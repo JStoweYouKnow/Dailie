@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, Calendar, UserCheck } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck } from "lucide-react";
 import { parseDocumentFile } from "./documentParser";
 
 const STAGES = [
@@ -77,13 +77,12 @@ const SEED_DATA = {
       ]
     }
   ],
-  logs: [
-    { id: "log-1", date: Date.now() - 4 * 3600000, text: "Call with line producer regarding UK tax incentives.", author: "Elena Rostova" }
-  ]
+  logs: []
 };
 
-const STORAGE_KEY = "dailie-data-v1";
-const OLD_STORAGE_KEY = "matriarch-data-v1";
+const STORAGE_KEY = "dailie-data-v2";
+const OLD_STORAGE_KEY_V1 = "dailie-data-v1";
+const OLD_STORAGE_KEY_MATRIARCH = "matriarch-data-v1";
 const AUTHOR_KEY = "dailie-author-name-v1";
 
 function uid() {
@@ -117,13 +116,21 @@ async function getStoredData() {
   try {
     if (window.storage && typeof window.storage.get === "function") {
       const res = await window.storage.get(STORAGE_KEY, true);
-      if (res && res.value) return JSON.parse(res.value);
+      if (res && res.value) {
+        const parsed = JSON.parse(res.value);
+        parsed.logs = (parsed.logs || []).filter(l => l.id !== "log-1");
+        return parsed;
+      }
     }
   } catch (e) {}
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY_V1) || localStorage.getItem(OLD_STORAGE_KEY_MATRIARCH);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.logs = (parsed.logs || []).filter(l => l.id !== "log-1");
+      return parsed;
+    }
   } catch (e) {}
 
   return SEED_DATA;
@@ -711,6 +718,7 @@ export default function App() {
         try {
           const parsed = JSON.parse(event.target.result);
           if (parsed && Array.isArray(parsed.projects) && Array.isArray(parsed.meetings)) {
+            parsed.logs = (parsed.logs || []).filter(l => l.id !== "log-1");
             persist(parsed);
             alert("Dailie production board backup successfully imported!");
           } else {
@@ -832,7 +840,8 @@ export default function App() {
         subtitle: m.followUps.length ? `${openCount} open follow-up${openCount === 1 ? "" : "s"} of ${m.followUps.length}` : m.attendees, dotColor: "var(--accent)",
       });
     });
-    data.logs.forEach((l) => {
+    (data.logs || []).forEach((l) => {
+      if (l.id === "log-1") return;
       entries.push({ id: "l-" + l.id, ts: l.date, type: "log", kindLabel: "NOTE", title: l.text, subtitle: l.author ? `Logged by ${l.author}` : "", dotColor: "var(--bone)" });
     });
     entries.sort((a, b) => b.ts - a.ts);
