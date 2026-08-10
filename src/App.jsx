@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare } from "lucide-react";
+import { parseDocumentFile } from "./documentParser";
 
 const STAGES = [
   { key: "development", label: "Development", color: "#9a968e" },
@@ -109,8 +110,6 @@ function formatClock(ts) {
 
 function formatShort(ts) {
   const d = new Date(ts);
-  const opts = { month: "short", day: "numeric" };
-  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
 }
 
@@ -313,9 +312,9 @@ function ProjectsView({ projects, onOpenNew, onOpenDetail, searchQuery }) {
   );
 }
 
-function NewProjectModal({ onClose, onCreate }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+function NewProjectModal({ onClose, onCreate, initialTitle = "", initialDesc = "" }) {
+  const [title, setTitle] = useState(initialTitle);
+  const [description, setDescription] = useState(initialDesc);
   const [stage, setStage] = useState(STAGES[0].key);
   const [owner, setOwner] = useState("");
   const [nextStep, setNextStep] = useState("");
@@ -471,11 +470,11 @@ function MeetingsView({ meetings, onOpenNew, onToggleFollowUp, onDelete, searchQ
   );
 }
 
-function NewMeetingModal({ onClose, onCreate, defaultAuthor }) {
-  const [title, setTitle] = useState("");
+function NewMeetingModal({ onClose, onCreate, defaultAuthor, initialTitle = "", initialNotes = "" }) {
+  const [title, setTitle] = useState(initialTitle);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [attendees, setAttendees] = useState("");
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(initialNotes);
   const [followUps, setFollowUps] = useState([{ id: uid(), text: "", owner: defaultAuthor || "", dueDate: "" }]);
   const [error, setError] = useState("");
 
@@ -512,6 +511,64 @@ function NewMeetingModal({ onClose, onCreate, defaultAuthor }) {
   );
 }
 
+function ImportDocumentModal({ fileInfo, onClose, onConvertToProject, onConvertToMeeting, onConvertToQuickLog }) {
+  const { fileName, fileExt, extractedText } = fileInfo;
+
+  return (
+    <ModalShell title={`Import Document: ${fileName}`} onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <FileText size={18} color="var(--accent)" />
+        <span className="md-mono" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: ".1em", fontWeight: 600 }}>
+          FORMAT: {fileExt.toUpperCase()}
+        </span>
+      </div>
+
+      <Field label="EXTRACTED CONTENT PREVIEW">
+        <textarea
+          className="md-textarea"
+          rows={6}
+          readOnly
+          value={extractedText}
+          style={{ fontSize: 12, fontFamily: "var(--font-mono)", opacity: 0.9, background: "var(--panel-raised)" }}
+        />
+      </Field>
+
+      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 10 }}>
+        CHOOSE IMPORT DESTINATION:
+      </div>
+
+      <div style={{ display: "grid", gap: 10 }}>
+        <button
+          className="md-btn md-btn-primary"
+          style={{ justifyContent: "flex-start", padding: "12px 16px" }}
+          onClick={() => onConvertToProject(fileName, extractedText)}
+        >
+          <FolderPlus size={16} style={{ marginRight: 8 }} />
+          Create New Project from Document
+        </button>
+
+        <button
+          className="md-btn"
+          style={{ justifyContent: "flex-start", padding: "12px 16px" }}
+          onClick={() => onConvertToMeeting(fileName, extractedText)}
+        >
+          <Users size={16} style={{ marginRight: 8 }} />
+          Save as Meeting Note & Action Items
+        </button>
+
+        <button
+          className="md-btn md-btn-ghost"
+          style={{ justifyContent: "flex-start", padding: "10px 16px", border: "1px solid var(--rule)" }}
+          onClick={() => onConvertToQuickLog(fileName, extractedText)}
+        >
+          <MessageSquare size={16} style={{ marginRight: 8 }} />
+          Log as Timeline Quick Note
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(SEED_DATA);
   const [loading, setLoading] = useState(true);
@@ -524,6 +581,8 @@ export default function App() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
+  const [importDocInfo, setImportDocInfo] = useState(null);
+  const [initialModalData, setInitialModalData] = useState({ projectTitle: "", projectDesc: "", meetingTitle: "", meetingNotes: "" });
   const fileInputRef = useRef(null);
 
   const load = async () => {
@@ -577,25 +636,77 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportData = (e) => {
+  const handleImportFile = async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target.result);
-        if (parsed && Array.isArray(parsed.projects) && Array.isArray(parsed.meetings)) {
-          persist(parsed);
-          alert("Dailie board successfully imported!");
-        } else {
-          alert("Invalid Dailie board format.");
+
+    const fileExt = file.name.split('.').pop().toLowerCase();
+
+    // If file is Dailie JSON backup
+    if (fileExt === 'json') {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          if (parsed && Array.isArray(parsed.projects) && Array.isArray(parsed.meetings)) {
+            persist(parsed);
+            alert("Dailie production board backup successfully imported!");
+          } else {
+            alert("Invalid Dailie board format.");
+          }
+        } catch (err) {
+          alert("Failed to parse JSON file.");
         }
+      };
+      reader.readAsText(file);
+    } else {
+      // Document files: PDF, DOCX, DOC, Pages, TXT, MD
+      try {
+        setLoading(true);
+        const extractedText = await parseDocumentFile(file);
+        setLoading(false);
+        setImportDocInfo({
+          fileName: file.name,
+          fileExt,
+          extractedText
+        });
       } catch (err) {
-        alert("Failed to parse JSON file.");
+        setLoading(false);
+        alert(`Could not extract document content from ${file.name}.`);
       }
-    };
-    reader.readAsText(file);
+    }
     e.target.value = "";
+  };
+
+  const handleConvertDocToProject = (fileName, text) => {
+    const titleWithoutExt = fileName.replace(/\.[^/.]+$/, "");
+    setInitialModalData(prev => ({
+      ...prev,
+      projectTitle: titleWithoutExt,
+      projectDesc: text.slice(0, 500)
+    }));
+    setImportDocInfo(null);
+    setShowNewProject(true);
+  };
+
+  const handleConvertDocToMeeting = (fileName, text) => {
+    const titleWithoutExt = fileName.replace(/\.[^/.]+$/, "");
+    setInitialModalData(prev => ({
+      ...prev,
+      meetingTitle: `Meeting Notes: ${titleWithoutExt}`,
+      meetingNotes: text.slice(0, 1000)
+    }));
+    setImportDocInfo(null);
+    setShowNewMeeting(true);
+  };
+
+  const handleConvertDocToQuickLog = (fileName, text) => {
+    addQuickLog({
+      text: `Imported document (${fileName}): ${text.slice(0, 200)}...`,
+      author: authorName || "Imported File"
+    });
+    setImportDocInfo(null);
+    alert(`Document "${fileName}" added to Timeline log!`);
   };
 
   const createProject = (fields) => {
@@ -698,10 +809,16 @@ export default function App() {
             <button className="md-btn md-btn-ghost" onClick={handleExportData} title="Export Dailie JSON" style={{ padding: 8 }}>
               <Download size={14} />
             </button>
-            <button className="md-btn md-btn-ghost" onClick={() => fileInputRef.current && fileInputRef.current.click()} title="Import Dailie JSON" style={{ padding: 8 }}>
+            <button className="md-btn md-btn-ghost" onClick={() => fileInputRef.current && fileInputRef.current.click()} title="Import Document (PDF, DOCX, DOC, Pages, JSON, TXT)" style={{ padding: 8 }}>
               <Upload size={14} />
             </button>
-            <input type="file" ref={fileInputRef} style={{ display: "none" }} accept=".json" onChange={handleImportData} />
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              accept=".json,.pdf,.doc,.docx,.pages,.txt,.md"
+              onChange={handleImportFile}
+            />
             <button className="md-btn md-btn-ghost" onClick={refresh} title="Refresh Data" style={{ padding: 8 }}>
               <RefreshCw size={14} className={refreshing ? "md-spin" : ""} />
             </button>
@@ -728,13 +845,13 @@ export default function App() {
         ) : activeTab === "timeline" ? (
           <TimelineView entries={allTimelineEntries} filter={timelineFilter} setFilter={setTimelineFilter} onAddLog={addQuickLog} defaultAuthor={authorName} searchQuery={searchQuery} />
         ) : activeTab === "projects" ? (
-          <ProjectsView projects={data.projects} onOpenNew={() => setShowNewProject(true)} onOpenDetail={setDetailProject} searchQuery={searchQuery} />
+          <ProjectsView projects={data.projects} onOpenNew={() => { setInitialModalData({ projectTitle: "", projectDesc: "" }); setShowNewProject(true); }} onOpenDetail={setDetailProject} searchQuery={searchQuery} />
         ) : (
-          <MeetingsView meetings={data.meetings} onOpenNew={() => setShowNewMeeting(true)} onToggleFollowUp={toggleFollowUp} onDelete={deleteMeeting} searchQuery={searchQuery} />
+          <MeetingsView meetings={data.meetings} onOpenNew={() => { setInitialModalData({ meetingTitle: "", meetingNotes: "" }); setShowNewMeeting(true); }} onToggleFollowUp={toggleFollowUp} onDelete={deleteMeeting} searchQuery={searchQuery} />
         )}
       </div>
-      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={createProject} />}
-      {showNewMeeting && <NewMeetingModal onClose={() => setShowNewMeeting(false)} onCreate={createMeeting} defaultAuthor={authorName} />}
+      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={createProject} initialTitle={initialModalData.projectTitle} initialDesc={initialModalData.projectDesc} />}
+      {showNewMeeting && <NewMeetingModal onClose={() => setShowNewMeeting(false)} onCreate={createMeeting} defaultAuthor={authorName} initialTitle={initialModalData.meetingTitle} initialNotes={initialModalData.meetingNotes} />}
       {detailProject && (
         <ProjectDetailModal
           project={data.projects.find((p) => p.id === detailProject.id) || detailProject}
@@ -742,6 +859,15 @@ export default function App() {
           onChangeStage={changeProjectStage}
           onLog={addProjectNote}
           onDelete={deleteProject}
+        />
+      )}
+      {importDocInfo && (
+        <ImportDocumentModal
+          fileInfo={importDocInfo}
+          onClose={() => setImportDocInfo(null)}
+          onConvertToProject={handleConvertDocToProject}
+          onConvertToMeeting={handleConvertDocToMeeting}
+          onConvertToQuickLog={handleConvertDocToQuickLog}
         />
       )}
     </div>
