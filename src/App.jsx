@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, Calendar, UserCheck } from "lucide-react";
 import { parseDocumentFile } from "./documentParser";
 
 const STAGES = [
@@ -569,6 +569,67 @@ function ImportDocumentModal({ fileInfo, onClose, onConvertToProject, onConvertT
   );
 }
 
+function InfoDialogModal({ onClose }) {
+  return (
+    <ModalShell title="Dailie Ops Board Guide" onClose={onClose}>
+      <div style={{ fontSize: 13, color: "var(--dim)", lineHeight: 1.6, marginBottom: 20 }}>
+        Welcome to <strong style={{ color: "var(--bone)" }}>Dailie</strong>, the production operations tracking system designed for film, TV, and tech-entertainment studios. Here is how to use the controls and inputs:
+      </div>
+
+      <div style={{ display: "grid", gap: 16, maxHeight: "55vh", overflowY: "auto", paddingRight: 4 }}>
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <Search size={16} color="var(--accent)" /> Search Board Input
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Instant real-time search across project titles, descriptions, stage owners, meeting notes, attendees, and timeline activity logs.
+          </div>
+        </div>
+
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <UserCheck size={16} color="var(--accent)" /> "Logged by" Producer Input
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Sets your default producer signature. Automatically attaches your name when you log notes, create projects, or complete follow-ups.
+          </div>
+        </div>
+
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <Upload size={16} color="var(--accent)" /> Document & Data Import
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Upload Dailie JSON backups or document files (<strong style={{ color: "var(--bone)" }}>PDF, DOCX, DOC, Pages, TXT, MD</strong>). Extracted script notes or pitch decks can be converted into Projects, Meetings, or Timeline logs.
+          </div>
+        </div>
+
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <Download size={16} color="var(--accent)" /> Export Board Slate
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Download a portable, complete JSON snapshot of your production board for backups or team sharing.
+          </div>
+        </div>
+
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <Layers size={16} color="var(--accent)" /> Kanban Stages & Timeline
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Track projects from <strong style={{ color: "var(--bone)" }}>Development</strong> through <strong style={{ color: "var(--bone)" }}>Production</strong> to <strong style={{ color: "var(--bone)" }}>Delivered</strong>. Clicking a project card opens its full history and update logs.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid var(--rule)", textAlign: "right" }}>
+        <button className="md-btn md-btn-primary" onClick={onClose}>Got it</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(SEED_DATA);
   const [loading, setLoading] = useState(true);
@@ -580,6 +641,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showNewProject, setShowNewProject] = useState(false);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
   const [importDocInfo, setImportDocInfo] = useState(null);
   const [initialModalData, setInitialModalData] = useState({ projectTitle: "", projectDesc: "", meetingTitle: "", meetingNotes: "" });
@@ -792,7 +854,17 @@ export default function App() {
               <Film size={20} color="var(--accent)" />
             </div>
             <div>
-              <div className="eyebrow-badge">Matriarch Studios Operations</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div className="eyebrow-badge">Matriarch Studios Operations</div>
+                <button
+                  className="md-btn md-btn-ghost"
+                  onClick={() => setShowInfoModal(true)}
+                  title="View Inputs & Features Information"
+                  style={{ padding: 3, color: "var(--accent)" }}
+                >
+                  <HelpCircle size={15} />
+                </button>
+              </div>
               <div className="md-display" style={{ fontSize: 26, letterSpacing: "-0.03em", lineHeight: 1.1, marginTop: 2 }}>
                 DAILIE <span className="md-serif-it" style={{ fontSize: "0.85em", opacity: 0.9 }}>Ops Board</span>
               </div>
@@ -806,6 +878,9 @@ export default function App() {
             <div>
               <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 120 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
             </div>
+            <button className="md-btn md-btn-ghost" onClick={() => setShowInfoModal(true)} title="Input & Controls Guide" style={{ padding: 8, color: "var(--accent)" }}>
+              <Info size={14} />
+            </button>
             <button className="md-btn md-btn-ghost" onClick={handleExportData} title="Export Dailie JSON" style={{ padding: 8 }}>
               <Download size={14} />
             </button>
@@ -870,6 +945,7 @@ export default function App() {
           onConvertToQuickLog={handleConvertDocToQuickLog}
         />
       )}
+      {showInfoModal && <InfoDialogModal onClose={() => setShowInfoModal(false)} />}
     </div>
   );
 }
