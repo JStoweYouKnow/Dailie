@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, ChevronRight } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search } from "lucide-react";
 
 const STAGES = [
-  { key: "development", label: "Development", color: "#948FA0" },
-  { key: "packaging", label: "Packaging", color: "#8C7A3A" },
-  { key: "preproduction", label: "Pre-Production", color: "#5E8C86" },
-  { key: "production", label: "Production", color: "#C1443C" },
-  { key: "postproduction", label: "Post-Production", color: "#8C6E9C" },
-  { key: "delivered", label: "Delivered", color: "#7C9473" },
-  { key: "onhold", label: "On Hold", color: "#6B6775" },
+  { key: "development", label: "Development", color: "#9a968e" },
+  { key: "packaging", label: "Packaging", color: "#a7b3a4" },
+  { key: "preproduction", label: "Pre-Production", color: "#5e8c86" },
+  { key: "production", label: "Production", color: "#e8553c" },
+  { key: "postproduction", label: "Post-Production", color: "#9b8aa4" },
+  { key: "delivered", label: "Delivered", color: "#7c9473" },
+  { key: "onhold", label: "On Hold", color: "#6e6b65" },
 ];
 
 const TABS = [
@@ -144,16 +144,16 @@ async function setStoredData(data) {
 function Stat({ label, value, accent }) {
   return (
     <div>
-      <div className="md-mono" style={{ fontSize: 22, fontWeight: 600, color: accent || "var(--paper)" }}>{value}</div>
-      <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: ".1em" }}>{label}</div>
+      <div className="md-mono" style={{ fontSize: 24, fontWeight: 700, color: accent || "var(--bone)" }}>{value}</div>
+      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em" }}>{label}</div>
     </div>
   );
 }
 
 function LoadingState() {
   return (
-    <div style={{ padding: "60px 0", textAlign: "center", color: "var(--muted)" }}>
-      <Film size={22} className="md-spin" style={{ marginBottom: 10 }} />
+    <div style={{ padding: "60px 0", textAlign: "center", color: "var(--dim)" }}>
+      <Film size={22} className="md-spin" style={{ marginBottom: 10, color: "var(--accent)" }} />
       <div className="md-mono" style={{ fontSize: 12, letterSpacing: ".08em" }}>LOADING THE BOARD…</div>
     </div>
   );
@@ -161,9 +161,9 @@ function LoadingState() {
 
 function EmptyState({ title, subtitle }) {
   return (
-    <div style={{ padding: "48px 20px", textAlign: "center", border: "1px dashed var(--rule)", borderRadius: 10 }}>
-      <div className="md-display" style={{ fontSize: 16, marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 13, color: "var(--muted)" }}>{subtitle}</div>
+    <div style={{ padding: "48px 20px", textAlign: "center", border: "1px dashed var(--rule-bright)", borderRadius: 12, background: "var(--panel)" }}>
+      <div className="md-display" style={{ fontSize: 16, marginBottom: 6, color: "var(--bone)" }}>{title}</div>
+      <div style={{ fontSize: 13, color: "var(--dim)" }}>{subtitle}</div>
     </div>
   );
 }
@@ -172,11 +172,11 @@ function ModalShell({ title, onClose, children }) {
   return (
     <div className="md-overlay" onClick={onClose}>
       <div className="md-modal" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid var(--rule)" }}>
-          <div className="md-display" style={{ fontSize: 17, fontWeight: 600 }}>{title}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", borderBottom: "1px solid var(--rule)" }}>
+          <div className="md-display" style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
           <button className="md-btn md-btn-ghost" onClick={onClose} style={{ padding: 6 }}><X size={16} /></button>
         </div>
-        <div style={{ padding: 18 }}>{children}</div>
+        <div style={{ padding: 20 }}>{children}</div>
       </div>
     </div>
   );
@@ -184,8 +184,8 @@ function ModalShell({ title, onClose, children }) {
 
 function Field({ label, children }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: ".08em", marginBottom: 6 }}>{label}</div>
+    <div style={{ marginBottom: 16 }}>
+      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>{label}</div>
       {children}
     </div>
   );
@@ -201,11 +201,11 @@ function QuickLogBar({ onAdd, defaultAuthor }) {
     setText("");
   };
   return (
-    <div className="md-card" style={{ padding: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
+    <div className="md-card" style={{ padding: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 20 }}>
       <input className="md-input" style={{ flex: "2 1 240px" }} placeholder="Log an activity — a call, a send-out, a decision…" value={text}
         onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
       <input className="md-input" style={{ flex: "0 1 140px" }} placeholder="Logged by" value={author} onChange={(e) => setAuthor(e.target.value)} />
-      <button className="md-btn md-btn-primary" onClick={submit}><Plus size={14} /> Log</button>
+      <button className="md-btn md-btn-primary" onClick={submit}><Plus size={14} /> Log Note</button>
     </div>
   );
 }
@@ -235,7 +235,7 @@ function TimelineView({ entries, filter, setFilter, onAddLog, defaultAuthor, sea
   return (
     <div>
       <QuickLogBar onAdd={onAddLog} defaultAuthor={defaultAuthor} />
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
         {[["all", "All Activity"], ["project", "Projects"], ["meeting", "Meetings"], ["log", "Quick Notes"]].map(([k, l]) => (
           <div key={k} className={"md-chip" + (filter === k ? " active" : "")} onClick={() => setFilter(k)} role="button" tabIndex={0}
             onKeyDown={(e) => { if (e.key === "Enter") setFilter(k); }}>{l}</div>
@@ -245,15 +245,15 @@ function TimelineView({ entries, filter, setFilter, onAddLog, defaultAuthor, sea
         <EmptyState title="No activity matching filter" subtitle="Add a project, meeting note, or change your search filter to populate the timeline." />
       ) : (
         groups.map((g, gi) => (
-          <div key={gi} style={{ marginBottom: 22 }}>
-            <div className="md-mono" style={{ fontSize: 11, color: "var(--brass)", letterSpacing: ".12em", marginBottom: 10 }}>{g.day}</div>
+          <div key={gi} style={{ marginBottom: 24 }}>
+            <div className="md-mono" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: ".14em", marginBottom: 12, fontWeight: 600 }}>{g.day}</div>
             <div style={{ borderLeft: "1px solid var(--rule)", marginLeft: 3 }}>
               {g.items.map((it) => (
-                <div key={it.id} style={{ position: "relative", padding: "0 0 18px 22px" }}>
-                  <div className="md-sprocket" style={{ position: "absolute", left: -3.5, top: 5, background: it.dotColor || "var(--brass)" }} />
-                  <div className="md-mono" style={{ fontSize: 11, color: "var(--muted)", marginBottom: 3 }}>{formatClock(it.ts)} · {it.kindLabel}</div>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{it.title}</div>
-                  {it.subtitle && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>{it.subtitle}</div>}
+                <div key={it.id} style={{ position: "relative", padding: "0 0 20px 24px" }}>
+                  <div className="md-sprocket" style={{ position: "absolute", left: -3.5, top: 6, background: it.dotColor || "var(--accent)" }} />
+                  <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", marginBottom: 4 }}>{formatClock(it.ts)} · {it.kindLabel}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--bone)" }}>{it.title}</div>
+                  {it.subtitle && <div style={{ fontSize: 13, color: "var(--dim)", marginTop: 2 }}>{it.subtitle}</div>}
                 </div>
               ))}
             </div>
@@ -268,11 +268,11 @@ function ProjectCard({ project, onClick }) {
   const info = stageInfo(project.stage);
   return (
     <div className="md-card" onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") onClick(); }}
-      style={{ padding: 12, marginBottom: 10, cursor: "pointer", borderLeft: `3px solid ${info.color}` }}>
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{project.title}</div>
-      {project.owner && <div className="md-mono" style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>OWNER: {project.owner.toUpperCase()}</div>}
-      {project.nextStep && <div style={{ fontSize: 12, color: "var(--paper)", opacity: 0.85 }}>Next: {project.nextStep}</div>}
-      <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", marginTop: 8 }}>UPDATED {formatShort(project.updatedAt)}</div>
+      style={{ padding: 14, marginBottom: 12, cursor: "pointer", borderLeft: `3px solid ${info.color}` }}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: "var(--bone)" }}>{project.title}</div>
+      {project.owner && <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", marginBottom: 6 }}>OWNER: {project.owner.toUpperCase()}</div>}
+      {project.nextStep && <div style={{ fontSize: 12, color: "var(--bone)", opacity: 0.9 }}>Next: {project.nextStep}</div>}
+      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 10 }}>UPDATED {formatShort(project.updatedAt)}</div>
     </div>
   );
 }
@@ -286,21 +286,21 @@ function ProjectsView({ projects, onOpenNew, onOpenDetail, searchQuery }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        <div className="md-mono" style={{ fontSize: 11, color: "var(--muted)", letterSpacing: ".1em" }}>{filteredProjects.length} PROJECT{filteredProjects.length === 1 ? "" : "S"} ON THE BOARD</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
+        <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", letterSpacing: ".12em" }}>{filteredProjects.length} PROJECT{filteredProjects.length === 1 ? "" : "S"} ON THE BOARD</div>
         <button className="md-btn md-btn-primary" onClick={onOpenNew}><Plus size={14} /> New Project</button>
       </div>
       {filteredProjects.length === 0 ? (
         <EmptyState title="No projects found" subtitle="Try clearing your search query or add a new project to start tracking." />
       ) : (
-        <div className="md-scroll" style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 8 }}>
+        <div className="md-scroll" style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 12 }}>
           {STAGES.map((s) => {
             const items = filteredProjects.filter((p) => p.stage === s.key);
             return (
-              <div key={s.key} style={{ minWidth: 240, flex: "0 0 240px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+              <div key={s.key} style={{ minWidth: 250, flex: "0 0 250px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.color, display: "inline-block" }} />
-                  <span className="md-mono" style={{ fontSize: 11, letterSpacing: ".08em", color: "var(--muted)" }}>{s.label.toUpperCase()} · {items.length}</span>
+                  <span className="md-mono" style={{ fontSize: 11, letterSpacing: ".1em", color: "var(--dim)", fontWeight: 600 }}>{s.label.toUpperCase()} · {items.length}</span>
                 </div>
                 {items.map((p) => <ProjectCard key={p.id} project={p} onClick={() => onOpenDetail(p)} />)}
               </div>
@@ -355,32 +355,32 @@ function ProjectDetailModal({ project, onClose, onChangeStage, onLog, onDelete }
 
   return (
     <ModalShell title={project.title} onClose={onClose}>
-      {project.description && <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>{project.description}</div>}
-      <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+      {project.description && <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16 }}>{project.description}</div>}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 160px" }}>
-          <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6 }}>STAGE</div>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 6 }}>STAGE</div>
           <select className="md-select" value={project.stage} onChange={(e) => onChangeStage(project.id, e.target.value)}>
             {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </div>
         {project.owner && (
           <div style={{ flex: "1 1 120px" }}>
-            <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", marginBottom: 6 }}>OWNER</div>
-            <div style={{ fontSize: 13, paddingTop: 8 }}>{project.owner}</div>
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 6 }}>OWNER</div>
+            <div style={{ fontSize: 13, paddingTop: 8, color: "var(--bone)", fontWeight: 600 }}>{project.owner}</div>
           </div>
         )}
       </div>
       {project.nextStep && (
-        <div style={{ fontSize: 13, marginBottom: 16, padding: 10, background: "var(--panel-raised)", borderRadius: 6 }}>
-          <span className="md-mono" style={{ fontSize: 10, color: "var(--muted)" }}>NEXT STEP · </span>{project.nextStep}
+        <div style={{ fontSize: 13, marginBottom: 18, padding: 12, background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8 }}>
+          <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>NEXT STEP · </span>{project.nextStep}
         </div>
       )}
-      <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: ".08em", marginBottom: 8 }}>ACTIVITY LOG</div>
-      <div style={{ maxHeight: 180, overflowY: "auto", marginBottom: 12, paddingRight: 4 }}>
+      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 10 }}>ACTIVITY LOG</div>
+      <div style={{ maxHeight: 180, overflowY: "auto", marginBottom: 14, paddingRight: 4 }}>
         {history.map((h) => (
           <div key={h.id} style={{ fontSize: 12, marginBottom: 10, paddingLeft: 10, borderLeft: "2px solid var(--rule)" }}>
-            <div className="md-mono" style={{ color: "var(--muted)", fontSize: 10 }}>{formatShort(h.date)}</div>
-            <div>{h.note}</div>
+            <div className="md-mono" style={{ color: "var(--dim)", fontSize: 10 }}>{formatShort(h.date)}</div>
+            <div style={{ color: "var(--bone)" }}>{h.note}</div>
           </div>
         ))}
       </div>
@@ -407,37 +407,37 @@ function MeetingCard({ meeting, onToggleFollowUp, onDelete }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const open = meeting.followUps.filter((f) => !f.done).length;
   return (
-    <div className="md-card" style={{ padding: 16, marginBottom: 14 }}>
+    <div className="md-card" style={{ padding: 18, marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
         <div>
-          <div className="md-mono" style={{ fontSize: 11, color: "var(--brass)", marginBottom: 3 }}>{formatShort(meeting.date)}</div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{meeting.title}</div>
+          <div className="md-mono" style={{ fontSize: 11, color: "var(--accent)", marginBottom: 4, fontWeight: 600 }}>{formatShort(meeting.date)}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--bone)" }}>{meeting.title}</div>
           {meeting.attendees && (
-            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-              <Users size={11} style={{ display: "inline", marginRight: 4, verticalAlign: -1 }} />{meeting.attendees}
+            <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 4 }}>
+              <Users size={12} style={{ display: "inline", marginRight: 5, verticalAlign: -1 }} />{meeting.attendees}
             </div>
           )}
         </div>
         <button className="md-btn md-btn-ghost" style={{ padding: 6 }} onClick={() => setConfirmingDelete(true)}><Trash2 size={13} /></button>
       </div>
-      {meeting.notes && <div style={{ fontSize: 13, color: "var(--paper)", opacity: 0.9, marginBottom: 12, whiteSpace: "pre-wrap" }}>{meeting.notes}</div>}
+      {meeting.notes && <div style={{ fontSize: 14, color: "var(--bone)", opacity: 0.9, marginBottom: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{meeting.notes}</div>}
       {meeting.followUps.length > 0 && (
         <div>
-          <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: ".08em", marginBottom: 6 }}>FOLLOW-UPS · {open} OPEN</div>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>FOLLOW-UPS · {open} OPEN</div>
           {meeting.followUps.map((f) => (
-            <div key={f.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "4px 0", cursor: "pointer" }}
+            <div key={f.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "5px 0", cursor: "pointer" }}
               onClick={() => onToggleFollowUp(meeting.id, f.id)} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === "Enter") onToggleFollowUp(meeting.id, f.id); }}>
-              {f.done ? <CheckSquare size={15} color="var(--sage)" style={{ marginTop: 1, flexShrink: 0 }} /> : <Square size={15} color="var(--muted)" style={{ marginTop: 1, flexShrink: 0 }} />}
-              <div style={{ fontSize: 13, textDecoration: f.done ? "line-through" : "none", color: f.done ? "var(--muted)" : "var(--paper)" }}>
-                {f.text}{f.owner && <span className="md-mono" style={{ color: "var(--muted)", fontSize: 11 }}> — {f.owner}</span>}
+              {f.done ? <CheckSquare size={15} color="var(--sage)" style={{ marginTop: 1, flexShrink: 0 }} /> : <Square size={15} color="var(--dim)" style={{ marginTop: 1, flexShrink: 0 }} />}
+              <div style={{ fontSize: 13, textDecoration: f.done ? "line-through" : "none", color: f.done ? "var(--dim)" : "var(--bone)" }}>
+                {f.text}{f.owner && <span className="md-mono" style={{ color: "var(--dim)", fontSize: 11 }}> — {f.owner}</span>}
               </div>
             </div>
           ))}
         </div>
       )}
       {confirmingDelete && (
-        <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center", borderTop: "1px solid var(--rule)", paddingTop: 10, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "center", borderTop: "1px solid var(--rule)", paddingTop: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, color: "var(--red)" }}>Delete this meeting note?</span>
           <button className="md-btn" style={{ borderColor: "var(--red)", color: "var(--red)" }} onClick={() => onDelete(meeting.id)}>Delete</button>
           <button className="md-btn md-btn-ghost" onClick={() => setConfirmingDelete(false)}>Cancel</button>
@@ -459,8 +459,8 @@ function MeetingsView({ meetings, onOpenNew, onToggleFollowUp, onDelete, searchQ
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        <div className="md-mono" style={{ fontSize: 11, color: "var(--muted)", letterSpacing: ".1em" }}>{filtered.length} MEETING NOTE{filtered.length === 1 ? "" : "S"}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
+        <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", letterSpacing: ".12em" }}>{filtered.length} MEETING NOTE{filtered.length === 1 ? "" : "S"}</div>
         <button className="md-btn md-btn-primary" onClick={onOpenNew}><Plus size={14} /> New Meeting Note</button>
       </div>
       {filtered.length === 0 ? (
@@ -655,11 +655,11 @@ export default function App() {
       const openCount = m.followUps.filter((f) => !f.done).length;
       entries.push({
         id: "m-" + m.id, ts: m.date, type: "meeting", kindLabel: "MEETING", title: m.title,
-        subtitle: m.followUps.length ? `${openCount} open follow-up${openCount === 1 ? "" : "s"} of ${m.followUps.length}` : m.attendees, dotColor: "var(--brass)",
+        subtitle: m.followUps.length ? `${openCount} open follow-up${openCount === 1 ? "" : "s"} of ${m.followUps.length}` : m.attendees, dotColor: "var(--accent)",
       });
     });
     data.logs.forEach((l) => {
-      entries.push({ id: "l-" + l.id, ts: l.date, type: "log", kindLabel: "NOTE", title: l.text, subtitle: l.author ? `Logged by ${l.author}` : "", dotColor: "var(--paper)" });
+      entries.push({ id: "l-" + l.id, ts: l.date, type: "log", kindLabel: "NOTE", title: l.text, subtitle: l.author ? `Logged by ${l.author}` : "", dotColor: "var(--bone)" });
     });
     entries.sort((a, b) => b.ts - a.ts);
     return entries;
@@ -673,24 +673,26 @@ export default function App() {
 
   return (
     <div className="md-root">
-      <div style={{ padding: "22px 26px 0" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--panel-raised)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--rule)", flexShrink: 0 }}>
-              <Film size={19} color="var(--brass)" />
+      <div style={{ padding: "26px 32px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: "var(--panel-raised)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--rule-bright)", flexShrink: 0 }}>
+              <Film size={20} color="var(--accent)" />
             </div>
             <div>
-              <div className="md-display" style={{ fontSize: 21, fontWeight: 700, letterSpacing: ".02em", lineHeight: 1 }}>MATRIARCH</div>
-              <div className="md-mono" style={{ fontSize: 10, color: "var(--muted)", letterSpacing: ".14em", marginTop: 3 }}>PRODUCTION OPS BOARD</div>
+              <div className="eyebrow-badge">Full-Stack Tech-Entertainment Studio</div>
+              <div className="md-display" style={{ fontSize: 24, letterSpacing: "-0.03em", lineHeight: 1.1, marginTop: 2 }}>
+                MATRIARCH <span className="md-serif-it" style={{ fontSize: "0.85em", opacity: 0.9 }}>Operations</span>
+              </div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ position: "relative", minWidth: 200 }}>
-              <Search size={14} color="var(--muted)" style={{ position: "absolute", left: 10, top: 10 }} />
-              <input className="md-input" style={{ paddingLeft: 30, fontSize: 12 }} placeholder="Search board..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <div style={{ position: "relative", minWidth: 220 }}>
+              <Search size={14} color="var(--dim)" style={{ position: "absolute", left: 12, top: 11 }} />
+              <input className="md-input" style={{ paddingLeft: 34, fontSize: 12 }} placeholder="Search operations board..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             <div>
-              <input className="md-input" style={{ fontSize: 12, padding: "6px 8px", width: 120 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
+              <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 120 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
             </div>
             <button className="md-btn md-btn-ghost" onClick={handleExportData} title="Export Board JSON" style={{ padding: 8 }}>
               <Download size={14} />
@@ -702,24 +704,24 @@ export default function App() {
             <button className="md-btn md-btn-ghost" onClick={refresh} title="Refresh Data" style={{ padding: 8 }}>
               <RefreshCw size={14} className={refreshing ? "md-spin" : ""} />
             </button>
-            <div className="md-mono" style={{ fontSize: 12, border: "1px solid var(--rule)", padding: "8px 12px", borderRadius: 6 }}>{todayLabel}</div>
+            <div className="md-mono" style={{ fontSize: 11, border: "1px solid var(--rule)", padding: "7px 14px", borderRadius: 100, color: "var(--dim)", letterSpacing: ".08em" }}>{todayLabel}</div>
           </div>
         </div>
       </div>
-      <div className="md-stripe" style={{ margin: "18px 0 0" }} />
-      <div style={{ padding: "16px 26px", display: "flex", gap: 32, flexWrap: "wrap", borderBottom: "1px solid var(--rule)", alignItems: "center" }}>
+      <div className="md-stripe" style={{ margin: "20px 0 0" }} />
+      <div style={{ padding: "18px 32px", display: "flex", gap: 36, flexWrap: "wrap", borderBottom: "1px solid var(--rule)", alignItems: "center" }}>
         <Stat label="ACTIVE PROJECTS" value={activeProjectsCount} />
         <Stat label="OPEN FOLLOW-UPS" value={openFollowUpsCount} accent={openFollowUpsCount > 0 ? "var(--red)" : undefined} />
         <Stat label="LOGGED THIS WEEK" value={weekActivityCount} />
         {saveError && <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--red)" }}>{saveError}</div>}
       </div>
-      <div className="md-scroll" style={{ display: "flex", gap: 24, padding: "0 26px", borderBottom: "1px solid var(--rule)", overflowX: "auto" }}>
+      <div className="md-scroll" style={{ display: "flex", gap: 28, padding: "0 32px", borderBottom: "1px solid var(--rule)", overflowX: "auto" }}>
         {TABS.map((t) => (
           <div key={t.key} className={"md-tab" + (activeTab === t.key ? " active" : "")} onClick={() => setActiveTab(t.key)} role="button" tabIndex={0}
             onKeyDown={(e) => { if (e.key === "Enter") setActiveTab(t.key); }}>{t.label}</div>
         ))}
       </div>
-      <div style={{ padding: "22px 26px 44px" }}>
+      <div style={{ padding: "24px 32px 48px" }}>
         {loading ? (
           <LoadingState />
         ) : activeTab === "timeline" ? (
