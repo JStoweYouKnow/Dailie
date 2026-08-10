@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2 } from "lucide-react";
 import { parseDocumentFile } from "./documentParser";
+import { parseICSFeed, parseGmailTextInvite } from "./calendarSync";
 
 const STAGES = [
   { key: "development", label: "Development", color: "#9a968e" },
@@ -16,6 +17,7 @@ const TABS = [
   { key: "timeline", label: "TIMELINE" },
   { key: "projects", label: "PROJECTS" },
   { key: "meetings", label: "MEETING NOTES" },
+  { key: "calendar", label: "CALENDAR" },
 ];
 
 const SEED_DATA = {
@@ -80,10 +82,11 @@ const SEED_DATA = {
   logs: []
 };
 
-const STORAGE_KEY = "dailie-data-v2";
+const STORAGE_KEY = "dailie-data-v3";
+const OLD_STORAGE_KEY_V2 = "dailie-data-v2";
 const OLD_STORAGE_KEY_V1 = "dailie-data-v1";
-const OLD_STORAGE_KEY_MATRIARCH = "matriarch-data-v1";
 const AUTHOR_KEY = "dailie-author-name-v1";
+const GMAIL_ICAL_KEY = "dailie-gmail-ical-url";
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -125,7 +128,7 @@ async function getStoredData() {
   } catch (e) {}
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY_V1) || localStorage.getItem(OLD_STORAGE_KEY_MATRIARCH);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY_V2) || localStorage.getItem(OLD_STORAGE_KEY_V1);
     if (raw) {
       const parsed = JSON.parse(raw);
       parsed.logs = (parsed.logs || []).filter(l => l.id !== "log-1");
@@ -315,6 +318,148 @@ function ProjectsView({ projects, onOpenNew, onOpenDetail, searchQuery }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function CalendarView({ projects, meetings, logs, onOpenProject, onOpenMeeting }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const monthLabel = currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase();
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startDayOfWeek = new Date(year, month, 1).getDay();
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const today = () => setCurrentDate(new Date());
+
+  // Aggregate events by YYYY-MM-DD
+  const eventsByDate = useMemo(() => {
+    const map = {};
+
+    const addEv = (dateTs, ev) => {
+      const dStr = new Date(dateTs).toISOString().slice(0, 10);
+      if (!map[dStr]) map[dStr] = [];
+      map[dStr].push(ev);
+    };
+
+    projects.forEach((p) => {
+      addEv(p.updatedAt, { type: "project", title: p.title, stage: p.stage, item: p });
+    });
+
+    meetings.forEach((m) => {
+      addEv(m.date, { type: "meeting", title: m.title, item: m });
+      (m.followUps || []).forEach((f) => {
+        if (f.dueDate) {
+          const dueTs = new Date(f.dueDate + "T12:00:00").getTime();
+          if (!isNaN(dueTs)) {
+            addEv(dueTs, { type: "task", title: `Task: ${f.text}`, done: f.done, item: m });
+          }
+        }
+      });
+    });
+
+    return map;
+  }, [projects, meetings]);
+
+  const cells = [];
+  for (let i = 0; i < startDayOfWeek; i++) {
+    cells.push({ empty: true, key: `empty-${i}` });
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month, d);
+    const dateStr = dateObj.toISOString().slice(0, 10);
+    const isToday = new Date().toDateString() === dateObj.toDateString();
+    const evs = eventsByDate[dateStr] || [];
+    cells.push({ day: d, dateStr, isToday, events: evs, key: `day-${d}` });
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="md-display" style={{ fontSize: 20, fontWeight: 800 }}>{monthLabel}</div>
+          <button className="md-btn md-btn-ghost" onClick={today} style={{ padding: "4px 10px", fontSize: 11 }}>TODAY</button>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="md-btn md-btn-ghost" onClick={prevMonth} style={{ padding: 8 }}><ChevronLeft size={16} /></button>
+          <button className="md-btn md-btn-ghost" onClick={nextMonth} style={{ padding: 8 }}><ChevronRight size={16} /></button>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: "var(--rule)", borderRadius: 12, overflow: "hidden", border: "1px solid var(--rule)" }}>
+        {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((h) => (
+          <div key={h} className="md-mono" style={{ background: "var(--panel-raised)", padding: "10px 8px", fontSize: 10, color: "var(--dim)", textAlign: "center", fontWeight: 700, letterSpacing: ".1em" }}>
+            {h}
+          </div>
+        ))}
+
+        {cells.map((cell) => {
+          if (cell.empty) {
+            return <div key={cell.key} style={{ background: "var(--ink)", minHeight: 100, opacity: 0.4 }} />;
+          }
+
+          return (
+            <div
+              key={cell.key}
+              style={{
+                background: cell.isToday ? "#19191d" : "var(--panel)",
+                minHeight: 110,
+                padding: 8,
+                display: "flex",
+                flexDirection: "column",
+                borderTop: cell.isToday ? "2px solid var(--accent)" : "none"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span className="md-mono" style={{ fontSize: 12, fontWeight: cell.isToday ? 800 : 500, color: cell.isToday ? "var(--accent)" : "var(--dim)" }}>
+                  {cell.day}
+                </span>
+                {cell.events.length > 0 && (
+                  <span className="md-mono" style={{ fontSize: 9, background: "var(--panel-raised)", color: "var(--dim)", padding: "1px 5px", borderRadius: 10 }}>
+                    {cell.events.length}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, overflowY: "auto", maxHeight: 80 }}>
+                {cell.events.map((ev, idx) => {
+                  const isProj = ev.type === "project";
+                  const isTask = ev.type === "task";
+                  const color = isProj ? stageInfo(ev.stage).color : isTask ? "var(--sage)" : "var(--accent)";
+
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => isProj ? onOpenProject(ev.item) : onOpenMeeting(ev.item)}
+                      style={{
+                        fontSize: 11,
+                        padding: "3px 6px",
+                        borderRadius: 4,
+                        background: "var(--panel-raised)",
+                        borderLeft: `3px solid ${color}`,
+                        color: "var(--bone)",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis"
+                      }}
+                      title={ev.title}
+                    >
+                      {ev.title}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -518,6 +663,74 @@ function NewMeetingModal({ onClose, onCreate, defaultAuthor, initialTitle = "", 
   );
 }
 
+function GmailSyncModal({ onClose, onImportICS, onImportGmailInvite }) {
+  const [gmailText, setGmailText] = useState("");
+  const [icalUrl, setIcalUrl] = useState("");
+  const [statusMsg, setStatusMsg] = useState("");
+
+  const handlePasteGmail = () => {
+    if (!gmailText.trim()) return;
+    const meeting = parseGmailTextInvite(gmailText);
+    onImportGmailInvite(meeting);
+    setStatusMsg("Gmail invite successfully parsed and added to Meeting Notes!");
+    setGmailText("");
+  };
+
+  const handleICalUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const events = parseICSFeed(event.target.result);
+        if (events.length > 0) {
+          onImportICS(events);
+          setStatusMsg(`Successfully imported ${events.length} Google Calendar event(s)!`);
+        } else {
+          setStatusMsg("No events found in iCal file.");
+        }
+      } catch (err) {
+        setStatusMsg("Failed to parse iCal file.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  return (
+    <ModalShell title="Gmail & Google Calendar Sync" onClose={onClose}>
+      <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16 }}>
+        Synchronize your <strong style={{ color: "var(--bone)" }}>Google Calendar</strong> schedule and <strong style={{ color: "var(--bone)" }}>Gmail meeting invites</strong> directly with Dailie's Live Calendar & Ops Board.
+      </div>
+
+      <Field label="OPTION 1: PASTE GMAIL MEETING INVITE / EMAIL THREAD">
+        <textarea
+          className="md-textarea"
+          rows={4}
+          value={gmailText}
+          onChange={(e) => setGmailText(e.target.value)}
+          placeholder="Paste email thread or calendar invite body here (Subject, From, Date, Discussion...)"
+        />
+        <button className="md-btn md-btn-primary" style={{ marginTop: 8, width: "100%", justifyContent: "center" }} onClick={handlePasteGmail}>
+          <Mail size={14} style={{ marginRight: 6 }} /> Sync Gmail Email to Meeting Notes
+        </button>
+      </Field>
+
+      <div style={{ borderTop: "1px solid var(--rule)", margin: "16px 0", paddingTop: 16 }}>
+        <Field label="OPTION 2: IMPORT GOOGLE CALENDAR (.ICS FILE)">
+          <input type="file" accept=".ics" onChange={handleICalUpload} style={{ fontSize: 12, color: "var(--bone)" }} />
+        </Field>
+      </div>
+
+      {statusMsg && (
+        <div style={{ padding: 10, background: "rgba(167, 179, 164, 0.15)", border: "1px solid var(--accent)", borderRadius: 8, color: "var(--bone)", fontSize: 12, marginTop: 12 }}>
+          {statusMsg}
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
 function ImportDocumentModal({ fileInfo, onClose, onConvertToProject, onConvertToMeeting, onConvertToQuickLog }) {
   const { fileName, fileExt, extractedText } = fileInfo;
 
@@ -595,6 +808,15 @@ function InfoDialogModal({ onClose }) {
 
         <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <Mail size={16} color="var(--accent)" /> Gmail & Google Calendar Sync
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Sync Google Calendar feeds (.ics) or paste Gmail email threads/invites to automatically populate your Live Calendar and Meeting Notes.
+          </div>
+        </div>
+
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
             <UserCheck size={16} color="var(--accent)" /> "Logged by" Producer Input
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
@@ -608,24 +830,6 @@ function InfoDialogModal({ onClose }) {
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
             Upload Dailie JSON backups or document files (<strong style={{ color: "var(--bone)" }}>PDF, DOCX, DOC, Pages, TXT, MD</strong>). Extracted script notes or pitch decks can be converted into Projects, Meetings, or Timeline logs.
-          </div>
-        </div>
-
-        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            <Download size={16} color="var(--accent)" /> Export Board Slate
-          </div>
-          <div style={{ fontSize: 12, color: "var(--dim)" }}>
-            Download a portable, complete JSON snapshot of your production board for backups or team sharing.
-          </div>
-        </div>
-
-        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            <Layers size={16} color="var(--accent)" /> Kanban Stages & Timeline
-          </div>
-          <div style={{ fontSize: 12, color: "var(--dim)" }}>
-            Track projects from <strong style={{ color: "var(--bone)" }}>Development</strong> through <strong style={{ color: "var(--bone)" }}>Production</strong> to <strong style={{ color: "var(--bone)" }}>Delivered</strong>. Clicking a project card opens its full history and update logs.
           </div>
         </div>
       </div>
@@ -649,6 +853,7 @@ export default function App() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showGmailModal, setShowGmailModal] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
   const [importDocInfo, setImportDocInfo] = useState(null);
   const [initialModalData, setInitialModalData] = useState({ projectTitle: "", projectDesc: "", meetingTitle: "", meetingNotes: "" });
@@ -779,6 +984,22 @@ export default function App() {
     alert(`Document "${fileName}" added to Timeline log!`);
   };
 
+  const handleImportICSEvents = (events) => {
+    const newMeetings = events.map(e => ({
+      id: e.id,
+      title: e.title,
+      date: e.date,
+      attendees: "Google Calendar Sync",
+      notes: e.notes || "Synced from Google Calendar",
+      followUps: []
+    }));
+    persist({ ...data, meetings: [...newMeetings, ...data.meetings] });
+  };
+
+  const handleImportGmailInvite = (meeting) => {
+    persist({ ...data, meetings: [meeting, ...data.meetings] });
+  };
+
   const createProject = (fields) => {
     const now = Date.now();
     const project = {
@@ -887,7 +1108,10 @@ export default function App() {
             <div>
               <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 120 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
             </div>
-            <button className="md-btn md-btn-ghost" onClick={() => setShowInfoModal(true)} title="Input & Controls Guide" style={{ padding: 8, color: "var(--accent)" }}>
+            <button className="md-btn md-btn-ghost" onClick={() => setShowGmailModal(true)} title="Gmail & Google Calendar Sync" style={{ padding: 8, color: "var(--accent)" }}>
+              <Mail size={14} />
+            </button>
+            <button className="md-btn md-btn-ghost" onClick={() => setShowInfoModal(true)} title="Input & Controls Guide" style={{ padding: 8, color: "var(--dim)" }}>
               <Info size={14} />
             </button>
             <button className="md-btn md-btn-ghost" onClick={handleExportData} title="Export Dailie JSON" style={{ padding: 8 }}>
@@ -930,8 +1154,10 @@ export default function App() {
           <TimelineView entries={allTimelineEntries} filter={timelineFilter} setFilter={setTimelineFilter} onAddLog={addQuickLog} defaultAuthor={authorName} searchQuery={searchQuery} />
         ) : activeTab === "projects" ? (
           <ProjectsView projects={data.projects} onOpenNew={() => { setInitialModalData({ projectTitle: "", projectDesc: "" }); setShowNewProject(true); }} onOpenDetail={setDetailProject} searchQuery={searchQuery} />
-        ) : (
+        ) : activeTab === "meetings" ? (
           <MeetingsView meetings={data.meetings} onOpenNew={() => { setInitialModalData({ meetingTitle: "", meetingNotes: "" }); setShowNewMeeting(true); }} onToggleFollowUp={toggleFollowUp} onDelete={deleteMeeting} searchQuery={searchQuery} />
+        ) : (
+          <CalendarView projects={data.projects} meetings={data.meetings} logs={data.logs} onOpenProject={setDetailProject} onOpenMeeting={(m) => setActiveTab("meetings")} />
         )}
       </div>
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={createProject} initialTitle={initialModalData.projectTitle} initialDesc={initialModalData.projectDesc} />}
@@ -955,6 +1181,7 @@ export default function App() {
         />
       )}
       {showInfoModal && <InfoDialogModal onClose={() => setShowInfoModal(false)} />}
+      {showGmailModal && <GmailSyncModal onClose={() => setShowGmailModal(false)} onImportICS={handleImportICSEvents} onImportGmailInvite={handleImportGmailInvite} />}
     </div>
   );
 }
