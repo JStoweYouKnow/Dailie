@@ -81,8 +81,9 @@ const SEED_DATA = {
   ]
 };
 
-const STORAGE_KEY = "matriarch-data-v1";
-const AUTHOR_KEY = "matriarch-author-name-v1";
+const STORAGE_KEY = "dailie-data-v1";
+const OLD_STORAGE_KEY = "matriarch-data-v1";
+const AUTHOR_KEY = "dailie-author-name-v1";
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -110,7 +111,7 @@ function formatShort(ts) {
   const d = new Date(ts);
   const opts = { month: "short", day: "numeric" };
   if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
-  return d.toLocaleDateString("en-US", opts).toUpperCase();
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
 }
 
 async function getStoredData() {
@@ -122,7 +123,7 @@ async function getStoredData() {
   } catch (e) {}
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {}
 
@@ -154,7 +155,7 @@ function LoadingState() {
   return (
     <div style={{ padding: "60px 0", textAlign: "center", color: "var(--dim)" }}>
       <Film size={22} className="md-spin" style={{ marginBottom: 10, color: "var(--accent)" }} />
-      <div className="md-mono" style={{ fontSize: 12, letterSpacing: ".08em" }}>LOADING THE BOARD…</div>
+      <div className="md-mono" style={{ fontSize: 12, letterSpacing: ".08em" }}>LOADING DAILIE BOARD…</div>
     </div>
   );
 }
@@ -202,7 +203,7 @@ function QuickLogBar({ onAdd, defaultAuthor }) {
   };
   return (
     <div className="md-card" style={{ padding: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 20 }}>
-      <input className="md-input" style={{ flex: "2 1 240px" }} placeholder="Log an activity — a call, a send-out, a decision…" value={text}
+      <input className="md-input" style={{ flex: "2 1 240px" }} placeholder="Log Dailie note — call, send-out, decision, cut..." value={text}
         onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
       <input className="md-input" style={{ flex: "0 1 140px" }} placeholder="Logged by" value={author} onChange={(e) => setAuthor(e.target.value)} />
       <button className="md-btn md-btn-primary" onClick={submit}><Plus size={14} /> Log Note</button>
@@ -571,7 +572,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `matriarch-ops-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `dailie-ops-backup-${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -585,9 +586,9 @@ export default function App() {
         const parsed = JSON.parse(event.target.result);
         if (parsed && Array.isArray(parsed.projects) && Array.isArray(parsed.meetings)) {
           persist(parsed);
-          alert("Production board successfully imported!");
+          alert("Dailie board successfully imported!");
         } else {
-          alert("Invalid board format.");
+          alert("Invalid Dailie board format.");
         }
       } catch (err) {
         alert("Failed to parse JSON file.");
@@ -680,24 +681,24 @@ export default function App() {
               <Film size={20} color="var(--accent)" />
             </div>
             <div>
-              <div className="eyebrow-badge">Full-Stack Tech-Entertainment Studio</div>
-              <div className="md-display" style={{ fontSize: 24, letterSpacing: "-0.03em", lineHeight: 1.1, marginTop: 2 }}>
-                MATRIARCH <span className="md-serif-it" style={{ fontSize: "0.85em", opacity: 0.9 }}>Operations</span>
+              <div className="eyebrow-badge">Matriarch Studios Operations</div>
+              <div className="md-display" style={{ fontSize: 26, letterSpacing: "-0.03em", lineHeight: 1.1, marginTop: 2 }}>
+                DAILIE <span className="md-serif-it" style={{ fontSize: "0.85em", opacity: 0.9 }}>Ops Board</span>
               </div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ position: "relative", minWidth: 220 }}>
               <Search size={14} color="var(--dim)" style={{ position: "absolute", left: 12, top: 11 }} />
-              <input className="md-input" style={{ paddingLeft: 34, fontSize: 12 }} placeholder="Search operations board..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input className="md-input" style={{ paddingLeft: 34, fontSize: 12 }} placeholder="Search Dailie board..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             <div>
               <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 120 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
             </div>
-            <button className="md-btn md-btn-ghost" onClick={handleExportData} title="Export Board JSON" style={{ padding: 8 }}>
+            <button className="md-btn md-btn-ghost" onClick={handleExportData} title="Export Dailie JSON" style={{ padding: 8 }}>
               <Download size={14} />
             </button>
-            <button className="md-btn md-btn-ghost" onClick={() => fileInputRef.current && fileInputRef.current.click()} title="Import Board JSON" style={{ padding: 8 }}>
+            <button className="md-btn md-btn-ghost" onClick={() => fileInputRef.current && fileInputRef.current.click()} title="Import Dailie JSON" style={{ padding: 8 }}>
               <Upload size={14} />
             </button>
             <input type="file" ref={fileInputRef} style={{ display: "none" }} accept=".json" onChange={handleImportData} />
