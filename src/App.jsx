@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink, Mic, MicOff, Play, Pause, Eye, Send, Radio, Zap, Bot, Sparkles, SendHorizontal } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink, Mic, MicOff, Play, Pause, Eye, Send, Radio, Zap, Bot, Sparkles, SendHorizontal, Sun, Moon } from "lucide-react";
 import { parseDocumentFile } from "./documentParser";
 import { parseICSFeed, parseGmailTextInvite } from "./calendarSync";
 
@@ -1562,16 +1562,26 @@ export default function App() {
   const [initialModalData, setInitialModalData] = useState({ projectTitle: "", projectDesc: "", meetingTitle: "", meetingNotes: "" });
   const fileInputRef = useRef(null);
 
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("dailie-theme-v1") || "dark";
+    } catch (e) {
+      return "dark";
+    }
+  });
+
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setShowCmdPalette((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    if (theme === "light") {
+      document.documentElement.classList.add("light-theme");
+    } else {
+      document.documentElement.classList.remove("light-theme");
+    }
+    try {
+      localStorage.setItem("dailie-theme-v1", theme);
+    } catch (e) {}
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
 
   const load = async () => {
     const stored = await getStoredData();
@@ -1880,6 +1890,9 @@ export default function App() {
               accept=".json,.pdf,.doc,.docx,.pages,.txt,.md"
               onChange={handleImportFile}
             />
+            <button className="md-btn md-btn-ghost" onClick={toggleTheme} title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`} style={{ padding: 8, color: "var(--accent)" }}>
+              {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
             <button className="md-btn md-btn-ghost" onClick={refresh} title="Refresh Data" style={{ padding: 8 }}>
               <RefreshCw size={14} className={refreshing ? "md-spin" : ""} />
             </button>
