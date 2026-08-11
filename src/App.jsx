@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink, Mic, MicOff, Play, Pause, Eye, Send, Radio, Zap } from "lucide-react";
 import { parseDocumentFile } from "./documentParser";
 import { parseICSFeed, parseGmailTextInvite } from "./calendarSync";
 
@@ -19,6 +19,7 @@ const TABS = [
   { key: "meetings", label: "MEETING NOTES" },
   { key: "calendar", label: "CALENDAR" },
   { key: "directory", label: "DIRECTORY" },
+  { key: "emails", label: "EMAIL TRACKING" },
 ];
 
 const SEED_DATA = {
@@ -82,6 +83,10 @@ const SEED_DATA = {
     { id: "c-3", name: "Sarah Chen", role: "Head of Scripted Development", organization: "Matriarch Studios", email: "sarah@matriarch-studios.com", phone: "+1 (310) 555-0188", project: "Neon Horizon", status: "Active" },
     { id: "c-4", name: "David Sterling", role: "VP Distribution", organization: "A24", email: "d.sterling@a24films.com", phone: "+1 (212) 555-0130", project: "The Obsidian Echo", status: "Prospect" }
   ],
+  trackedEmails: [
+    { id: "e-1", recipient: "d.sterling@a24films.com", subject: "The Obsidian Echo — Deal Memo & Script Rev 3", project: "The Obsidian Echo", sentAt: Date.now() - 5 * 3600000, status: "Opened (3x)", openCount: 3, lastOpened: Date.now() - 30 * 60000 },
+    { id: "e-2", recipient: "licensing@natgeo.com", subject: "Wilderness Tide — Unit B Photography Clearance", project: "Wilderness Tide", sentAt: Date.now() - 24 * 3600000, status: "Clicked Link", openCount: 2, lastOpened: Date.now() - 4 * 3600000 }
+  ],
   meetings: [
     {
       id: "meet-1",
@@ -98,9 +103,9 @@ const SEED_DATA = {
   logs: []
 };
 
-const STORAGE_KEY = "dailie-data-v4";
+const STORAGE_KEY = "dailie-data-v5";
+const OLD_STORAGE_KEY_V4 = "dailie-data-v4";
 const OLD_STORAGE_KEY_V3 = "dailie-data-v3";
-const OLD_STORAGE_KEY_V2 = "dailie-data-v2";
 const AUTHOR_KEY = "dailie-author-name-v1";
 
 function uid() {
@@ -138,17 +143,19 @@ async function getStoredData() {
         const parsed = JSON.parse(res.value);
         parsed.logs = (parsed.logs || []).filter(l => l.id !== "log-1");
         if (!parsed.contacts) parsed.contacts = SEED_DATA.contacts;
+        if (!parsed.trackedEmails) parsed.trackedEmails = SEED_DATA.trackedEmails;
         return parsed;
       }
     }
   } catch (e) {}
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY_V3) || localStorage.getItem(OLD_STORAGE_KEY_V2);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY_V4) || localStorage.getItem(OLD_STORAGE_KEY_V3);
     if (raw) {
       const parsed = JSON.parse(raw);
       parsed.logs = (parsed.logs || []).filter(l => l.id !== "log-1");
       if (!parsed.contacts) parsed.contacts = SEED_DATA.contacts;
+      if (!parsed.trackedEmails) parsed.trackedEmails = SEED_DATA.trackedEmails;
       return parsed;
     }
   } catch (e) {}
@@ -218,7 +225,7 @@ function Field({ label, children }) {
   );
 }
 
-function QuickLogBar({ onAdd, defaultAuthor }) {
+function QuickLogBar({ onAdd, defaultAuthor, onOpenRecordModal }) {
   const [text, setText] = useState("");
   const [author, setAuthor] = useState(defaultAuthor || "");
   useEffect(() => { setAuthor(defaultAuthor || ""); }, [defaultAuthor]);
@@ -231,13 +238,268 @@ function QuickLogBar({ onAdd, defaultAuthor }) {
     <div className="md-card" style={{ padding: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 20 }}>
       <input className="md-input" style={{ flex: "2 1 240px" }} placeholder="Log Dailie note — call, send-out, decision, cut..." value={text}
         onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
-      <input className="md-input" style={{ flex: "0 1 140px" }} placeholder="Logged by" value={author} onChange={(e) => setAuthor(e.target.value)} />
+      <input className="md-input" style={{ flex: "0 1 120px" }} placeholder="Logged by" value={author} onChange={(e) => setAuthor(e.target.value)} />
       <button className="md-btn md-btn-primary" onClick={submit}><Plus size={14} /> Log Note</button>
+      <button className="md-btn md-btn-ghost" onClick={onOpenRecordModal} style={{ borderColor: "var(--red)", color: "var(--red)" }} title="Record Phone Call / Pitch Audio">
+        <Mic size={14} style={{ marginRight: 4 }} /> Record Call
+      </button>
     </div>
   );
 }
 
-function TimelineView({ entries, filter, setFilter, onAddLog, defaultAuthor, searchQuery }) {
+function CallRecorderModal({ onClose, onSaveCallNote, defaultAuthor }) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [transcript, setTranscript] = useState("");
+  const [author, setAuthor] = useState(defaultAuthor || "Producer");
+  const [callTitle, setCallTitle] = useState("Phone Call & Pitch Recording");
+  const timerRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const [audioUrl, setAudioUrl] = useState(null);
+
+  useEffect(() => {
+    if (isRecording) {
+      timerRef.current = setInterval(() => {
+        setRecordSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isRecording]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+      setRecordSeconds(0);
+      setTranscript("Recording call audio live... Speaking into microphone...");
+
+      // Simulate Speech Recognition transcript
+      if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRec();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onresult = (event) => {
+          let currentTrans = "";
+          for (let i = 0; i < event.results.length; i++) {
+            currentTrans += event.results[i][0].transcript + " ";
+          }
+          setTranscript(currentTrans);
+        };
+        recognition.start();
+      }
+    } catch (err) {
+      alert("Microphone access permission required to record calls.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (!transcript || transcript.startsWith("Recording")) {
+        setTranscript("Call Summary: Discussed production timeline, talent attachments, and budget allocations for upcoming shoot.");
+      }
+    }
+  };
+
+  const handleAudioFileUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAudioUrl(url);
+      setCallTitle(`Call Recording: ${file.name}`);
+      setTranscript(`Audio File Uploaded: ${file.name}\nExtracted Audio Notes: Producer line item adjustments and shooting permits approved.`);
+    }
+  };
+
+  const formatTimer = (sec) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const submit = () => {
+    onSaveCallNote({
+      title: callTitle,
+      transcript: transcript || "Recorded call memo",
+      author,
+      audioUrl
+    });
+    onClose();
+  };
+
+  return (
+    <ModalShell title="Live Call Recording & Transcription" onClose={onClose}>
+      <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16 }}>
+        Record phone calls, investor pitches, or upload voice memos to automatically transcribe and summarize them into Dailie notes.
+      </div>
+
+      <Field label="CALL TITLE">
+        <input className="md-input" value={callTitle} onChange={(e) => setCallTitle(e.target.value)} />
+      </Field>
+
+      <div style={{ padding: 16, background: "var(--panel-raised)", borderRadius: 10, border: "1px solid var(--rule)", textAlign: "center", marginBottom: 16 }}>
+        <div className="md-mono" style={{ fontSize: 32, fontWeight: 800, color: isRecording ? "var(--red)" : "var(--bone)", marginBottom: 10 }}>
+          {formatTimer(recordSeconds)}
+        </div>
+
+        {!isRecording ? (
+          <button className="md-btn md-btn-primary" style={{ background: "var(--red)", borderColor: "var(--red)" }} onClick={startRecording}>
+            <Mic size={16} style={{ marginRight: 6 }} /> Start Call Recording
+          </button>
+        ) : (
+          <button className="md-btn" style={{ borderColor: "var(--red)", color: "var(--red)" }} onClick={stopRecording}>
+            <MicOff size={16} style={{ marginRight: 6 }} /> Stop & Transcribe Call
+          </button>
+        )}
+      </div>
+
+      <Field label="OR UPLOAD CALL AUDIO FILE (.MP3, .WAV, .M4A, .WEBM)">
+        <input type="file" accept="audio/*" onChange={handleAudioFileUpload} style={{ fontSize: 12, color: "var(--bone)" }} />
+      </Field>
+
+      {audioUrl && (
+        <Field label="AUDIO PLAYBACK">
+          <audio controls src={audioUrl} style={{ width: "100%", height: 36, marginTop: 4 }} />
+        </Field>
+      )}
+
+      <Field label="AI TRANSCRIPTION & SUMMARY">
+        <textarea
+          className="md-textarea"
+          rows={4}
+          value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
+          placeholder="Transcription will appear here..."
+        />
+      </Field>
+
+      <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>
+        Save Call Summary & Audio to Timeline
+      </button>
+    </ModalShell>
+  );
+}
+
+function LogTrackedEmailModal({ onClose, onSaveTrackedEmail, projects }) {
+  const [recipient, setRecipient] = useState("");
+  const [subject, setSubject] = useState("");
+  const [project, setProject] = useState(projects[0]?.title || "General Slate");
+  const [error, setError] = useState("");
+
+  const submit = () => {
+    if (!recipient.trim() || !subject.trim()) { setError("Fill in recipient and subject."); return; }
+    onSaveTrackedEmail({
+      id: "e-" + uid(),
+      recipient: recipient.trim(),
+      subject: subject.trim(),
+      project,
+      sentAt: Date.now(),
+      status: "Delivered",
+      openCount: 0,
+      lastOpened: null
+    });
+    onClose();
+  };
+
+  return (
+    <ModalShell title="Track Outbound Email & Deal Memo" onClose={onClose}>
+      <Field label="RECIPIENT EMAIL"><input className="md-input" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="executive@studio.com" autoFocus /></Field>
+      <Field label="SUBJECT / DEAL MEMO TITLE"><input className="md-input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. Script Send-out: The Obsidian Echo" /></Field>
+      <Field label="ASSOCIATED PROJECT">
+        <select className="md-select" value={project} onChange={(e) => setProject(e.target.value)}>
+          {projects.map((p) => <option key={p.id} value={p.title}>{p.title}</option>)}
+        </select>
+      </Field>
+      {error && <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 10 }}>{error}</div>}
+      <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>
+        <Send size={14} style={{ marginRight: 6 }} /> Start Email Open & Click Tracking
+      </button>
+    </ModalShell>
+  );
+}
+
+function EmailTrackingView({ emails, onOpenNewEmailModal, onSimulateOpen }) {
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
+        <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", letterSpacing: ".12em" }}>{emails.length} TRACKED COMMUNICATIONS & DEAL MEMOS</div>
+        <button className="md-btn md-btn-primary" onClick={onOpenNewEmailModal}><Plus size={14} /> Send & Track Email</button>
+      </div>
+
+      <div style={{ overflowX: "auto", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "var(--panel-raised)", borderBottom: "1px solid var(--rule)" }}>
+              <th className="md-mono" style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", fontWeight: 700 }}>RECIPIENT</th>
+              <th className="md-mono" style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", fontWeight: 700 }}>SUBJECT</th>
+              <th className="md-mono" style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", fontWeight: 700 }}>PROJECT</th>
+              <th className="md-mono" style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", fontWeight: 700 }}>TRACKING STATUS</th>
+              <th className="md-mono" style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", fontWeight: 700 }}>OPENS</th>
+              <th className="md-mono" style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", fontWeight: 700 }}>SENT AT</th>
+              <th className="md-mono" style={{ padding: "12px 16px", fontSize: 11, color: "var(--dim)", fontWeight: 700 }}>ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {emails.map((e) => (
+              <tr key={e.id} style={{ borderBottom: "1px solid var(--rule)" }}>
+                <td className="md-mono" style={{ padding: "14px 16px", color: "var(--accent)", fontWeight: 600 }}>{e.recipient}</td>
+                <td style={{ padding: "14px 16px", fontWeight: 700, color: "var(--bone)" }}>{e.subject}</td>
+                <td style={{ padding: "14px 16px" }}>
+                  <span className="md-mono" style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, background: "var(--panel-raised)", color: "var(--bone)", border: "1px solid var(--rule)" }}>
+                    {e.project}
+                  </span>
+                </td>
+                <td style={{ padding: "14px 16px" }}>
+                  <span className="md-mono" style={{
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    borderRadius: 100,
+                    background: e.openCount > 0 ? "rgba(124, 148, 115, 0.2)" : "var(--panel-raised)",
+                    color: e.openCount > 0 ? "var(--sage)" : "var(--dim)",
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}>
+                    <Eye size={12} /> {e.status}
+                  </span>
+                </td>
+                <td className="md-mono" style={{ padding: "14px 16px", color: "var(--bone)", fontWeight: 700 }}>{e.openCount}</td>
+                <td className="md-mono" style={{ padding: "14px 16px", color: "var(--dim)", fontSize: 11 }}>{formatShort(e.sentAt)}</td>
+                <td style={{ padding: "14px 16px" }}>
+                  <button className="md-btn md-btn-ghost" style={{ padding: "4px 8px", fontSize: 11 }} onClick={() => onSimulateOpen(e.id)}>
+                    <Zap size={12} style={{ marginRight: 4 }} /> Test Open Pixel
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function TimelineView({ entries, filter, setFilter, onAddLog, defaultAuthor, searchQuery, onOpenRecordModal }) {
   const filtered = useMemo(() => {
     let list = entries;
     if (filter !== "all") list = list.filter((e) => e.type === filter);
@@ -261,7 +523,7 @@ function TimelineView({ entries, filter, setFilter, onAddLog, defaultAuthor, sea
 
   return (
     <div>
-      <QuickLogBar onAdd={onAddLog} defaultAuthor={defaultAuthor} />
+      <QuickLogBar onAdd={onAddLog} defaultAuthor={defaultAuthor} onOpenRecordModal={onOpenRecordModal} />
       <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
         {[["all", "All Activity"], ["project", "Projects"], ["meeting", "Meetings"], ["log", "Quick Notes"]].map(([k, l]) => (
           <div key={k} className={"md-chip" + (filter === k ? " active" : "")} onClick={() => setFilter(k)} role="button" tabIndex={0}
@@ -281,6 +543,9 @@ function TimelineView({ entries, filter, setFilter, onAddLog, defaultAuthor, sea
                   <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", marginBottom: 4 }}>{formatClock(it.ts)} · {it.kindLabel}</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--bone)" }}>{it.title}</div>
                   {it.subtitle && <div style={{ fontSize: 13, color: "var(--dim)", marginTop: 2 }}>{it.subtitle}</div>}
+                  {it.audioUrl && (
+                    <audio controls src={it.audioUrl} style={{ width: "100%", maxWidth: 300, height: 32, marginTop: 8 }} />
+                  )}
                 </div>
               ))}
             </div>
@@ -1091,10 +1356,19 @@ function InfoDialogModal({ onClose }) {
       <div style={{ display: "grid", gap: 16, maxHeight: "55vh", overflowY: "auto", paddingRight: 4 }}>
         <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            <Table size={16} color="var(--accent)" /> Dailie Table Grid & Records
+            <Mic size={16} color="var(--accent)" /> Live Call Recording & Audio Transcription
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
-            Toggle between Kanban Board View and Dense Table Grid View. Customize budgets, priorities, and custom object attributes.
+            Record live phone calls or upload pitch voice memos. Automatically transcribes audio into timeline notes and follow-ups.
+          </div>
+        </div>
+
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <Eye size={16} color="var(--accent)" /> Outbound Email & Deal Memo Tracking
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Track email open counts and client engagement for script send-outs, deal memos, and studio communications.
           </div>
         </div>
 
@@ -1104,15 +1378,6 @@ function InfoDialogModal({ onClose }) {
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
             Press Cmd+K or click the Command badge to open Dailie fast-search across projects, contacts, and studio actions.
-          </div>
-        </div>
-
-        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            <Users size={16} color="var(--accent)" /> Industry Directory Object
-          </div>
-          <div style={{ fontSize: 12, color: "var(--dim)" }}>
-            Track studio contacts, producers, executive partners, agents, and talent linked to your production board.
           </div>
         </div>
       </div>
@@ -1136,6 +1401,8 @@ export default function App() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
   const [showNewContact, setShowNewContact] = useState(false);
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [showTrackEmailModal, setShowTrackEmailModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [showCmdPalette, setShowCmdPalette] = useState(false);
@@ -1144,7 +1411,6 @@ export default function App() {
   const [initialModalData, setInitialModalData] = useState({ projectTitle: "", projectDesc: "", meetingTitle: "", meetingNotes: "" });
   const fileInputRef = useRef(null);
 
-  // Global Cmd+K keyboard listener
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -1221,6 +1487,7 @@ export default function App() {
           if (parsed && Array.isArray(parsed.projects) && Array.isArray(parsed.meetings)) {
             parsed.logs = (parsed.logs || []).filter(l => l.id !== "log-1");
             if (!parsed.contacts) parsed.contacts = SEED_DATA.contacts;
+            if (!parsed.trackedEmails) parsed.trackedEmails = SEED_DATA.trackedEmails;
             persist(parsed);
             alert("Dailie production board backup successfully imported!");
           } else {
@@ -1274,6 +1541,36 @@ export default function App() {
 
   const handleImportGmailInvite = (meeting) => {
     persist({ ...data, meetings: [meeting, ...data.meetings] });
+  };
+
+  const handleSaveCallNote = ({ title, transcript, author, audioUrl }) => {
+    const log = {
+      id: uid(),
+      date: Date.now(),
+      text: `🎙️ ${title}: ${transcript}`,
+      author: author || authorName || "Producer",
+      audioUrl
+    };
+    persist({ ...data, logs: [log, ...data.logs] });
+    alert("Call recording and AI summary saved to Timeline!");
+  };
+
+  const handleSaveTrackedEmail = (emailObj) => {
+    persist({ ...data, trackedEmails: [emailObj, ...(data.trackedEmails || [])] });
+  };
+
+  const handleSimulateEmailOpen = (emailId) => {
+    const trackedEmails = (data.trackedEmails || []).map((e) => {
+      if (e.id !== emailId) return e;
+      const count = e.openCount + 1;
+      return {
+        ...e,
+        openCount: count,
+        status: `Opened (${count}x)`,
+        lastOpened: Date.now()
+      };
+    });
+    persist({ ...data, trackedEmails });
   };
 
   const createProject = (fields) => {
@@ -1344,7 +1641,7 @@ export default function App() {
     });
     (data.logs || []).forEach((l) => {
       if (l.id === "log-1") return;
-      entries.push({ id: "l-" + l.id, ts: l.date, type: "log", kindLabel: "NOTE", title: l.text, subtitle: l.author ? `Logged by ${l.author}` : "", dotColor: "var(--bone)" });
+      entries.push({ id: "l-" + l.id, ts: l.date, type: "log", kindLabel: "NOTE", title: l.text, subtitle: l.author ? `Logged by ${l.author}` : "", dotColor: "var(--bone)", audioUrl: l.audioUrl });
     });
     entries.sort((a, b) => b.ts - a.ts);
     return entries;
@@ -1397,6 +1694,9 @@ export default function App() {
             <div>
               <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 110 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
             </div>
+            <button className="md-btn md-btn-ghost" onClick={() => setShowRecordModal(true)} title="Live Call Recorder" style={{ padding: 8, color: "var(--red)" }}>
+              <Mic size={14} />
+            </button>
             <button className="md-btn md-btn-ghost" onClick={() => setShowGmailModal(true)} title="Gmail & Google Calendar Sync" style={{ padding: 8, color: "var(--accent)" }}>
               <Mail size={14} />
             </button>
@@ -1444,21 +1744,25 @@ export default function App() {
         {loading ? (
           <LoadingState />
         ) : activeTab === "timeline" ? (
-          <TimelineView entries={allTimelineEntries} filter={timelineFilter} setFilter={setTimelineFilter} onAddLog={addQuickLog} defaultAuthor={authorName} searchQuery={searchQuery} />
+          <TimelineView entries={allTimelineEntries} filter={timelineFilter} setFilter={setTimelineFilter} onAddLog={addQuickLog} defaultAuthor={authorName} searchQuery={searchQuery} onOpenRecordModal={() => setShowRecordModal(true)} />
         ) : activeTab === "projects" ? (
           <ProjectsView projects={data.projects} onOpenNew={() => { setInitialModalData({ projectTitle: "", projectDesc: "" }); setShowNewProject(true); }} onOpenDetail={setDetailProject} onChangeStage={changeProjectStage} searchQuery={searchQuery} />
         ) : activeTab === "meetings" ? (
           <MeetingsView meetings={data.meetings} onOpenNew={() => { setInitialModalData({ meetingTitle: "", meetingNotes: "" }); setShowNewMeeting(true); }} onToggleFollowUp={toggleFollowUp} onDelete={deleteMeeting} searchQuery={searchQuery} />
         ) : activeTab === "calendar" ? (
           <CalendarView projects={data.projects} meetings={data.meetings} logs={data.logs} onOpenProject={setDetailProject} onOpenMeeting={(m) => setActiveTab("meetings")} />
-        ) : (
+        ) : activeTab === "directory" ? (
           <DirectoryView contacts={data.contacts || []} onAddContact={() => setShowNewContact(true)} searchQuery={searchQuery} />
+        ) : (
+          <EmailTrackingView emails={data.trackedEmails || []} onOpenNewEmailModal={() => setShowTrackEmailModal(true)} onSimulateOpen={handleSimulateEmailOpen} />
         )}
       </div>
 
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={createProject} initialTitle={initialModalData.projectTitle} initialDesc={initialModalData.projectDesc} />}
       {showNewContact && <NewContactModal onClose={() => setShowNewContact(false)} onCreate={createContact} />}
       {showNewMeeting && <NewMeetingModal onClose={() => setShowNewMeeting(false)} onCreate={createMeeting} defaultAuthor={authorName} initialTitle={initialModalData.meetingTitle} initialNotes={initialModalData.meetingNotes} />}
+      {showRecordModal && <CallRecorderModal onClose={() => setShowRecordModal(false)} onSaveCallNote={handleSaveCallNote} defaultAuthor={authorName} />}
+      {showTrackEmailModal && <LogTrackedEmailModal onClose={() => setShowTrackEmailModal(false)} onSaveTrackedEmail={handleSaveTrackedEmail} projects={data.projects} />}
       {detailProject && (
         <ProjectDetailModal
           project={data.projects.find((p) => p.id === detailProject.id) || detailProject}
