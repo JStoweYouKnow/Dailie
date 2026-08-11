@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink, Mic, MicOff, Play, Pause, Eye, Send, Radio, Zap } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink, Mic, MicOff, Play, Pause, Eye, Send, Radio, Zap, Bot, Sparkles, SendHorizontal } from "lucide-react";
 import { parseDocumentFile } from "./documentParser";
 import { parseICSFeed, parseGmailTextInvite } from "./calendarSync";
 
@@ -225,6 +225,157 @@ function Field({ label, children }) {
   );
 }
 
+function AIAssistantDrawer({ isOpen, onClose, data, onRunAction }) {
+  const [messages, setMessages] = useState([
+    {
+      sender: "ai",
+      text: "Hello! I am your Dailie Studio AI Assistant. I can analyze your production slate, automate task assignments, generate executive reports, or search your Contacts Directory. How can I help today?"
+    }
+  ]);
+  const [inputPrompt, setInputPrompt] = useState("");
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (isOpen) scrollToBottom();
+  }, [messages, isOpen]);
+
+  const handleSend = (textToSend) => {
+    const prompt = textToSend || inputPrompt;
+    if (!prompt.trim()) return;
+
+    const userMsg = { sender: "user", text: prompt.trim() };
+    setMessages((prev) => [...prev, userMsg]);
+    if (!textToSend) setInputPrompt("");
+
+    setTimeout(() => {
+      processAIResponse(prompt.trim());
+    }, 500);
+  };
+
+  const processAIResponse = (prompt) => {
+    const p = prompt.toLowerCase();
+    let aiText = "";
+
+    if (p.includes("report") || p.includes("slate") || p.includes("summary")) {
+      const totalBudget = data.projects.reduce((acc, proj) => {
+        const b = parseFloat((proj.budget || "0").replace(/[^0-9.]/g, ""));
+        return acc + (isNaN(b) ? 0 : b);
+      }, 0);
+      const openFollows = data.meetings.reduce((acc, m) => acc + m.followUps.filter(f => !f.done).length, 0);
+
+      aiText = `📊 **Executive Studio Slate Report**\n\n` +
+        `• **Active Projects**: ${data.projects.length} total projects\n` +
+        `• **Total Slate Budget**: ~$${totalBudget.toFixed(1)}M\n` +
+        `• **Open Action Follow-ups**: ${openFollows} items requiring attention\n` +
+        `• **Top Priority Projects**: ${data.projects.filter(pr => pr.priority === "HIGH").map(pr => pr.title).join(", ")}\n\n` +
+        `Would you like me to export this report as a JSON snapshot or log it to the timeline?`;
+    } else if (p.includes("add project") || p.includes("new project") || p.includes("create project")) {
+      const match = prompt.match(/project\s+(.+)/i);
+      const projName = match ? match[1] : "New Studio Production";
+      onRunAction("createProject", { title: projName, description: "Auto-created by AI Assistant", stage: "development", owner: "AI Assistant", budget: "$10.0M", priority: "HIGH" });
+      aiText = `✨ Project **"${projName}"** has been automatically created and added to your Development Kanban board!`;
+    } else if (p.includes("follow") || p.includes("task") || p.includes("action")) {
+      const openTasks = [];
+      data.meetings.forEach(m => {
+        m.followUps.filter(f => !f.done).forEach(f => {
+          openTasks.push(`• **${f.text}** (Owner: ${f.owner || "Unassigned"}) — Meeting: *${m.title}*`);
+        });
+      });
+      aiText = `⚡ **Pending Follow-up Action Items (${openTasks.length})**:\n\n` + openTasks.join("\n");
+    } else if (p.includes("contact") || p.includes("exec") || p.includes("partner")) {
+      const contactList = (data.contacts || []).map(c => `• **${c.name}** (${c.role} @ ${c.organization}) — Project: *${c.project || "General"}*`);
+      aiText = `👥 **Industry Contacts Directory (${contactList.length})**:\n\n` + contactList.join("\n");
+    } else {
+      aiText = `I analyzed your Dailie production board. You currently have **${data.projects.length} projects** and **${data.meetings.length} meeting notes**. You can ask me to "Run weekly slate report", "List open follow-ups", or "Add project [Title]".`;
+    }
+
+    setMessages((prev) => [...prev, { sender: "ai", text: aiText }]);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{
+      position: "fixed",
+      bottom: 24,
+      right: 24,
+      width: 420,
+      height: 540,
+      background: "var(--panel)",
+      border: "1px solid var(--rule-bright)",
+      borderRadius: 16,
+      boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+      display: "flex",
+      flexDirection: "column",
+      zIndex: 1000,
+      overflow: "hidden"
+    }}>
+      <div style={{ padding: "14px 18px", background: "var(--panel-raised)", borderBottom: "1px solid var(--rule)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Sparkles size={16} color="var(--ink)" />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "var(--bone)" }}>Dailie AI Studio Assistant</div>
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--accent)" }}>ONLINE · AUTOMATION ENGINE</div>
+          </div>
+        </div>
+        <button className="md-btn md-btn-ghost" onClick={onClose} style={{ padding: 4 }}><X size={16} /></button>
+      </div>
+
+      <div style={{ flex: 1, padding: 16, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+        {messages.map((m, idx) => (
+          <div key={idx} style={{
+            alignSelf: m.sender === "user" ? "flex-end" : "flex-start",
+            maxWidth: "85%",
+            background: m.sender === "user" ? "var(--panel-raised)" : "#1c1c22",
+            border: `1px solid ${m.sender === "user" ? "var(--rule-bright)" : "var(--rule)"}`,
+            padding: "10px 14px",
+            borderRadius: 12,
+            fontSize: 13,
+            color: "var(--bone)",
+            whiteSpace: "pre-wrap",
+            lineHeight: 1.5
+          }}>
+            {m.text}
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <div style={{ padding: "8px 12px", borderTop: "1px solid var(--rule)", display: "flex", gap: 6, flexWrap: "wrap", background: "var(--panel-raised)" }}>
+        <button className="md-btn md-btn-ghost" style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100 }} onClick={() => handleSend("Run weekly slate report")}>
+          📊 Slate Report
+        </button>
+        <button className="md-btn md-btn-ghost" style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100 }} onClick={() => handleSend("List pending follow-up action items")}>
+          ⚡ Open Action Items
+        </button>
+        <button className="md-btn md-btn-ghost" style={{ fontSize: 10, padding: "3px 8px", borderRadius: 100 }} onClick={() => handleSend("Show Industry Contacts")}>
+          👥 Contacts Summary
+        </button>
+      </div>
+
+      <div style={{ padding: 12, borderTop: "1px solid var(--rule)", display: "flex", gap: 8 }}>
+        <input
+          className="md-input"
+          style={{ fontSize: 13 }}
+          placeholder="Ask AI Assistant or command an action..."
+          value={inputPrompt}
+          onChange={(e) => setInputPrompt(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
+        />
+        <button className="md-btn md-btn-primary" onClick={() => handleSend()} style={{ padding: "0 12px" }}>
+          <SendHorizontal size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function QuickLogBar({ onAdd, defaultAuthor, onOpenRecordModal }) {
   const [text, setText] = useState("");
   const [author, setAuthor] = useState(defaultAuthor || "");
@@ -290,7 +441,6 @@ function CallRecorderModal({ onClose, onSaveCallNote, defaultAuthor }) {
       setRecordSeconds(0);
       setTranscript("Recording call audio live... Speaking into microphone...");
 
-      // Simulate Speech Recognition transcript
       if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRec();
@@ -1356,6 +1506,15 @@ function InfoDialogModal({ onClose }) {
       <div style={{ display: "grid", gap: 16, maxHeight: "55vh", overflowY: "auto", paddingRight: 4 }}>
         <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            <Sparkles size={16} color="var(--accent)" /> Dailie AI Studio Assistant
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Chat with AI Assistant to run executive slate reports, automate project creation, and filter open follow-up action items.
+          </div>
+        </div>
+
+        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
             <Mic size={16} color="var(--accent)" /> Live Call Recording & Audio Transcription
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
@@ -1369,15 +1528,6 @@ function InfoDialogModal({ onClose }) {
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
             Track email open counts and client engagement for script send-outs, deal memos, and studio communications.
-          </div>
-        </div>
-
-        <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            <Command size={16} color="var(--accent)" /> Dailie Command Palette (Cmd+K)
-          </div>
-          <div style={{ fontSize: 12, color: "var(--dim)" }}>
-            Press Cmd+K or click the Command badge to open Dailie fast-search across projects, contacts, and studio actions.
           </div>
         </div>
       </div>
@@ -1406,6 +1556,7 @@ export default function App() {
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [showCmdPalette, setShowCmdPalette] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
   const [importDocInfo, setImportDocInfo] = useState(null);
   const [initialModalData, setInitialModalData] = useState({ projectTitle: "", projectDesc: "", meetingTitle: "", meetingNotes: "" });
@@ -1573,6 +1724,12 @@ export default function App() {
     persist({ ...data, trackedEmails });
   };
 
+  const handleAIAction = (actionType, payload) => {
+    if (actionType === "createProject") {
+      createProject(payload);
+    }
+  };
+
   const createProject = (fields) => {
     const now = Date.now();
     const project = {
@@ -1681,18 +1838,25 @@ export default function App() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <button
+              className="md-btn md-btn-primary"
+              onClick={() => setShowAIAssistant((prev) => !prev)}
+              style={{ background: "var(--accent)", color: "var(--ink)", fontWeight: 700 }}
+            >
+              <Sparkles size={14} style={{ marginRight: 6 }} /> AI Studio Assistant
+            </button>
+            <button
               className="md-btn md-btn-ghost"
               onClick={() => setShowCmdPalette(true)}
               style={{ background: "var(--panel-raised)", border: "1px solid var(--rule)", fontSize: 12, padding: "6px 12px" }}
             >
               <Command size={13} style={{ marginRight: 6, color: "var(--accent)" }} /> Cmd+K
             </button>
-            <div style={{ position: "relative", minWidth: 200 }}>
+            <div style={{ position: "relative", minWidth: 180 }}>
               <Search size={14} color="var(--dim)" style={{ position: "absolute", left: 12, top: 11 }} />
               <input className="md-input" style={{ paddingLeft: 34, fontSize: 12 }} placeholder="Search board..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
             <div>
-              <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 110 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
+              <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 100 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
             </div>
             <button className="md-btn md-btn-ghost" onClick={() => setShowRecordModal(true)} title="Live Call Recorder" style={{ padding: 8, color: "var(--red)" }}>
               <Mic size={14} />
@@ -1795,6 +1959,7 @@ export default function App() {
           contacts={data.contacts || []}
         />
       )}
+      <AIAssistantDrawer isOpen={showAIAssistant} onClose={() => setShowAIAssistant(false)} data={data} onRunAction={handleAIAction} />
     </div>
   );
 }
