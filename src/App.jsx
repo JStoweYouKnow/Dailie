@@ -319,7 +319,7 @@ function ProjectCard({ project, onClick }) {
   );
 }
 
-function AttioTableView({ projects, onOpenDetail, onChangeStage }) {
+function DailieTableView({ projects, onOpenDetail, onChangeStage }) {
   return (
     <div style={{ overflowX: "auto", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
@@ -397,7 +397,7 @@ function AttioTableView({ projects, onOpenDetail, onChangeStage }) {
 }
 
 function ProjectsView({ projects, onOpenNew, onOpenDetail, onChangeStage, searchQuery }) {
-  const [viewMode, setViewMode] = useState("kanban"); // 'kanban' | 'table'
+  const [viewMode, setViewMode] = useState("kanban");
 
   const filteredProjects = useMemo(() => {
     if (!searchQuery) return projects;
@@ -423,7 +423,7 @@ function ProjectsView({ projects, onOpenNew, onOpenDetail, onChangeStage, search
               className={"md-btn md-btn-ghost" + (viewMode === "table" ? " active" : "")}
               onClick={() => setViewMode("table")}
               style={{ padding: "4px 8px", borderRadius: 4, background: viewMode === "table" ? "var(--panel)" : "transparent" }}
-              title="Attio Table Grid View"
+              title="Table Grid View"
             >
               <Table size={14} color={viewMode === "table" ? "var(--accent)" : "var(--dim)"} />
             </button>
@@ -436,7 +436,7 @@ function ProjectsView({ projects, onOpenNew, onOpenDetail, onChangeStage, search
       {filteredProjects.length === 0 ? (
         <EmptyState title="No projects found" subtitle="Try clearing your search query or add a new project to start tracking." />
       ) : viewMode === "table" ? (
-        <AttioTableView projects={filteredProjects} onOpenDetail={onOpenDetail} onChangeStage={onChangeStage} />
+        <DailieTableView projects={filteredProjects} onOpenDetail={onOpenDetail} onChangeStage={onChangeStage} />
       ) : (
         <div className="md-scroll" style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 12 }}>
           {STAGES.map((s) => {
@@ -674,7 +674,7 @@ function CommandPaletteModal({ onClose, onSelectAction, projects, contacts }) {
   }, [query, projects, contacts]);
 
   return (
-    <ModalShell title="Attio Command Palette (Cmd+K)" onClose={onClose}>
+    <ModalShell title="Dailie Command Palette (Cmd+K)" onClose={onClose}>
       <div style={{ position: "relative", marginBottom: 16 }}>
         <Command size={16} color="var(--accent)" style={{ position: "absolute", left: 14, top: 13 }} />
         <input
@@ -1091,7 +1091,7 @@ function InfoDialogModal({ onClose }) {
       <div style={{ display: "grid", gap: 16, maxHeight: "55vh", overflowY: "auto", paddingRight: 4 }}>
         <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            <Table size={16} color="var(--accent)" /> Attio-Style Views & Records
+            <Table size={16} color="var(--accent)" /> Dailie Table Grid & Records
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
             Toggle between Kanban Board View and Dense Table Grid View. Customize budgets, priorities, and custom object attributes.
@@ -1100,10 +1100,10 @@ function InfoDialogModal({ onClose }) {
 
         <div style={{ padding: 12, background: "var(--panel-raised)", borderRadius: 8, border: "1px solid var(--rule)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--bone)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
-            <Command size={16} color="var(--accent)" /> Command Palette (Cmd+K)
+            <Command size={16} color="var(--accent)" /> Dailie Command Palette (Cmd+K)
           </div>
           <div style={{ fontSize: 12, color: "var(--dim)" }}>
-            Press Cmd+K or click the Command badge to open Attio fast-search across projects, contacts, and studio actions.
+            Press Cmd+K or click the Command badge to open Dailie fast-search across projects, contacts, and studio actions.
           </div>
         </div>
 
