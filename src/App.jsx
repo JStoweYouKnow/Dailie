@@ -1539,6 +1539,22 @@ function InfoDialogModal({ onClose }) {
   );
 }
 
+function DailieBrandLogo({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, display: "block" }}>
+      <rect x="3" y="11" width="30" height="22" rx="5" fill="var(--panel-raised)" stroke="var(--accent)" strokeWidth="2" />
+      <path d="M3 12C3 9.79086 4.79086 8 7 8H29C31.2091 8 33 9.79086 33 12V15H3V12Z" fill="var(--accent)" />
+      <path d="M8 8L12 15" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M16 8L20 15" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M24 8L28 15" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="10" cy="22" r="2" fill="var(--bone)" />
+      <circle cx="18" cy="22" r="2" fill="var(--bone)" />
+      <circle cx="26" cy="22" r="2" fill="var(--bone)" />
+      <line x1="8" y1="27" x2="28" y2="27" stroke="var(--rule-bright)" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(SEED_DATA);
   const [loading, setLoading] = useState(true);
@@ -1825,9 +1841,7 @@ export default function App() {
       <div style={{ padding: "26px 32px 0" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 10, background: "var(--panel-raised)", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--rule-bright)", flexShrink: 0 }}>
-              <Film size={20} color="var(--accent)" />
-            </div>
+            <DailieBrandLogo size={42} />
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div className="eyebrow-badge">Matriarch Studios Operations</div>
