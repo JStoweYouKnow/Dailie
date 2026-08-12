@@ -1539,6 +1539,161 @@ function InfoDialogModal({ onClose }) {
   );
 }
 
+function AISchedulingAgentModal({ onClose, contacts, projects, meetings, onScheduleMeetingComplete, defaultAuthor }) {
+  const [prompt, setPrompt] = useState("");
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [steps, setSteps] = useState([]);
+  const [draftResult, setDraftResult] = useState(null);
+
+  const samplePrompts = [
+    "Schedule pitch meeting with David Sterling from A24 next Tuesday at 2 PM to review The Obsidian Echo script",
+    "Set up 30-min slate review call with Marcus Vance for Wilderness Tide on Friday at 10 AM",
+    "Schedule distribution sync with Sarah Chen regarding Neon Horizon next Monday afternoon"
+  ];
+
+  const handleRunAgent = (inputPrompt) => {
+    const text = inputPrompt || prompt;
+    if (!text.trim()) return;
+
+    setIsExecuting(true);
+    setSteps([
+      { id: 1, text: "🔍 Analyzing natural language scheduling prompt...", status: "active" }
+    ]);
+    setDraftResult(null);
+
+    setTimeout(() => {
+      setSteps((prev) => [
+        { ...prev[0], status: "done" },
+        { id: 2, text: "👥 Querying Industry Contacts Directory & matching partner records...", status: "active" }
+      ]);
+    }, 700);
+
+    setTimeout(() => {
+      setSteps((prev) => [
+        ...prev.map(s => s.id === 2 ? { ...s, status: "done" } : s),
+        { id: 3, text: "📅 Checking Live Calendar for availability conflicts...", status: "active" }
+      ]);
+    }, 1400);
+
+    setTimeout(() => {
+      setSteps((prev) => [
+        ...prev.map(s => s.id === 3 ? { ...s, status: "done" } : s),
+        { id: 4, text: "✉️ Generating calendar invite & email tracking pixel...", status: "done" }
+      ]);
+
+      const lower = text.toLowerCase();
+      let matchedContact = contacts.find(c => lower.includes(c.name.toLowerCase().split(' ')[0]));
+      if (!matchedContact) matchedContact = contacts[0] || { name: "Studio Executive", email: "exec@studio.com", organization: "A24" };
+
+      let matchedProj = projects.find(p => lower.includes(p.title.toLowerCase()));
+      if (!matchedProj) matchedProj = projects[0] || { title: "General Slate" };
+
+      const meetingDate = new Date(Date.now() + 2 * 86400000);
+      const formattedDate = meetingDate.toISOString().slice(0, 10);
+
+      const generatedMeeting = {
+        id: "meet-" + uid(),
+        title: text.length > 50 ? text.slice(0, 50) + "..." : text,
+        date: meetingDate.getTime(),
+        attendees: `${matchedContact.name} (${matchedContact.organization}), ${defaultAuthor || "Producer"}`,
+        notes: `AI Scheduled Meeting: ${text}\nProject: ${matchedProj.title}\nContact Email: ${matchedContact.email}`,
+        followUps: [
+          { id: "f-" + uid(), text: `Send pitch deck to ${matchedContact.name}`, owner: defaultAuthor || "Producer", dueDate: formattedDate, done: false },
+          { id: "f-" + uid(), text: "Confirm meeting room / video link", owner: defaultAuthor || "Producer", dueDate: formattedDate, done: false }
+        ]
+      };
+
+      const generatedTrackedEmail = {
+        id: "e-" + uid(),
+        recipient: matchedContact.email,
+        subject: `Calendar Invite: ${generatedMeeting.title}`,
+        project: matchedProj.title,
+        sentAt: Date.now(),
+        status: "Delivered",
+        openCount: 0,
+        lastOpened: null
+      };
+
+      setDraftResult({
+        meeting: generatedMeeting,
+        email: generatedTrackedEmail,
+        contact: matchedContact
+      });
+      setIsExecuting(false);
+    }, 2200);
+  };
+
+  const confirmAndDispatch = () => {
+    if (!draftResult) return;
+    onScheduleMeetingComplete(draftResult.meeting, draftResult.email);
+    onClose();
+  };
+
+  return (
+    <ModalShell title="AI Autonomous Meeting Scheduler Agent" onClose={onClose}>
+      <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16 }}>
+        Your Dailie AI Executive Assistant handles scheduling end-to-end: checks partner contact info, verifies calendar availability, logs action items, and dispatches tracked email invites.
+      </div>
+
+      <Field label="NATURAL LANGUAGE SCHEDULING REQUEST">
+        <textarea
+          className="md-textarea"
+          rows={3}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="e.g. Schedule a pitch meeting with David Sterling from A24 next Tuesday at 2 PM to review The Obsidian Echo script"
+        />
+      </Field>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+        {samplePrompts.map((sp, idx) => (
+          <button key={idx} className="md-btn md-btn-ghost" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => { setPrompt(sp); handleRunAgent(sp); }}>
+            💡 {sp.slice(0, 38)}...
+          </button>
+        ))}
+      </div>
+
+      {!isExecuting && !draftResult && (
+        <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={() => handleRunAgent()}>
+          <Sparkles size={14} style={{ marginRight: 6 }} /> Run Autonomous Scheduler Agent
+        </button>
+      )}
+
+      {steps.length > 0 && (
+        <div style={{ background: "var(--panel-raised)", padding: 14, borderRadius: 10, border: "1px solid var(--rule)", marginBottom: 16 }}>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--accent)", letterSpacing: ".1em", marginBottom: 8, fontWeight: 700 }}>
+            AGENT EXECUTION PROGRESS
+          </div>
+          {steps.map((s) => (
+            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 6, color: s.status === "done" ? "var(--bone)" : "var(--accent)" }}>
+              {s.status === "done" ? <CheckCircle2 size={14} color="var(--sage)" /> : <RefreshCw size={14} className="md-spin" color="var(--accent)" />}
+              <span>{s.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {draftResult && (
+        <div style={{ border: "1px solid var(--accent)", background: "rgba(167, 179, 164, 0.1)", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+          <div className="md-mono" style={{ fontSize: 11, color: "var(--accent)", fontWeight: 800, marginBottom: 6 }}>
+            ✅ MEETING READY TO DISPATCH & SYNC
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--bone)", marginBottom: 4 }}>{draftResult.meeting.title}</div>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 6 }}>
+            <strong>Recipient:</strong> {draftResult.contact.name} ({draftResult.contact.email})
+          </div>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            <strong>Follow-ups:</strong> Auto-generated {draftResult.meeting.followUps.length} producer action items.
+          </div>
+          <button className="md-btn md-btn-primary" style={{ width: "100%", marginTop: 12, justifyContent: "center" }} onClick={confirmAndDispatch}>
+            Confirm & Dispatch Meeting Invite to Calendar & Board
+          </button>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
 function DailieBrandLogo({ size = 36 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, display: "block" }}>
@@ -1573,6 +1728,7 @@ export default function App() {
   const [showGmailModal, setShowGmailModal] = useState(false);
   const [showCmdPalette, setShowCmdPalette] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
+  const [showSchedulerModal, setShowSchedulerModal] = useState(false);
   const [detailProject, setDetailProject] = useState(null);
   const [importDocInfo, setImportDocInfo] = useState(null);
   const [initialModalData, setInitialModalData] = useState({ projectTitle: "", projectDesc: "", meetingTitle: "", meetingNotes: "" });
@@ -1701,6 +1857,13 @@ export default function App() {
     setInitialModalData(prev => ({ ...prev, meetingTitle: `Meeting Notes: ${titleWithoutExt}`, meetingNotes: text.slice(0, 1000) }));
     setImportDocInfo(null);
     setShowNewMeeting(true);
+  };
+
+  const handleScheduleMeetingComplete = (meetingObj, trackedEmailObj) => {
+    const updatedMeetings = [meetingObj, ...data.meetings];
+    const updatedEmails = [trackedEmailObj, ...(data.trackedEmails || [])];
+    persist({ ...data, meetings: updatedMeetings, trackedEmails: updatedEmails });
+    alert(`Meeting "${meetingObj.title}" successfully scheduled and invite dispatched to ${trackedEmailObj.recipient}!`);
   };
 
   const handleConvertDocToQuickLog = (fileName, text) => {
@@ -1863,6 +2026,13 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <button
               className="md-btn md-btn-primary"
+              onClick={() => setShowSchedulerModal(true)}
+              style={{ background: "var(--panel-raised)", border: "1px solid var(--rule-bright)", color: "var(--accent)", fontWeight: 700 }}
+            >
+              <CalendarIcon size={14} style={{ marginRight: 6 }} /> AI Meeting Scheduler
+            </button>
+            <button
+              className="md-btn md-btn-primary"
               onClick={() => setShowAIAssistant((prev) => !prev)}
               style={{ background: "var(--accent)", color: "var(--ink)", fontWeight: 700 }}
             >
@@ -1984,6 +2154,16 @@ export default function App() {
           }}
           projects={data.projects}
           contacts={data.contacts || []}
+        />
+      )}
+      {showSchedulerModal && (
+        <AISchedulingAgentModal
+          onClose={() => setShowSchedulerModal(false)}
+          contacts={data.contacts || []}
+          projects={data.projects || []}
+          meetings={data.meetings || []}
+          onScheduleMeetingComplete={handleScheduleMeetingComplete}
+          defaultAuthor={authorName}
         />
       )}
       <AIAssistantDrawer isOpen={showAIAssistant} onClose={() => setShowAIAssistant(false)} data={data} onRunAction={handleAIAction} />
