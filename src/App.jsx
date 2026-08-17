@@ -332,7 +332,7 @@ function AIAssistantDrawer({ isOpen, onClose, data, onRunAction }) {
           <div key={idx} style={{
             alignSelf: m.sender === "user" ? "flex-end" : "flex-start",
             maxWidth: "85%",
-            background: m.sender === "user" ? "var(--panel-raised)" : "#1c1c22",
+            background: m.sender === "user" ? "var(--panel-raised)" : "var(--panel-hover)",
             border: `1px solid ${m.sender === "user" ? "var(--rule-bright)" : "var(--rule)"}`,
             padding: "10px 14px",
             borderRadius: 12,
