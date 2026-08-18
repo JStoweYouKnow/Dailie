@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search } from "lucide-react";
+import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, GripVertical } from "lucide-react";
 import { initials, colorForName, dateInputValue, tsFromDateInput } from "../lib/format";
 import { uploadFile, formatBytes, fileSrc } from "../lib/files";
 
@@ -292,15 +292,48 @@ export function MemberPicker({ team, selectedIds, onChange, label = "Assignees" 
  * Table
  * ------------------------------------------------------------------ */
 
-export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.id }) {
+export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.id, onReorderColumns }) {
+  const [dragKey, setDragKey] = useState(null);
+  const [overKey, setOverKey] = useState(null);
+
   if (!rows.length) return empty || <EmptyState title="Nothing here yet" subtitle="Records you add will show up in this table." />;
+
+  const headerDragProps = (c) => (onReorderColumns && c.label ? {
+    draggable: true,
+    onDragStart: (e) => {
+      setDragKey(c.key);
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", c.key); } catch (err) { /* older Edge */ }
+      }
+    },
+    onDragOver: (e) => { e.preventDefault(); setOverKey(c.key); },
+    onDragLeave: () => setOverKey((k) => (k === c.key ? null : k)),
+    onDrop: (e) => {
+      e.preventDefault();
+      const from = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || dragKey;
+      if (from && from !== c.key) onReorderColumns(from, c.key);
+      setDragKey(null);
+      setOverKey(null);
+    },
+    onDragEnd: () => { setDragKey(null); setOverKey(null); },
+    title: `Drag to reorder “${c.label}”`,
+  } : {});
+
   return (
     <div className="md-scroll" style={{ overflowX: "auto", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
         <thead>
           <tr style={{ background: "var(--panel-raised)", borderBottom: "1px solid var(--rule)" }}>
             {columns.map((c) => (
-              <th key={c.key} className="md-mono" style={{ padding: "12px 16px", fontSize: 10, color: "var(--dim)", fontWeight: 700, letterSpacing: ".08em", whiteSpace: "nowrap", width: c.width }}>
+              <th key={c.key} className="md-mono" data-column={c.key} {...headerDragProps(c)}
+                style={{
+                  padding: "12px 16px", fontSize: 10, color: "var(--dim)", fontWeight: 700,
+                  letterSpacing: ".08em", whiteSpace: "nowrap", width: c.width,
+                  cursor: onReorderColumns && c.label ? "grab" : undefined,
+                  opacity: dragKey === c.key ? 0.4 : 1,
+                  boxShadow: overKey === c.key && dragKey && dragKey !== c.key ? "inset 2px 0 0 var(--accent)" : undefined,
+                }}>
                 {c.label}
               </th>
             ))}
@@ -331,33 +364,57 @@ export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.
  * Kanban with drag and drop between columns
  * ------------------------------------------------------------------ */
 
-export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAddColumn, onRenameColumn, onRemoveColumn, emptyHint }) {
-  const [dragId, setDragId] = useState(null);
-  const [overColumn, setOverColumn] = useState(null);
-  // The drag payload is the source of truth on drop; `dragId` state only dims the card,
-  // and a ref backs it up for browsers that withhold dataTransfer outside a real drag.
-  const dragIdRef = useRef(null);
+// Cards and columns are dropped on the same targets, so the payload says which is moving.
+const COLUMN_DRAG = "column:";
 
-  const startDrag = (e, id) => {
-    dragIdRef.current = id;
-    setDragId(id);
+export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAddColumn, onRenameColumn, onRemoveColumn, onReorderColumns, emptyHint }) {
+  const [dragId, setDragId] = useState(null);
+  const [dragColumn, setDragColumn] = useState(null);
+  const [overColumn, setOverColumn] = useState(null);
+  // The drag payload is the source of truth on drop; the state above only drives the
+  // visuals, and a ref backs it up for browsers that withhold dataTransfer mid-drag.
+  const payloadRef = useRef(null);
+
+  const setPayload = (e, value) => {
+    payloadRef.current = value;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = "move";
-      try { e.dataTransfer.setData("text/plain", id); } catch (err) { /* older Edge */ }
+      try { e.dataTransfer.setData("text/plain", value); } catch (err) { /* older Edge */ }
     }
+  };
+
+  const startDrag = (e, id) => {
+    setDragId(id);
+    setPayload(e, id);
+  };
+
+  const startColumnDrag = (e, key) => {
+    e.stopPropagation();
+    setDragColumn(key);
+    setPayload(e, COLUMN_DRAG + key);
+  };
+
+  const clearDrag = () => {
+    payloadRef.current = null;
+    setDragId(null);
+    setDragColumn(null);
+    setOverColumn(null);
   };
 
   const endDrag = (e, columnKey) => {
     e.preventDefault();
-    setOverColumn(null);
-    let id = dragIdRef.current;
+    let payload = payloadRef.current;
     if (e.dataTransfer) {
-      const payload = e.dataTransfer.getData("text/plain");
-      if (payload) id = payload;
+      const fromEvent = e.dataTransfer.getData("text/plain");
+      if (fromEvent) payload = fromEvent;
     }
-    if (id) onMove(id, columnKey);
-    dragIdRef.current = null;
-    setDragId(null);
+    if (payload && payload.startsWith(COLUMN_DRAG)) {
+      const fromKey = payload.slice(COLUMN_DRAG.length);
+      if (onReorderColumns && fromKey !== columnKey) onReorderColumns(fromKey, columnKey);
+    } else if (payload) {
+      onMove(payload, columnKey);
+    }
+    clearDrag();
   };
 
   return (
@@ -375,9 +432,22 @@ export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAd
               minWidth: 262, flex: "0 0 262px", borderRadius: 12, padding: 8,
               background: isOver ? "var(--panel-raised)" : "transparent",
               border: `1px dashed ${isOver ? col.color : "transparent"}`,
-              transition: "background .15s, border-color .15s",
+              opacity: dragColumn === col.key ? 0.4 : 1,
+              // While a column is in flight, show where it would land rather than a drop zone.
+              borderLeft: isOver && dragColumn && dragColumn !== col.key ? `3px solid ${col.color}` : undefined,
+              transition: "background .15s, border-color .15s, opacity .15s",
             }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "0 4px" }}>
+              {onReorderColumns ? (
+                <span draggable
+                  onDragStart={(e) => startColumnDrag(e, col.key)}
+                  onDragEnd={clearDrag}
+                  title={`Drag to reorder “${col.label}”`}
+                  aria-label={`Reorder column ${col.label}`}
+                  style={{ display: "flex", alignItems: "center", cursor: "grab", color: "var(--dim-2)", flexShrink: 0, marginRight: -2 }}>
+                  <GripVertical size={13} />
+                </span>
+              ) : null}
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: col.color, flexShrink: 0 }} />
               {onRenameColumn ? (
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -396,7 +466,7 @@ export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAd
             {cards.map((item) => (
               <div key={item.id} draggable
                 onDragStart={(e) => startDrag(e, item.id)}
-                onDragEnd={() => { dragIdRef.current = null; setDragId(null); setOverColumn(null); }}
+                onDragEnd={clearDrag}
                 style={{ opacity: dragId === item.id ? 0.4 : 1, cursor: "grab" }}>
                 {renderCard(item)}
               </div>

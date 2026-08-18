@@ -101,6 +101,17 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail }) {
     setPipeline(pipeline.filter((c) => c.key !== key));
   };
 
+  /** Drop a column onto another to take its position; the rest shuffle around it. */
+  const reorderColumns = (fromKey, toKey) => {
+    const from = pipeline.findIndex((c) => c.key === fromKey);
+    const to = pipeline.findIndex((c) => c.key === toKey);
+    if (from === -1 || to === -1 || from === to) return;
+    const next = [...pipeline];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setPipeline(next);
+  };
+
   const move = (projectId, stageKey) => {
     const project = data.projects.find((p) => p.id === projectId);
     const label = (pipeline.find((c) => c.key === stageKey) || {}).label || stageKey;
@@ -127,6 +138,7 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail }) {
         onAddColumn={addColumn}
         onRenameColumn={renameColumn}
         onRemoveColumn={pipeline.length > 1 ? removeColumn : undefined}
+        onReorderColumns={reorderColumns}
         emptyHint="Drag a project here"
         renderCard={(p) => <ProjectCard project={p} onOpen={() => onOpenDetail(p)} memberName={memberName} companyName={companyName} />}
       />
@@ -135,7 +147,7 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail }) {
 }
 
 export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
-  const { data, patch, update, updateProject, currentUser, memberName, companyName } = useStore();
+  const { data, patch, update, updateProject, updateSettings, currentUser, memberName, companyName } = useStore();
   const [typeFilter, setTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useState("pipeline");
   const [mineOnly, setMineOnly] = useState(false);
@@ -173,7 +185,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     </button>
   );
 
-  const columns = [
+  const allColumns = [
     { key: "title", label: "PROJECT", render: (p) => (
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {imageSrc(p) ? (
@@ -216,6 +228,24 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     { key: "updated", label: "UPDATED", render: (p) => <span className="md-mono" style={{ fontSize: 11, color: "var(--dim)" }}>{formatShort(p.updatedAt)}</span> },
   ];
 
+  // A saved order wins; columns added by a later release append rather than disappear.
+  const savedOrder = data.settings.projectColumnOrder || [];
+  const columns = savedOrder.length
+    ? [
+        ...savedOrder.map((key) => allColumns.find((c) => c.key === key)).filter(Boolean),
+        ...allColumns.filter((c) => !savedOrder.includes(c.key)),
+      ]
+    : allColumns;
+
+  const reorderTableColumns = (fromKey, toKey) => {
+    const order = columns.map((c) => c.key);
+    const from = order.indexOf(fromKey);
+    const to = order.indexOf(toKey);
+    if (from === -1 || to === -1 || from === to) return;
+    order.splice(to, 0, order.splice(from, 1)[0]);
+    updateSettings({ projectColumnOrder: order });
+  };
+
   return (
     <div>
       <ViewHeader count={projects.length} label={`PROJECT${projects.length === 1 ? "" : "S"}${mineOnly ? " ASSIGNED TO ME" : ""}`}>
@@ -241,7 +271,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
           subtitle={mineOnly ? "Projects where you are the owner or a team member land here." : "Change the type filter, clear your search, or add a project."}
         />
       ) : viewMode === "table" ? (
-        <DataTable columns={columns} rows={projects} onRowClick={onOpenDetail} />
+        <DataTable columns={columns} rows={projects} onRowClick={onOpenDetail} onReorderColumns={reorderTableColumns} />
       ) : viewMode === "gallery" ? (
         <GalleryGrid projects={projects} onOpen={onOpenDetail} memberName={memberName} companyName={companyName} />
       ) : (
