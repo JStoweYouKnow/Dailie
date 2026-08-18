@@ -4,5 +4,17 @@
     "api/transcribe.js": {
       "maxDuration": 300
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/:section(members|playlists|projects|review|schedule|settings|tasks|usage|sign-in|sign-up)",
+      "destination": "/production/:section",
+      "permanent": false
+    },
+    {
+      "source": "/:section(members|playlists|projects|review|schedule|settings|tasks|usage|sign-in|sign-up)/:path*",
+      "destination": "/production/:section/:path*",
+      "permanent": false
+    }
+  ]
 }
