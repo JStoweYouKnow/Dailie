@@ -43,6 +43,7 @@ export function parseICSFeed(icsData) {
       attendees = [];
     } else if (line === "END:VEVENT") {
       if (currentEvent && currentEvent.title) {
+        if (currentEvent.uid) currentEvent.id = `ics-${currentEvent.uid}`;
         if (!Number.isFinite(currentEvent.date)) currentEvent.date = Date.now();
         if (!currentEvent.meetingLink) {
           currentEvent.meetingLink = extractMeetingLink(`${currentEvent.location || ""}\n${currentEvent.notes || ""}`);
@@ -61,6 +62,9 @@ export function parseICSFeed(icsData) {
         currentEvent.location = unescapeICS(prop.value).trim();
       } else if (prop.name === "DTSTART") {
         currentEvent.date = parseICSDate(prop.value);
+      } else if (prop.name === "UID") {
+        // Stable across re-syncs, so a repeated pull updates events instead of duplicating them.
+        currentEvent.uid = String(prop.value || "").trim();
       } else if (prop.name === "X-GOOGLE-CONFERENCE") {
         currentEvent.meetingLink = unescapeICS(prop.value).trim();
       } else if (prop.name === "ORGANIZER" || prop.name === "ATTENDEE") {

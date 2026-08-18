@@ -1,0 +1,188 @@
+import { createContext, useContext, useCallback, useMemo, useState, useEffect } from "react";
+import { uid } from "./format";
+import { normalizeData, SEED_DATA, STORAGE_KEY, LEGACY_KEYS, stageInfo } from "./model";
+
+const StoreContext = createContext(null);
+
+export async function loadStoredData() {
+  // window.storage is the host-provided sync store; localStorage is the fallback.
+  try {
+    if (window.storage && typeof window.storage.get === "function") {
+      const res = await window.storage.get(STORAGE_KEY, true);
+      if (res && res.value) return normalizeData(JSON.parse(res.value));
+    }
+  } catch (e) { /* fall through to localStorage */ }
+
+  for (const key of [STORAGE_KEY, ...LEGACY_KEYS]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) return normalizeData(JSON.parse(raw));
+    } catch (e) { /* try the next key */ }
+  }
+  return normalizeData(SEED_DATA);
+}
+
+export async function saveStoredData(data) {
+  const payload = JSON.stringify(data);
+  let stored = false;
+  try {
+    if (window.storage && typeof window.storage.set === "function") {
+      await window.storage.set(STORAGE_KEY, payload, true);
+      stored = true;
+    }
+  } catch (e) { /* fall through */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, payload);
+    stored = true;
+  } catch (e) {
+    if (!stored) throw new Error("Storage is full — export a backup and remove old recordings.");
+  }
+}
+
+export function StoreProvider({ value, children }) {
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+}
+
+export function useStore() {
+  const ctx = useContext(StoreContext);
+  if (!ctx) throw new Error("useStore must be used inside a StoreProvider");
+  return ctx;
+}
+
+/**
+ * One place that owns the board. Views call add/update/remove on a named collection
+ * instead of threading a dozen setters through props.
+ */
+export function useBoardStore() {
+  const [data, setData] = useState(() => normalizeData(SEED_DATA));
+  const [loading, setLoading] = useState(true);
+  const [saveError, setSaveError] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((message, tone = "info") => {
+    setToast({ id: uid(), message, tone });
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 4200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const persist = useCallback((next) => {
+    setData(next);
+    saveStoredData(next).then(
+      () => setSaveError(""),
+      (err) => setSaveError(err.message || "Failed to save changes.")
+    );
+    return next;
+  }, []);
+
+  const reload = useCallback(async () => {
+    const stored = await loadStoredData();
+    setData(stored);
+    return stored;
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await reload();
+      setLoading(false);
+    })();
+  }, [reload]);
+
+  /** patch may be an object or a function of the current board. */
+  const patch = useCallback((update) => {
+    setData((current) => {
+      const delta = typeof update === "function" ? update(current) : update;
+      const next = { ...current, ...delta };
+      saveStoredData(next).then(
+        () => setSaveError(""),
+        (err) => setSaveError(err.message || "Failed to save changes.")
+      );
+      return next;
+    });
+  }, []);
+
+  const add = useCallback((collection, record, { prepend = true } = {}) => {
+    const item = { id: uid(), createdAt: Date.now(), ...record };
+    patch((current) => ({
+      [collection]: prepend ? [item, ...(current[collection] || [])] : [...(current[collection] || []), item],
+    }));
+    return item;
+  }, [patch]);
+
+  const update = useCallback((collection, id, changes) => {
+    patch((current) => ({
+      [collection]: (current[collection] || []).map((item) => {
+        if (item.id !== id) return item;
+        const delta = typeof changes === "function" ? changes(item) : changes;
+        return { ...item, ...delta };
+      }),
+    }));
+  }, [patch]);
+
+  const remove = useCallback((collection, id) => {
+    patch((current) => ({ [collection]: (current[collection] || []).filter((item) => item.id !== id) }));
+  }, [patch]);
+
+  const updateSettings = useCallback((changes) => {
+    patch((current) => ({ settings: { ...current.settings, ...changes } }));
+  }, [patch]);
+
+  /** Project edits also write the activity log, so history stays truthful. */
+  const updateProject = useCallback((id, changes, note) => {
+    patch((current) => ({
+      projects: current.projects.map((p) => {
+        if (p.id !== id) return p;
+        const delta = typeof changes === "function" ? changes(p) : changes;
+        const history = note ? [...(p.history || []), { id: uid(), date: Date.now(), note }] : p.history;
+        return { ...p, ...delta, updatedAt: Date.now(), history };
+      }),
+    }));
+  }, [patch]);
+
+  const currentUser = useMemo(
+    () => data.team.find((m) => m.id === data.settings.currentUserId) || data.team[0] || null,
+    [data.team, data.settings.currentUserId]
+  );
+
+  const memberName = useCallback(
+    (id) => {
+      const m = data.team.find((x) => x.id === id);
+      return m ? m.name : "";
+    },
+    [data.team]
+  );
+
+  const projectName = useCallback(
+    (id) => {
+      const p = data.projects.find((x) => x.id === id);
+      return p ? p.title : "";
+    },
+    [data.projects]
+  );
+
+  const companyName = useCallback(
+    (id) => {
+      const c = data.companies.find((x) => x.id === id);
+      return c ? c.name : "";
+    },
+    [data.companies]
+  );
+
+  const personName = useCallback(
+    (id) => {
+      const p = data.people.find((x) => x.id === id);
+      return p ? p.name : "";
+    },
+    [data.people]
+  );
+
+  return {
+    data, setData, persist, patch, add, update, remove, updateSettings, updateProject,
+    reload, loading, saveError, currentUser, memberName, projectName, companyName, personName,
+    toast, showToast, stageInfo,
+  };
+}
