@@ -26,6 +26,9 @@ const appearance = {
     colorInputBackground: "#1c2420",
     colorInputText: "#f0f3ee",
     colorDanger: "#c08d7a",
+    // Clerk puts white on the primary colour, which only reaches 3.5:1 against this
+    // sage. The rest of the app sets dark ink on accent for the same reason.
+    colorTextOnPrimaryBackground: "#0a0d0b",
     borderRadius: "8px",
     fontFamily: "Archivo, -apple-system, sans-serif",
   },
@@ -36,6 +39,23 @@ const appearance = {
     // "Sign in to Interface" even here. The branding above the card says where you
     // are; renaming the app in the Clerk dashboard would fix it for both products.
     header: { display: "none" },
+    // Social buttons carry their own colours rather than inheriting colorText, and
+    // they assume a light card. On this dark one that left "Continue with Google"
+    // near-black on near-black.
+    socialButtonsBlockButton: {
+      backgroundColor: "#1c2420",
+      borderColor: "rgba(240,243,238,0.22)",
+      color: "#f0f3ee",
+    },
+    socialButtonsBlockButtonText: { color: "#f0f3ee", fontWeight: 600 },
+    socialButtonsProviderIcon: { filter: "none" },
+    dividerLine: { backgroundColor: "rgba(240,243,238,0.12)" },
+    dividerText: { color: "#9aaba1" },
+    formFieldLabel: { color: "#9aaba1" },
+    formFieldInput: { borderColor: "rgba(240,243,238,0.22)" },
+    identityPreviewText: { color: "#f0f3ee" },
+    formResendCodeLink: { color: "#6f917d" },
+    otpCodeFieldInput: { color: "#f0f3ee", borderColor: "rgba(240,243,238,0.22)" },
   },
 };
 
