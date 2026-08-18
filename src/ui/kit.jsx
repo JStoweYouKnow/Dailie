@@ -64,7 +64,7 @@ export function Section({ title, right, children, style }) {
   return (
     <div style={{ marginBottom: 26, ...style }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-        <div className="md-mono" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: ".14em", fontWeight: 600 }}>{title}</div>
+        <div className="md-mono" style={{ fontSize: 10, color: "var(--dim-2)", letterSpacing: ".14em", fontWeight: 600 }}>{title}</div>
         {right}
       </div>
       {children}
@@ -75,7 +75,7 @@ export function Section({ title, right, children, style }) {
 export function ViewHeader({ count, label, children }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
-      <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", letterSpacing: ".12em" }}>
+      <div className="md-mono" style={{ fontSize: 10.5, color: "var(--dim-2)", letterSpacing: ".1em" }}>
         {count != null ? `${count} ` : ""}{label}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>{children}</div>
@@ -83,17 +83,27 @@ export function ViewHeader({ count, label, children }) {
   );
 }
 
-export function Badge({ label, color, subtle, icon, style }) {
+/**
+ * Quiet by default: a dot of colour and plain text, rather than a filled pill. A
+ * table full of filled pills reads as noise, and then nothing stands out when it
+ * matters. Pass `solid` for the few states that genuinely need to be loud.
+ */
+export function Badge({ label, color, subtle, icon, style, solid }) {
+  const hue = color || "var(--dim)";
   return (
     <span className="md-mono" style={{
-      display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700,
-      padding: "3px 9px", borderRadius: 100, whiteSpace: "nowrap",
-      background: subtle ? "var(--panel-raised)" : `${color || "#9a968e"}26`,
-      color: subtle ? "var(--dim)" : (color || "var(--dim)"),
-      border: `1px solid ${subtle ? "var(--rule)" : `${color || "#9a968e"}55`}`,
+      display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 600,
+      padding: solid ? "3px 9px" : "2px 0", borderRadius: 100, whiteSpace: "nowrap",
+      background: solid ? `${hue}22` : "transparent",
+      color: subtle ? "var(--dim)" : hue,
+      border: solid ? `1px solid ${hue}55` : "none",
       ...style,
     }}>
-      {icon}{label}
+      {icon}
+      {!icon && !subtle && color && (
+        <span style={{ width: 6, height: 6, borderRadius: 2, background: hue, flexShrink: 0 }} />
+      )}
+      {label}
     </span>
   );
 }
@@ -214,10 +224,15 @@ export function InlineSelect({ value, options, onCommit, placeholder = "—", co
       value={value == null ? "" : value}
       onChange={(e) => onCommit(e.target.value || null)}
       onClick={(e) => e.stopPropagation()}
+      // No border until you reach for it — a grid of outlined dropdowns is what made
+      // the tables feel like a form rather than a list.
       style={{
-        padding: "4px 8px", fontSize: 12, width: "auto", minWidth: 90, cursor: "pointer",
-        background: "transparent", borderColor: color || "var(--rule)", color: color || "var(--bone)", fontWeight: 600,
+        padding: "4px 7px", fontSize: 12, width: "auto", minWidth: 84, cursor: "pointer",
+        background: "transparent", border: "1px solid transparent", borderRadius: 6,
+        color: color || "var(--bone)", fontWeight: 500,
       }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--rule)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
     >
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -233,7 +248,9 @@ export function InlineDate({ value, onCommit }) {
       value={dateInputValue(value)}
       onChange={(e) => onCommit(tsFromDateInput(e.target.value))}
       onClick={(e) => e.stopPropagation()}
-      style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: "transparent" }}
+      style={{ padding: "4px 7px", fontSize: 12, width: "auto", background: "transparent", border: "1px solid transparent", borderRadius: 6, color: "var(--dim)" }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--rule)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
     />
   );
 }
@@ -338,8 +355,8 @@ export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.
             {columns.map((c) => (
               <th key={c.key} className="md-mono" data-column={c.key} {...headerDragProps(c)}
                 style={{
-                  padding: "12px 16px", fontSize: 10, color: "var(--dim)", fontWeight: 700,
-                  letterSpacing: ".08em", whiteSpace: "nowrap", width: c.width,
+                  padding: "10px 14px", fontSize: 9.5, color: "var(--dim-2)", fontWeight: 600,
+                  letterSpacing: ".1em", whiteSpace: "nowrap", width: c.width,
                   cursor: onReorderColumns && c.label ? "grab" : undefined,
                   opacity: dragKey === c.key ? 0.4 : 1,
                   boxShadow: overKey === c.key && dragKey && dragKey !== c.key ? "inset 2px 0 0 var(--accent)" : undefined,
@@ -357,7 +374,7 @@ export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.
               onMouseEnter={(e) => { e.currentTarget.style.background = "var(--panel-raised)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
               {columns.map((c) => (
-                <td key={c.key} style={{ padding: "11px 16px", verticalAlign: "middle", ...(c.cellStyle || {}) }}
+                <td key={c.key} style={{ padding: "10px 14px", verticalAlign: "middle", ...(c.cellStyle || {}) }}
                   onClick={c.stopClick ? (e) => e.stopPropagation() : undefined}>
                   {c.render(row)}
                 </td>

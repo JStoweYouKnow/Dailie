@@ -47,15 +47,15 @@ export default function TimelineView({ searchQuery, onRecord }) {
     });
     data.calls.forEach((c) => list.push({
       id: `c-${c.id}`, ts: c.startedAt, type: "call", kind: "CALL", title: c.title,
-      subtitle: c.summary ? c.summary.slice(0, 140) : `${(c.nextSteps || []).length} next steps`, color: "#8aa4c4",
+      subtitle: c.summary ? c.summary.slice(0, 140) : `${(c.nextSteps || []).length} next steps`, color: "var(--info)",
     }));
     data.emails.forEach((e) => list.push({
       id: `e-${e.id}`, ts: e.sentAt, type: "email", kind: e.direction === "in" ? "EMAIL IN" : "EMAIL OUT",
-      title: e.subject, subtitle: e.direction === "in" ? `from ${e.from}` : `to ${(e.to || []).join(", ")}`, color: "#7c9473",
+      title: e.subject, subtitle: e.direction === "in" ? `from ${e.from}` : `to ${(e.to || []).join(", ")}`, color: "var(--sage)",
     }));
     data.tasks.filter((t) => t.status === "done" && t.completedAt).forEach((t) => list.push({
       id: `t-${t.id}`, ts: t.completedAt, type: "task", kind: "TASK DONE", title: t.title,
-      subtitle: (t.assigneeIds || []).map(memberName).filter(Boolean).join(", "), color: "#7c9473",
+      subtitle: (t.assigneeIds || []).map(memberName).filter(Boolean).join(", "), color: "var(--sage)",
     }));
     (data.logs || []).forEach((l) => list.push({
       id: `l-${l.id}`, ts: l.date, type: "log", kind: "NOTE", title: l.text,

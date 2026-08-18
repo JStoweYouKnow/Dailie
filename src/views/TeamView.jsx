@@ -132,7 +132,7 @@ function AvailabilityTimeline({ roster, onOpen }) {
                   <Avatar name={t.name} size={26} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "var(--bone)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
-                    <div className="md-mono" style={{ fontSize: 9, color: used >= 90 ? "var(--red)" : used > 0 ? "#c9a227" : "var(--sage)" }}>
+                    <div className="md-mono" style={{ fontSize: 9, color: used >= 90 ? "var(--red)" : used > 0 ? "var(--warn)" : "var(--sage)" }}>
                       {used === 0 ? "FULLY AVAILABLE" : `${used}% BOOKED`}
                     </div>
                   </div>
@@ -221,7 +221,7 @@ function TalentDetail({ talent, onClose }) {
         <div style={{ textAlign: "right" }}>
           <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 4 }}>AVAILABILITY</div>
           {isBusyOn(talent, Date.now())
-            ? <Badge label={free ? `FREE ${formatShort(free).toUpperCase()}` : "FULLY BOOKED"} color="#c9a227" />
+            ? <Badge label={free ? `FREE ${formatShort(free).toUpperCase()}` : "FULLY BOOKED"} color="var(--warn)" />
             : <Badge label="AVAILABLE NOW" color="var(--sage)" />}
         </div>
       </div>
@@ -428,7 +428,7 @@ export default function TeamView({ searchQuery }) {
       const used = Math.round(utilisation(t, Date.now(), Date.now() + 84 * DAY) * 100);
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <Badge label={busy ? (free ? `FREE ${formatShort(free).toUpperCase()}` : "FULLY BOOKED") : "AVAILABLE NOW"} color={busy ? "#c9a227" : "var(--sage)"} />
+          <Badge label={busy ? (free ? `FREE ${formatShort(free).toUpperCase()}` : "FULLY BOOKED") : "AVAILABLE NOW"} color={busy ? "var(--warn)" : "var(--sage)"} />
           <span className="md-mono" style={{ fontSize: 9, color: "var(--dim)" }}>{used}% booked · next 12 wks</span>
         </div>
       );

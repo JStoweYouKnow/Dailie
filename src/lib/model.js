@@ -4,15 +4,35 @@ export const SCHEMA_VERSION = 6;
 export const STORAGE_KEY = "dailie-data-v6";
 export const LEGACY_KEYS = ["dailie-data-v5", "dailie-data-v4", "dailie-data-v3"];
 
+/**
+ * One harmonious set for every categorical colour in the app — stages, record types,
+ * statuses, avatars, speakers. Previously these were picked ad hoc per list, which is
+ * what made a dense table read as noise. All of them sit in Feelie's sage family
+ * except CLAY, which is reserved for things that genuinely need attention.
+ */
+export const HUE = {
+  stone: "#6e7f75",
+  sage: "#6f917d",
+  teal: "#4f7a72",
+  moss: "#7f9468",
+  sand: "#b3a07f",
+  clay: "#c08d7a",
+  plum: "#8d7f96",
+  slate: "#7d8fa3",
+  faint: "#55635b",
+};
+
+export const CATEGORICAL = [HUE.sage, HUE.clay, HUE.teal, HUE.plum, HUE.sand, HUE.slate, HUE.moss, HUE.stone];
+
 /** Production stages — the lifecycle a project moves through once it is real work. */
 export const STAGES = [
-  { key: "development", label: "Development", color: "#9a968e" },
-  { key: "packaging", label: "Packaging", color: "#a7b3a4" },
-  { key: "preproduction", label: "Pre-Production", color: "#5e8c86" },
-  { key: "production", label: "Production", color: "#e8553c" },
-  { key: "postproduction", label: "Post-Production", color: "#9b8aa4" },
-  { key: "delivered", label: "Delivered", color: "#7c9473" },
-  { key: "onhold", label: "On Hold", color: "#6e6b65" },
+  { key: "development", label: "Development", color: HUE.stone },
+  { key: "packaging", label: "Packaging", color: HUE.sage },
+  { key: "preproduction", label: "Pre-Production", color: HUE.teal },
+  { key: "production", label: "Production", color: HUE.clay },
+  { key: "postproduction", label: "Post-Production", color: HUE.plum },
+  { key: "delivered", label: "Delivered", color: HUE.moss },
+  { key: "onhold", label: "On Hold", color: HUE.faint },
 ];
 
 export function stageInfo(key) {
@@ -25,9 +45,9 @@ export function stageInfo(key) {
  * every view filters by it.
  */
 export const RECORD_TYPES = [
-  { key: "service", label: "Service Production", short: "Service Prod.", color: "#5e8c86", description: "Work produced for a client or studio under a service agreement." },
-  { key: "original", label: "Original IP", short: "Original IP", color: "#e8553c", description: "IP we own and develop ourselves." },
-  { key: "outside", label: "Outside IP", short: "Outside IP", color: "#9b8aa4", description: "Third-party IP we option, license or co-develop." },
+  { key: "service", label: "Service Production", short: "Service Prod.", color: HUE.teal, description: "Work produced for a client or studio under a service agreement." },
+  { key: "original", label: "Original IP", short: "Original IP", color: HUE.clay, description: "IP we own and develop ourselves." },
+  { key: "outside", label: "Outside IP", short: "Outside IP", color: HUE.plum, description: "Third-party IP we option, license or co-develop." },
 ];
 
 export function recordTypeInfo(key) {
@@ -37,43 +57,43 @@ export function recordTypeInfo(key) {
 /** Default deal pipelines. Columns are editable per type and stored in data.pipelines. */
 export const DEFAULT_PIPELINES = {
   service: [
-    { key: "inbound", label: "Inbound", color: "#9a968e" },
-    { key: "pitch", label: "In Pitch", color: "#a7b3a4" },
-    { key: "negotiation", label: "In Negotiations", color: "#c9a227" },
-    { key: "production", label: "Production", color: "#e8553c" },
-    { key: "delivered", label: "Delivered", color: "#7c9473" },
-    { key: "lost", label: "Lost / Passed", color: "#6e6b65" },
+    { key: "inbound", label: "Inbound", color: HUE.stone },
+    { key: "pitch", label: "In Pitch", color: HUE.sage },
+    { key: "negotiation", label: "In Negotiations", color: HUE.sand },
+    { key: "production", label: "Production", color: HUE.clay },
+    { key: "delivered", label: "Delivered", color: HUE.moss },
+    { key: "lost", label: "Lost / Passed", color: HUE.faint },
   ],
   original: [
-    { key: "concept", label: "Concept", color: "#9a968e" },
-    { key: "development", label: "Development", color: "#a7b3a4" },
-    { key: "pitch", label: "In Pitch", color: "#5e8c86" },
-    { key: "negotiation", label: "In Negotiations", color: "#c9a227" },
-    { key: "production", label: "Production", color: "#e8553c" },
-    { key: "released", label: "Released", color: "#7c9473" },
+    { key: "concept", label: "Concept", color: HUE.stone },
+    { key: "development", label: "Development", color: HUE.sage },
+    { key: "pitch", label: "In Pitch", color: HUE.teal },
+    { key: "negotiation", label: "In Negotiations", color: HUE.sand },
+    { key: "production", label: "Production", color: HUE.clay },
+    { key: "released", label: "Released", color: HUE.moss },
   ],
   outside: [
-    { key: "scouting", label: "Scouting", color: "#9a968e" },
-    { key: "optioned", label: "Optioned", color: "#a7b3a4" },
-    { key: "negotiation", label: "In Negotiations", color: "#c9a227" },
-    { key: "production", label: "Production", color: "#e8553c" },
-    { key: "released", label: "Released", color: "#7c9473" },
+    { key: "scouting", label: "Scouting", color: HUE.stone },
+    { key: "optioned", label: "Optioned", color: HUE.sage },
+    { key: "negotiation", label: "In Negotiations", color: HUE.sand },
+    { key: "production", label: "Production", color: HUE.clay },
+    { key: "released", label: "Released", color: HUE.moss },
   ],
 };
 
 export const COMPANY_TYPES = [
-  { key: "client", label: "Client", color: "#5e8c86" },
-  { key: "vendor", label: "Vendor", color: "#c9a227" },
-  { key: "platform", label: "Platform", color: "#9b8aa4" },
-  { key: "ai-tool", label: "AI Tool", color: "#8aa4c4" },
-  { key: "studio", label: "Studio", color: "#e8553c" },
-  { key: "agency", label: "Agency", color: "#c47a8a" },
-  { key: "partner", label: "Partner", color: "#7c9473" },
-  { key: "prospect", label: "Prospect", color: "#9a968e" },
+  { key: "client", label: "Client", color: HUE.teal },
+  { key: "vendor", label: "Vendor", color: HUE.sand },
+  { key: "platform", label: "Platform", color: HUE.plum },
+  { key: "ai-tool", label: "AI Tool", color: HUE.slate },
+  { key: "studio", label: "Studio", color: HUE.clay },
+  { key: "agency", label: "Agency", color: HUE.sage },
+  { key: "partner", label: "Partner", color: HUE.moss },
+  { key: "prospect", label: "Prospect", color: HUE.stone },
 ];
 
 export function companyTypeInfo(key) {
-  return COMPANY_TYPES.find((t) => t.key === key) || { key: key || "prospect", label: key || "Prospect", color: "#9a968e" };
+  return COMPANY_TYPES.find((t) => t.key === key) || { key: key || "prospect", label: key || "Prospect", color: HUE.stone };
 }
 
 export const RELATIONSHIP_STAGES = [
@@ -87,10 +107,10 @@ export const RELATIONSHIP_STAGES = [
 ];
 
 export const TASK_STATUSES = [
-  { key: "todo", label: "To Do", color: "#9a968e" },
-  { key: "doing", label: "In Progress", color: "#c9a227" },
-  { key: "blocked", label: "Blocked", color: "#e8553c" },
-  { key: "done", label: "Done", color: "#7c9473" },
+  { key: "todo", label: "To Do", color: HUE.stone },
+  { key: "doing", label: "In Progress", color: HUE.sand },
+  { key: "blocked", label: "Blocked", color: HUE.clay },
+  { key: "done", label: "Done", color: HUE.moss },
 ];
 
 export const PRIORITIES = ["HIGH", "MEDIUM", "LOW"];
@@ -101,12 +121,12 @@ export const PRIORITIES = ["HIGH", "MEDIUM", "LOW"];
  * months before you sign them, and only then become assignable.
  */
 export const TALENT_STATUSES = [
-  { key: "prospect", label: "Prospect", color: "#9a968e" },
-  { key: "in-talks", label: "In Talks", color: "#a7b3a4" },
-  { key: "offer-out", label: "Offer Out", color: "#c9a227" },
-  { key: "signed", label: "Signed", color: "#7c9473" },
-  { key: "passed", label: "Passed", color: "#6e6b65" },
-  { key: "alumni", label: "Past Collaborator", color: "#9b8aa4" },
+  { key: "prospect", label: "Prospect", color: HUE.stone },
+  { key: "in-talks", label: "In Talks", color: HUE.sage },
+  { key: "offer-out", label: "Offer Out", color: HUE.sand },
+  { key: "signed", label: "Signed", color: HUE.moss },
+  { key: "passed", label: "Passed", color: HUE.faint },
+  { key: "alumni", label: "Past Collaborator", color: HUE.plum },
 ];
 
 export const RATE_UNITS = [
@@ -131,26 +151,26 @@ export const CONTRACT_KINDS = [
 ];
 
 export const CONTRACT_STATUSES = [
-  { key: "draft", label: "Draft", color: "#9a968e" },
-  { key: "sent", label: "Sent for Signature", color: "#c9a227" },
-  { key: "open", label: "Open / Unsigned", color: "#e8553c" },
-  { key: "signed", label: "Signed", color: "#7c9473" },
-  { key: "expired", label: "Expired", color: "#6e6b65" },
+  { key: "draft", label: "Draft", color: HUE.stone },
+  { key: "sent", label: "Sent for Signature", color: HUE.sand },
+  { key: "open", label: "Open / Unsigned", color: HUE.clay },
+  { key: "signed", label: "Signed", color: HUE.moss },
+  { key: "expired", label: "Expired", color: HUE.faint },
 ];
 
 export const PAYMENT_STATUSES = [
-  { key: "unpaid", label: "Not Paid", color: "#e8553c" },
-  { key: "partial", label: "Partially Paid", color: "#c9a227" },
-  { key: "paid", label: "Paid", color: "#7c9473" },
-  { key: "na", label: "N/A", color: "#6e6b65" },
+  { key: "unpaid", label: "Not Paid", color: HUE.clay },
+  { key: "partial", label: "Partially Paid", color: HUE.sand },
+  { key: "paid", label: "Paid", color: HUE.moss },
+  { key: "na", label: "N/A", color: HUE.faint },
 ];
 
 export const INVOICE_STATUSES = [
-  { key: "draft", label: "Draft", color: "#9a968e" },
-  { key: "sent", label: "Sent", color: "#a7b3a4" },
-  { key: "partial", label: "Partially Paid", color: "#c9a227" },
-  { key: "paid", label: "Paid", color: "#7c9473" },
-  { key: "overdue", label: "Overdue", color: "#e8553c" },
+  { key: "draft", label: "Draft", color: HUE.stone },
+  { key: "sent", label: "Sent", color: HUE.sage },
+  { key: "partial", label: "Partially Paid", color: HUE.sand },
+  { key: "paid", label: "Paid", color: HUE.moss },
+  { key: "overdue", label: "Overdue", color: HUE.clay },
 ];
 
 export function lookupLabel(list, key, fallback = "—") {
@@ -158,7 +178,7 @@ export function lookupLabel(list, key, fallback = "—") {
   return hit ? hit.label : (key || fallback);
 }
 
-export function lookupColor(list, key, fallback = "#9a968e") {
+export function lookupColor(list, key, fallback = HUE.stone) {
   const hit = list.find((x) => x.key === key);
   return hit ? hit.color || fallback : fallback;
 }
@@ -862,10 +882,10 @@ export function participantNames(call) {
 }
 
 /** Stable colour per speaker so the transcript reads like a conversation. */
-const SPEAKER_COLORS = ["#a7b3a4", "#e8553c", "#5e8c86", "#9b8aa4", "#c9a227", "#8aa4c4", "#c47a8a", "#7c9473"];
+const SPEAKER_COLORS = CATEGORICAL;
 export function speakerColor(name) {
   const s = String(name || "");
-  if (!s) return "#6e6b65";
+  if (!s) return HUE.faint;
   let hash = 0;
   for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
   return SPEAKER_COLORS[hash % SPEAKER_COLORS.length];

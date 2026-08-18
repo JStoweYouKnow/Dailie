@@ -37,7 +37,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
 
     if (filter === "all" || filter === "tasks") {
       data.tasks.filter((t) => t.dueDate && t.status !== "done").forEach((t) => push(t.dueDate, {
-        id: `t-${t.id}`, kind: "task", label: t.title, color: t.dueDate < Date.now() ? "var(--red)" : "#c9a227", ts: t.dueDate,
+        id: `t-${t.id}`, kind: "task", label: t.title, color: t.dueDate < Date.now() ? "var(--red)" : "var(--warn)", ts: t.dueDate,
       }));
     }
 
@@ -117,7 +117,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
                   title={e.label}
                   style={{
                     fontSize: 10, padding: "3px 5px", marginBottom: 3, borderRadius: 4, cursor: "pointer",
-                    background: `${e.color === "var(--accent)" ? "rgba(167,179,164,.16)" : `${e.color}22`}`,
+                    background: `${e.color === "var(--accent)" ? "var(--accent-soft)" : `${e.color}22`}`,
                     borderLeft: `2px solid ${e.color}`, color: "var(--bone)",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>

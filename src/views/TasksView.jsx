@@ -26,7 +26,7 @@ function TaskCard({ task, onOpen, memberName, projectName, onToggle }) {
             {task.projectId && <Badge label={projectName(task.projectId)} subtle />}
             {task.priority === "HIGH" && <Badge label="HIGH" color="var(--red)" />}
             {task.dueDate && <Badge label={formatShort(task.dueDate)} color={overdue ? "var(--red)" : undefined} subtle={!overdue} />}
-            {task.source === "call" && <Badge label="FROM CALL" color="#8aa4c4" />}
+            {task.source === "call" && <Badge label="FROM CALL" color="var(--info)" />}
             {(task.comments || []).length > 0 && (
               <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)", display: "inline-flex", alignItems: "center", gap: 3 }}>
                 <MessageSquare size={10} /> {task.comments.length}

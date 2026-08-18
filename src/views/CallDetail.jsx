@@ -294,7 +294,7 @@ export default function CallDetail({ call, onClose, onOpenEmail }) {
           <span className="md-mono" style={{ fontSize: 11, color: "var(--dim)" }}>+{(call.participants || []).length - 6}</span>
         )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
-          {video && <Badge label="VIDEO KEPT" color="#8aa4c4" />}
+          {video && <Badge label="VIDEO KEPT" color="var(--info)" />}
           {call.emailSent && <Badge label="FOLLOW-UP SENT" color="var(--sage)" icon={<CheckCircle2 size={10} />} />}
         </div>
       </div>

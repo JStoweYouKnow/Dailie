@@ -193,10 +193,10 @@ function CallRow({ call, onOpen }) {
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {video && <Badge label="VIDEO" color="#8aa4c4" icon={<Video size={10} />} />}
+        {video && <Badge label="VIDEO" color="var(--info)" icon={<Video size={10} />} />}
         {(call.segments || []).length > 0 && <Badge label={`${speakersIn(call).length || 1} SPEAKERS`} subtle />}
         {call.projectId && <Badge label={projectName(call.projectId)} subtle />}
-        {openTasks > 0 && <Badge label={`${openTasks} OPEN TASK${openTasks === 1 ? "" : "S"}`} color="#c9a227" />}
+        {openTasks > 0 && <Badge label={`${openTasks} OPEN TASK${openTasks === 1 ? "" : "S"}`} color="var(--warn)" />}
         {call.emailSent && <Badge label="FOLLOWED UP" color="var(--sage)" icon={<CheckCircle2 size={10} />} />}
       </div>
     </div>

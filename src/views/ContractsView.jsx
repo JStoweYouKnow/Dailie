@@ -155,7 +155,7 @@ export default function ContractsView({ searchQuery }) {
         <Stat label="NDAs SIGNED" value={ndas.filter((c) => c.status === "signed").length} />
         <Stat label="NDAs OPEN" value={ndas.filter((c) => c.status !== "signed").length} accent={ndas.filter((c) => c.status !== "signed").length ? "var(--red)" : undefined} />
         <Stat label="AWAITING SIGNATURE" value={openCount} accent={openCount ? "var(--red)" : undefined} />
-        <Stat label="EXPIRING IN 30 DAYS" value={expiringSoon} accent={expiringSoon ? "#c9a227" : undefined} />
+        <Stat label="EXPIRING IN 30 DAYS" value={expiringSoon} accent={expiringSoon ? "var(--warn)" : undefined} />
       </div>
 
       <div style={{ marginBottom: 18 }}>

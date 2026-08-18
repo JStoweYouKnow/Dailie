@@ -127,13 +127,13 @@ export function NotificationCenter({ onOpenTab }) {
 
           {overdueTasks.length > 0 && (
             <div style={{ marginBottom: 14 }}>
-              <div className="md-mono" style={{ fontSize: 10, color: "#c9a227", letterSpacing: ".12em", marginBottom: 8, fontWeight: 700 }}>OVERDUE TASKS</div>
+              <div className="md-mono" style={{ fontSize: 10, color: "var(--warn)", letterSpacing: ".12em", marginBottom: 8, fontWeight: 700 }}>OVERDUE TASKS</div>
               {overdueTasks.slice(0, 5).map((t) => (
                 <div key={t.id} role="button" tabIndex={0}
                   onClick={() => { onOpenTab("tasks"); setOpen(false); }}
                   onKeyDown={(e) => { if (e.key === "Enter") { onOpenTab("tasks"); setOpen(false); } }}
                   style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: "1px solid var(--rule)", cursor: "pointer" }}>
-                  <Clock size={13} color="#c9a227" />
+                  <Clock size={13} color="var(--warn)" />
                   <div style={{ flex: 1, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
                   <span className="md-mono" style={{ fontSize: 10, color: "var(--red)" }}>{formatShort(t.dueDate)}</span>
                 </div>
@@ -149,7 +149,7 @@ export function NotificationCenter({ onOpenTab }) {
                   onClick={() => { onOpenTab(a.tab); setOpen(false); }}
                   onKeyDown={(e) => { if (e.key === "Enter") { onOpenTab(a.tab); setOpen(false); } }}
                   style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: "1px solid var(--rule)", cursor: "pointer" }}>
-                  {a.kind === "contract" ? <FileText size={13} color="#c9a227" /> : <Receipt size={13} color={a.severity === "high" ? "var(--red)" : "#c9a227"} />}
+                  {a.kind === "contract" ? <FileText size={13} color="var(--warn)" /> : <Receipt size={13} color={a.severity === "high" ? "var(--red)" : "var(--warn)"} />}
                   <div style={{ flex: 1, fontSize: 12 }}>{a.text}</div>
                 </div>
               ))}
@@ -167,7 +167,7 @@ export function LiveCallBanner({ onRecord, onDismiss, meeting }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 12, padding: "12px 32px", flexWrap: "wrap",
-      background: "rgba(232,85,60,.12)", borderBottom: "1px solid var(--red)",
+      background: "var(--red-soft)", borderBottom: "1px solid var(--red)",
     }}>
       <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--red)", flexShrink: 0 }} />
       <div style={{ flex: "1 1 200px", minWidth: 0 }}>

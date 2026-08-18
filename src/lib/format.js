@@ -133,7 +133,9 @@ export function initials(name) {
 }
 
 /** Deterministic per-name colour so the same person keeps the same avatar everywhere. */
-const AVATAR_COLORS = ["#a7b3a4", "#e8553c", "#5e8c86", "#9b8aa4", "#c9a227", "#7c9473", "#8aa4c4", "#c47a8a"];
+// Same harmonious set the rest of the app uses; kept inline so format.js stays
+// dependency-free for the model that imports it.
+const AVATAR_COLORS = ["#6f917d", "#c08d7a", "#4f7a72", "#8d7f96", "#b3a07f", "#7d8fa3", "#7f9468", "#6e7f75"];
 export function colorForName(name) {
   const s = String(name || "");
   let hash = 0;

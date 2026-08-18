@@ -217,7 +217,7 @@ export default function SchedulerAgent({ onClose, onScheduled }) {
       {error && <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>{error}</div>}
 
       {draft && (
-        <div style={{ border: "1px solid var(--accent)", background: "rgba(167,179,164,.1)", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+        <div style={{ border: "1px solid var(--accent)", background: "var(--accent-soft)", borderRadius: 10, padding: 14, marginBottom: 16 }}>
           <div className="md-mono" style={{ fontSize: 10, color: "var(--accent)", fontWeight: 800, marginBottom: 8, letterSpacing: ".1em" }}>READY TO SCHEDULE</div>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{draft.title}</div>
           <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>

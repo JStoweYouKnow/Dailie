@@ -174,7 +174,7 @@ export default function FinanceView({ searchQuery }) {
     { key: "dir", label: "", width: 34, render: (i) => (
       i.direction === "incoming"
         ? <ArrowDownLeft size={14} color="var(--sage)" title="Receivable" />
-        : <ArrowUpRight size={14} color="#c9a227" title="Payable" />
+        : <ArrowUpRight size={14} color="var(--warn)" title="Payable" />
     ) },
     { key: "number", label: "INVOICE", stopClick: true, render: (i) => (
       <InlineText value={i.number} mono style={{ fontWeight: 700 }} placeholder="Add number" onCommit={(v) => update("invoices", i.id, { number: v })} />
@@ -218,7 +218,7 @@ export default function FinanceView({ searchQuery }) {
         onCommit={(v) => update("payments", p.id, { companyId: v })} />
     ) },
     { key: "amount", label: "AMOUNT OUT", stopClick: true, render: (p) => (
-      <InlineText value={formatMoney(p.amount, p.currency)} mono style={{ color: "#c9a227", fontWeight: 700 }}
+      <InlineText value={formatMoney(p.amount, p.currency)} mono style={{ color: "var(--warn)", fontWeight: 700 }}
         onCommit={(v) => update("payments", p.id, { amount: parseMoney(v) })} />
     ) },
     { key: "project", label: "PROJECT", stopClick: true, render: (p) => (
@@ -257,8 +257,8 @@ export default function FinanceView({ searchQuery }) {
 
       <div style={{ display: "flex", gap: 36, flexWrap: "wrap", padding: "14px 18px", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 20 }}>
         <Stat label="RECEIVABLE OPEN" value={formatMoney(receivableOpen)} accent="var(--sage)" />
-        <Stat label="PAYABLE OPEN" value={formatMoney(payableOpen)} accent="#c9a227" />
-        <Stat label="VENDOR PAYMENTS DUE" value={formatMoney(vendorOwed)} accent="#c9a227" />
+        <Stat label="PAYABLE OPEN" value={formatMoney(payableOpen)} accent="var(--warn)" />
+        <Stat label="VENDOR PAYMENTS DUE" value={formatMoney(vendorOwed)} accent="var(--warn)" />
         <Stat label="OVERDUE INVOICES" value={overdue} accent={overdue ? "var(--red)" : undefined} />
       </div>
 

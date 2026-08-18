@@ -185,7 +185,7 @@ function FollowUpControl({ count }) {
 function FollowUpPanel({ items, onCreateTask }) {
   if (!items.length) return null;
   return (
-    <div style={{ border: "1px solid var(--red)", borderRadius: 12, background: "rgba(232,85,60,.07)", padding: 16, marginBottom: 22 }}>
+    <div style={{ border: "1px solid var(--red)", borderRadius: 12, background: "var(--red-soft)", padding: 16, marginBottom: 22 }}>
       {items.slice(0, 8).map((item) => (
         <div key={`${item.kind}-${item.id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid var(--rule)" }}>
           <Avatar name={item.name} size={26} />

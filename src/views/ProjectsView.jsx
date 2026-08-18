@@ -186,14 +186,14 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
   );
 
   const allColumns = [
-    { key: "title", label: "PROJECT", render: (p) => (
+    { key: "title", label: "PROJECT", cellStyle: { minWidth: 210 }, render: (p) => (
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {imageSrc(p) ? (
           <div style={{ width: 34, height: 24, borderRadius: 4, background: `var(--panel-raised) url(${imageSrc(p)}) center/cover`, flexShrink: 0 }} />
         ) : (
-          <div style={{ width: 34, height: 24, borderRadius: 4, background: "var(--panel-raised)", border: "1px solid var(--rule)", flexShrink: 0 }} />
+          <div style={{ width: 34, height: 24, borderRadius: 4, background: "var(--panel-raised)", flexShrink: 0 }} />
         )}
-        <span style={{ fontWeight: 700, color: "var(--bone)" }}>{p.title}</span>
+        <span style={{ fontWeight: 600, color: "var(--bone)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</span>
       </div>
     ) },
     { key: "type", label: "TYPE", render: (p) => <Badge label={recordTypeInfo(p.recordType).short} color={recordTypeInfo(p.recordType).color} /> },

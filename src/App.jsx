@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Search, Command, Sparkles, Sun, Moon, RefreshCw, Download, Upload, Info, Mic, Mail,
-  Calendar as CalendarIcon, Settings, ExternalLink,
+  Search, Sparkles, Sun, Moon, RefreshCw, Download, Upload, Info, Mic, Mail,
+  Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
+  Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
+  MoreHorizontal, ChevronLeft, ChevronRight, Plus,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { normalizeData, staleFollowUps } from "./lib/model";
@@ -33,23 +35,123 @@ import SyncModal from "./views/SyncModal";
 import SettingsModal from "./views/SettingsModal";
 import SchedulerAgent from "./views/SchedulerAgent";
 
-const TABS = [
-  { key: "home", label: "HOME" },
-  { key: "projects", label: "PROJECTS" },
-  { key: "tasks", label: "TASKS & NOTES" },
-  { key: "calendar", label: "CALENDAR" },
-  { key: "meetings", label: "MEETINGS" },
-  { key: "calls", label: "CALLS" },
-  { key: "emails", label: "EMAILS" },
-  { key: "companies", label: "COMPANIES" },
-  { key: "people", label: "PEOPLE" },
-  { key: "team", label: "TEAM" },
-  { key: "vendors", label: "VENDORS" },
-  { key: "aitools", label: "AI TOOLS" },
-  { key: "contracts", label: "NDAs & CONTRACTS" },
-  { key: "finance", label: "INVOICES" },
-  { key: "timeline", label: "TIMELINE" },
+/**
+ * Fifteen destinations in one scrolling row asked you to read every label to find
+ * anything. Grouped in a sidebar they stay one click away without competing.
+ */
+const NAV = [
+  {
+    group: null,
+    items: [{ key: "home", label: "Home", icon: Home }],
+  },
+  {
+    group: "Work",
+    items: [
+      { key: "projects", label: "Projects", icon: Clapperboard },
+      { key: "tasks", label: "Tasks & Notes", icon: CheckSquare },
+      { key: "calendar", label: "Calendar", icon: CalendarIcon },
+      { key: "meetings", label: "Meetings", icon: Users },
+      { key: "calls", label: "Calls", icon: Mic },
+    ],
+  },
+  {
+    group: "Relationships",
+    items: [
+      { key: "emails", label: "Emails", icon: Mail },
+      { key: "companies", label: "Companies", icon: Building2 },
+      { key: "people", label: "People", icon: Contact },
+      { key: "team", label: "Team", icon: UserCheck },
+      { key: "vendors", label: "Vendors", icon: Truck },
+      { key: "aitools", label: "AI Tools", icon: Sparkles },
+    ],
+  },
+  {
+    group: "Business",
+    items: [
+      { key: "contracts", label: "NDAs & Contracts", icon: FileText },
+      { key: "finance", label: "Invoices", icon: Receipt },
+      { key: "timeline", label: "Timeline", icon: History },
+    ],
+  },
 ];
+
+const ALL_TABS = NAV.flatMap((g) => g.items);
+
+function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts }) {
+  return (
+    <nav className={"md-sidebar" + (collapsed ? " collapsed" : "")} aria-label="Sections">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 8px 20px" }}>
+        <DailieBrandLogo size={26} />
+        {!collapsed && (
+          <div style={{ minWidth: 0 }}>
+            <div className="md-display" style={{ fontSize: 15, letterSpacing: "-0.02em", lineHeight: 1 }}>DAILIE</div>
+            <div className="md-mono" style={{ fontSize: 8.5, color: "var(--dim-2)", letterSpacing: ".14em", marginTop: 2 }}>MATRIARCH STUDIOS</div>
+          </div>
+        )}
+      </div>
+
+      {NAV.map((section, i) => (
+        <div key={section.group || `s-${i}`} className="md-nav-group">
+          {section.group && !collapsed && <div className="md-nav-label">{section.group}</div>}
+          {section.items.map((item) => {
+            const Icon = item.icon;
+            const count = counts[item.key];
+            return (
+              <div key={item.key} role="button" tabIndex={0}
+                className={"md-nav-item" + (activeTab === item.key ? " active" : "")}
+                title={item.label}
+                onClick={() => onSelect(item.key)}
+                onKeyDown={(e) => { if (e.key === "Enter") onSelect(item.key); }}>
+                <Icon size={15} style={{ flexShrink: 0 }} />
+                {!collapsed && <span className="md-nav-text">{item.label}</span>}
+                {!collapsed && count ? <span className="md-nav-count">{count}</span> : null}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      <button className="md-btn md-btn-ghost" onClick={onToggle}
+        style={{ marginTop: 6, width: "100%", justifyContent: collapsed ? "center" : "flex-start", fontSize: 12 }}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+        {collapsed ? <ChevronRight size={14} /> : <><ChevronLeft size={14} /> Collapse</>}
+      </button>
+    </nav>
+  );
+}
+
+/** Everything that used to be an icon in the header, folded into one menu. */
+function OverflowMenu({ actions }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button className="md-btn md-btn-ghost" style={{ padding: 8 }} title="More" aria-label="More actions"
+        onClick={() => setOpen((o) => !o)}>
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div className="md-menu">
+          {actions.map((a, i) => (
+            a.divider
+              ? <div key={`d-${i}`} style={{ height: 1, background: "var(--rule)", margin: "5px 2px" }} />
+              : <button key={a.label} className="md-menu-item" onClick={() => { setOpen(false); a.onClick(); }}>
+                  <a.icon size={14} style={{ color: "var(--dim)", flexShrink: 0 }} /> {a.label}
+                </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ImportDocumentModal({ fileInfo, onClose, onImport }) {
   const formats = fileInfo.formats;
@@ -133,6 +235,13 @@ function Board() {
   const [importDoc, setImportDoc] = useState(null);
   const [docSeed, setDocSeed] = useState({ title: "", body: "" });
   const [dismissedCalls, setDismissedCalls] = useState([]);
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    try { return localStorage.getItem("dailie-nav-collapsed-v1") === "1"; } catch (e) { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("dailie-nav-collapsed-v1", navCollapsed ? "1" : "0"); } catch (e) { /* private mode */ }
+  }, [navCollapsed]);
   const fileInputRef = useRef(null);
 
   const [theme, setTheme] = useState(() => {
@@ -292,101 +401,87 @@ function Board() {
     }
   };
 
+  const navCounts = {
+    tasks: myOpen || undefined,
+    emails: stale.length || undefined,
+  };
+
+  const menuActions = [
+    { label: "Record a call", icon: Mic, onClick: () => setRecorder({ meeting: null }) },
+    { label: "Connect Google Calendar", icon: CalendarIcon, onClick: () => setShowSync(true) },
+    { label: "Meeting scheduler", icon: Sparkles, onClick: () => setShowScheduler(true) },
+    { divider: true },
+    { label: "Import a document", icon: Upload, onClick: () => fileInputRef.current && fileInputRef.current.click() },
+    { label: "Export a backup", icon: Download, onClick: exportBoard },
+    { divider: true },
+    { label: theme === "dark" ? "Light mode" : "Dark mode", icon: theme === "dark" ? Sun : Moon, onClick: () => setTheme((t) => (t === "dark" ? "light" : "dark")) },
+    { label: "Reload from storage", icon: RefreshCw, onClick: refresh },
+    { label: "Workspace settings", icon: Settings, onClick: () => setShowSettings(true) },
+    { label: "How Dailie works", icon: Info, onClick: () => setShowInfo(true) },
+  ];
+
+  const activeItem = ALL_TABS.find((t) => t.key === activeTab) || ALL_TABS[0];
+
   return (
     <StoreProvider value={store}>
-      <div className="md-root">
-        <div style={{ padding: "26px 32px 0" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <DailieBrandLogo size={42} />
-              <div>
-                <div className="eyebrow-badge">Matriarch Studios Operations</div>
-                <div className="md-display" style={{ fontSize: 26, letterSpacing: "-0.03em", lineHeight: 1.1, marginTop: 2 }}>
-                  DAILIE <span className="md-serif-it" style={{ fontSize: "0.85em", opacity: 0.9 }}>Ops Board</span>
-                </div>
-              </div>
+      <div className="md-shell">
+        <Sidebar
+          activeTab={activeTab}
+          onSelect={openTab}
+          collapsed={navCollapsed}
+          onToggle={() => setNavCollapsed((c) => !c)}
+          counts={navCounts}
+        />
+
+        <div className="md-main">
+          <header style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "16px 28px", flexWrap: "wrap",
+            borderBottom: "1px solid var(--rule)", position: "sticky", top: 0, background: "var(--ink)", zIndex: 20,
+          }}>
+            <div style={{ minWidth: 0, marginRight: "auto" }}>
+              <h1 className="md-display" style={{ fontSize: 19, letterSpacing: "-0.02em", lineHeight: 1.2 }}>{activeItem.label}</h1>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <button className="md-btn md-btn-primary" onClick={() => setShowScheduler(true)}
-                style={{ background: "var(--panel-raised)", border: "1px solid var(--rule-bright)", color: "var(--accent)", fontWeight: 700 }}>
-                <CalendarIcon size={14} /> Meeting Scheduler
-              </button>
-              <button className="md-btn md-btn-primary" onClick={() => setShowAssistant((s) => !s)}
-                style={{ background: "var(--accent)", color: "var(--ink)", fontWeight: 700 }}>
-                <Sparkles size={14} /> Studio Assistant
-              </button>
-              <button className="md-btn md-btn-ghost" onClick={() => setShowPalette(true)}
-                style={{ background: "var(--panel-raised)", border: "1px solid var(--rule)", fontSize: 12, padding: "6px 12px" }}>
-                <Command size={13} color="var(--accent)" /> Cmd+K
-              </button>
-              <div style={{ position: "relative", minWidth: 170 }}>
-                <Search size={14} color="var(--dim)" style={{ position: "absolute", left: 12, top: 11 }} />
-                <input className="md-input" style={{ paddingLeft: 34, fontSize: 12 }} placeholder="Search board…"
-                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-              </div>
-
-              <NotificationCenter onOpenTab={openTab} />
-
-              <button className="md-btn md-btn-ghost" onClick={() => setRecorder({ meeting: null })} title="Record a call" style={{ padding: 8, color: "var(--red)" }}>
-                <Mic size={15} />
-              </button>
-              <button className="md-btn md-btn-ghost" onClick={() => setShowSync(true)} title="Connect Google Calendar" style={{ padding: 8, color: "var(--accent)" }}>
-                <CalendarIcon size={15} />
-              </button>
-              <button className="md-btn md-btn-ghost" onClick={() => openTab("emails")} title="Emails" style={{ padding: 8, color: "var(--accent)" }}>
-                <Mail size={15} />
-              </button>
-              <button className="md-btn md-btn-ghost" onClick={exportBoard} title="Export backup" style={{ padding: 8 }}><Download size={15} /></button>
-              <button className="md-btn md-btn-ghost" onClick={() => fileInputRef.current && fileInputRef.current.click()} title="Import backup or document" style={{ padding: 8 }}>
-                <Upload size={15} />
-              </button>
-              <input type="file" ref={fileInputRef} style={{ display: "none" }} accept=".json,.pdf,.doc,.docx,.pages,.txt,.md" onChange={importFile} />
-              <button className="md-btn md-btn-ghost" onClick={() => setShowInfo(true)} title="How Dailie works" style={{ padding: 8 }}><Info size={15} /></button>
-              <button className="md-btn md-btn-ghost" onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} title="Toggle theme" style={{ padding: 8, color: "var(--accent)" }}>
-                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
-              <button className="md-btn md-btn-ghost" onClick={refresh} title="Reload from storage" style={{ padding: 8 }}>
-                <RefreshCw size={15} className={refreshing ? "md-spin" : ""} />
-              </button>
-
-              <button className="md-btn md-btn-ghost" onClick={() => setShowSettings(true)} title="Workspace settings"
-                style={{ padding: "5px 10px", border: "1px solid var(--rule)", gap: 8 }}>
-                {currentUser ? <Avatar name={currentUser.name} size={22} /> : <Settings size={14} />}
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{currentUser ? currentUser.name.split(" ")[0] : "Set up"}</span>
-              </button>
-              <div className="md-mono" style={{ fontSize: 11, border: "1px solid var(--rule)", padding: "7px 14px", borderRadius: 100, color: "var(--dim)", letterSpacing: ".08em" }}>{todayLabel}</div>
+            <div style={{ position: "relative", width: 210 }}>
+              <Search size={14} color="var(--dim-2)" style={{ position: "absolute", left: 11, top: 10 }} />
+              {/* Filters the current view. Cmd+K opens the palette for jumping records. */}
+              <input className="md-input" style={{ paddingLeft: 32, fontSize: 12.5, background: "var(--panel)" }}
+                placeholder="Filter this view" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
-          </div>
-        </div>
 
-        <div className="md-stripe" style={{ margin: "20px 0 0" }} />
+            <button className="md-btn md-btn-ghost" onClick={() => setShowAssistant((a) => !a)}
+              title="Studio Assistant" style={{ padding: 8, color: "var(--accent)" }}>
+              <Sparkles size={16} />
+            </button>
 
-        <LiveCallBanner meeting={liveMeeting} onRecord={(m) => setRecorder({ meeting: m })}
-          onDismiss={() => liveMeeting && setDismissedCalls((d) => [...d, liveMeeting.id])} />
+            <NotificationCenter onOpenTab={openTab} />
+            <OverflowMenu actions={menuActions} />
 
-        <div style={{ padding: "18px 32px", display: "flex", gap: 34, flexWrap: "wrap", borderBottom: "1px solid var(--rule)", alignItems: "center" }}>
-          <Stat label="ACTIVE PROJECTS" value={activeProjects} onClick={() => openTab("projects")} />
-          <Stat label="OPEN TASKS" value={openTasks} onClick={() => openTab("tasks")} />
-          <Stat label="ASSIGNED TO ME" value={myOpen} accent={myOpen ? "var(--accent)" : undefined} onClick={() => openTab("tasks")} />
-          <Stat label="NEEDS FOLLOW-UP" value={stale.length} accent={stale.length ? "var(--red)" : undefined} onClick={() => openTab("emails")} />
-          <Stat label="CALLS RECORDED" value={data.calls.length} onClick={() => openTab("calls")} />
-          {saveError && <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--red)" }}>{saveError}</div>}
-        </div>
+            <button className="md-btn md-btn-ghost" onClick={() => setShowSettings(true)} title="Workspace settings"
+              style={{ padding: 3, borderRadius: 100 }}>
+              {currentUser ? <Avatar name={currentUser.name} size={26} /> : <Settings size={15} />}
+            </button>
 
-        <div className="md-scroll" style={{ display: "flex", gap: 26, padding: "0 32px", borderBottom: "1px solid var(--rule)", overflowX: "auto" }}>
-          {TABS.map((t) => (
-            <div key={t.key} className={"md-tab" + (activeTab === t.key ? " active" : "")} role="button" tabIndex={0}
-              onClick={() => openTab(t.key)} onKeyDown={(e) => { if (e.key === "Enter") openTab(t.key); }}>{t.label}</div>
-          ))}
-          {/* Cross-zone: /production is served by the Interface microfrontend. */}
-          <a className="md-tab" href="/production" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
-            PRODUCTION <ExternalLink size={11} />
-          </a>
-        </div>
+            <input type="file" ref={fileInputRef} style={{ display: "none" }} accept=".json,.pdf,.doc,.docx,.pages,.txt,.md" onChange={importFile} />
+          </header>
 
-        <div style={{ padding: "24px 32px 60px" }}>
-          {loading ? <LoadingState /> : renderTab()}
+          <LiveCallBanner meeting={liveMeeting} onRecord={(m) => setRecorder({ meeting: m })}
+            onDismiss={() => liveMeeting && setDismissedCalls((d) => [...d, liveMeeting.id])} />
+
+          {saveError && (
+            <div style={{ padding: "10px 28px", fontSize: 12.5, color: "var(--red)", borderBottom: "1px solid var(--rule)" }}>{saveError}</div>
+          )}
+
+          <main style={{ padding: "24px 28px 64px" }}>
+            {loading ? <LoadingState /> : renderTab()}
+          </main>
+
+          <footer style={{ padding: "0 28px 28px" }}>
+            {/* Cross-zone: /production is served by the Interface microfrontend. */}
+            <a href="/production" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim-2)", textDecoration: "none" }}>
+              Production tracking <ExternalLink size={11} />
+            </a>
+          </footer>
         </div>
 
         {detailProject && (

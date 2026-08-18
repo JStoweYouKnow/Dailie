@@ -23,7 +23,7 @@ function TaskLine({ task, onToggle, projectName, memberName }) {
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
           {task.projectId && <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{projectName(task.projectId)}</span>}
           {task.dueDate && <Badge label={overdue ? `OVERDUE · ${formatShort(task.dueDate)}` : formatShort(task.dueDate)} color={overdue ? "var(--red)" : undefined} subtle={!overdue} />}
-          {task.source === "call" && <Badge label="FROM CALL" color="#8aa4c4" />}
+          {task.source === "call" && <Badge label="FROM CALL" color="var(--info)" />}
         </div>
       </div>
       <AvatarStack names={(task.assigneeIds || []).map(memberName)} size={20} max={2} />
@@ -173,7 +173,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
         <Stat label="MY OVERDUE" value={overdue.length} accent={overdue.length ? "var(--red)" : undefined} onClick={() => onOpenTab("tasks")} />
         <Stat label="MY PROJECTS" value={myProjects.length} onClick={() => onOpenTab("projects")} />
         <Stat label="NEEDS FOLLOW-UP" value={stale.length} accent={stale.length ? "var(--red)" : undefined} onClick={() => onOpenTab("emails")} />
-        <Stat label="PAPERWORK ALERTS" value={alerts.length} accent={alerts.length ? "#c9a227" : undefined} onClick={() => onOpenTab("contracts")} />
+        <Stat label="PAPERWORK ALERTS" value={alerts.length} accent={alerts.length ? "var(--warn)" : undefined} onClick={() => onOpenTab("contracts")} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 26, alignItems: "start" }}>
@@ -249,7 +249,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
                 <div key={a.id} role="button" tabIndex={0}
                   onClick={() => onOpenTab(a.tab)} onKeyDown={(e) => { if (e.key === "Enter") onOpenTab(a.tab); }}
                   style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--rule)", cursor: "pointer" }}>
-                  <AlertTriangle size={13} color={a.severity === "high" ? "var(--red)" : "#c9a227"} />
+                  <AlertTriangle size={13} color={a.severity === "high" ? "var(--red)" : "var(--warn)"} />
                   <div style={{ flex: 1, fontSize: 13, color: "var(--bone)" }}>{a.text}</div>
                 </div>
               ))}
