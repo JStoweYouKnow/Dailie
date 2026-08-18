@@ -3,7 +3,7 @@
   "applications": {
     "dailie": {
       "development": {
-        "fallback": "dailie.vercel.app"
+        "fallback": "www.thewizardofops.app"
       }
     },
     "interface": {
