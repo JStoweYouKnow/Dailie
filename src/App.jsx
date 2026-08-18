@@ -6,6 +6,7 @@ import {
   MoreHorizontal, ChevronLeft, ChevronRight, Plus,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
+import { AuthGate, useAccount } from "./lib/auth";
 import { normalizeData, staleFollowUps } from "./lib/model";
 import { parseDocumentFile } from "./documentParser";
 import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
@@ -217,7 +218,7 @@ function ImportDocumentModal({ fileInfo, onClose, onImport }) {
 
 function Board() {
   const store = useBoardStore();
-  const { data, patch, add, currentUser, loading, saveError, reload, toast, showToast } = store;
+  const { data, patch, add, currentUser, loading, saveError, reload, toast, showToast, linkAccount } = store;
 
   const [activeTab, setActiveTab] = useState("home");
   const [searchQuery, setSearchQuery] = useState("");
@@ -243,6 +244,14 @@ function Board() {
     try { localStorage.setItem("dailie-nav-collapsed-v1", navCollapsed ? "1" : "0"); } catch (e) { /* private mode */ }
   }, [navCollapsed]);
   const fileInputRef = useRef(null);
+
+  // The signed-in account owns "who you are" — the manual picker in Settings is
+  // only for boards running without auth.
+  const { enabled: authEnabled, account } = useAccount();
+  useEffect(() => {
+    if (!authEnabled || loading || !account) return;
+    linkAccount(account);
+  }, [authEnabled, loading, account && account.id, linkAccount]);
 
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("dailie-theme-v1") || "dark"; } catch (e) { return "dark"; }
@@ -575,5 +584,9 @@ function Board() {
 }
 
 export default function App() {
-  return <Board />;
+  return (
+    <AuthGate>
+      <Board />
+    </AuthGate>
+  );
 }

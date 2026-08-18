@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.9",
     "@vercel/blob": "^2.8.0",
     "@vercel/microfrontends": "^2.4.0",
     "ai": "^7.0.66",

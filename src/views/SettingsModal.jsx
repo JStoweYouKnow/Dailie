@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { Plus, Trash2, UserCheck } from "lucide-react";
+import { Plus, Trash2, UserCheck, LogOut, ShieldCheck } from "lucide-react";
 import { useStore } from "../lib/store";
+import { useAccount, useSignOut } from "../lib/auth";
 import { uid } from "../lib/format";
 import { ModalShell, Field, Section, Avatar, InlineText, ConfirmButton, Badge } from "../ui/kit";
 
 export default function SettingsModal({ onClose }) {
   const { data, patch, updateSettings, currentUser } = useStore();
+  const { enabled: authEnabled, account: signedIn } = useAccount();
+  const signOut = useSignOut();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [account, setAccount] = useState("");
@@ -39,9 +42,32 @@ export default function SettingsModal({ onClose }) {
 
   return (
     <ModalShell title="Workspace Settings" onClose={onClose}>
-      <Section title="WHO ARE YOU">
+      {authEnabled && signedIn && (
+        <Section title="SIGNED IN">
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", border: "1px solid var(--rule)", borderRadius: 10, background: "var(--panel-raised)", flexWrap: "wrap" }}>
+            <Avatar name={signedIn.name} size={34} />
+            <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--bone)" }}>{signedIn.name}</div>
+              <div className="md-mono" style={{ fontSize: 10.5, color: "var(--dim)", overflow: "hidden", textOverflow: "ellipsis" }}>{signedIn.email}</div>
+            </div>
+            <Badge label="SSO" color="var(--accent)" icon={<ShieldCheck size={10} />} />
+            {signOut && (
+              <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)", fontSize: 12 }} onClick={() => signOut()}>
+                <LogOut size={13} /> Sign out
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 9, lineHeight: 1.55 }}>
+            The same session covers <strong style={{ color: "var(--bone)" }}>production tracking</strong> — both apps sit on one domain, so signing in here signs you in there.
+          </div>
+        </Section>
+      )}
+
+      <Section title={authEnabled ? "TEAM" : "WHO ARE YOU"}>
         <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10 }}>
-          This drives "My Projects", "My Tasks" and who new records are assigned to.
+          {authEnabled
+            ? "Everyone who can be assigned work. Your own row is set by whoever you signed in as."
+            : "This drives \"My Projects\", \"My Tasks\" and who new records are assigned to."}
         </div>
         {data.team.map((m) => (
           <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--rule)" }}>
@@ -54,7 +80,7 @@ export default function SettingsModal({ onClose }) {
             </div>
             {currentUser && currentUser.id === m.id ? (
               <Badge label="THIS IS ME" color="var(--accent)" />
-            ) : (
+            ) : authEnabled ? null : (
               <button className="md-btn md-btn-ghost" style={{ fontSize: 11, border: "1px solid var(--rule)" }}
                 onClick={() => updateSettings({ currentUserId: m.id })}>
                 <UserCheck size={12} /> This is me

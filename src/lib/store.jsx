@@ -143,6 +143,42 @@ export function useBoardStore() {
     }));
   }, [patch]);
 
+  /**
+   * Ties the signed-in Clerk account to a row in `team`, which is what task
+   * assignment, "My projects" and the Home board all key off. Matching prefers the
+   * Clerk id, then the email, then the name, so an account that signs in after
+   * someone already typed them into the team lands on that row rather than
+   * creating a duplicate.
+   */
+  const linkAccount = useCallback((account) => {
+    if (!account) return;
+    setData((current) => {
+      const team = current.team || [];
+      const email = (account.email || "").toLowerCase();
+      const existing =
+        team.find((m) => m.clerkId === account.id) ||
+        team.find((m) => m.email && m.email.toLowerCase() === email && email) ||
+        team.find((m) => m.name && m.name.toLowerCase() === account.name.toLowerCase());
+
+      // Already linked and already selected — nothing to write.
+      if (existing && existing.clerkId === account.id && current.settings.currentUserId === existing.id) {
+        return current;
+      }
+
+      const member = existing
+        ? { ...existing, clerkId: account.id, email: existing.email || email, name: existing.name || account.name }
+        : { id: uid(), name: account.name, email, role: "", clerkId: account.id };
+
+      const next = {
+        ...current,
+        team: existing ? team.map((m) => (m.id === member.id ? member : m)) : [...team, member],
+        settings: { ...current.settings, currentUserId: member.id },
+      };
+      saveStoredData(next).catch(() => { /* surfaced by the next write */ });
+      return next;
+    });
+  }, []);
+
   const currentUser = useMemo(
     () => data.team.find((m) => m.id === data.settings.currentUserId) || data.team[0] || null,
     [data.team, data.settings.currentUserId]
@@ -182,7 +218,7 @@ export function useBoardStore() {
 
   return {
     data, setData, persist, patch, add, update, remove, updateSettings, updateProject,
-    reload, loading, saveError, currentUser, memberName, projectName, companyName, personName,
+    reload, loading, saveError, currentUser, memberName, projectName, companyName, personName, linkAccount,
     toast, showToast, stageInfo,
   };
 }
