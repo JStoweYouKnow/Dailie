@@ -38,41 +38,53 @@ export async function uploadFile(file, kind = "documents") {
     throw new Error(`${file.name} is ${Math.round(file.size / (1024 * 1024))} MB. The limit is 25 MB.`);
   }
 
-  const meta = { fileName: file.name, fileSize: file.size, fileType: file.type || "application/octet-stream", filePath: "", fileUrl: "", uploadedAt: Date.now() };
+  const meta = {
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type || "application/octet-stream",
+    filePath: "",
+    fileUrl: "",
+    uploadedAt: Date.now(),
+  };
 
+  // Used when the store simply is not there. Small files still attach, inline.
+  const inline = async (reason) => {
+    if (file.size > INLINE_LIMIT) throw new Error(reason);
+    return { ...meta, fileUrl: await readAsDataUrl(file) };
+  };
+  const noStore = `${file.name} is over 1.5 MB and no blob store is reachable. Set BLOB_READ_WRITE_TOKEN to attach files this size.`;
+
+  let res;
   try {
-    const res = await fetch(`/api/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, {
+    res = await fetch(`/api/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, {
       method: "POST",
       headers: { "Content-Type": meta.fileType },
       body: file,
     });
-    if (res.ok) {
-      const body = await res.json();
-      if (body.path) return { ...meta, filePath: body.path };
-    }
-    // A 501 means no blob token — fall through to the inline path rather than failing.
-    if (res.status !== 404 && res.status !== 501) {
-      let message = `Upload failed (${res.status}).`;
-      try {
-        const body = await res.json();
-        if (body && body.error) message = body.error;
-      } catch (e) { /* non-JSON body */ }
-      if (file.size > INLINE_LIMIT) throw new Error(message);
-    }
   } catch (err) {
-    if (file.size > INLINE_LIMIT) {
-      throw new Error(
-        err && err.message && !/fetch/i.test(err.message)
-          ? err.message
-          : `${file.name} is too large to store locally. Configure a Vercel Blob store (BLOB_READ_WRITE_TOKEN) to attach files over 1.5 MB.`
-      );
-    }
+    return inline(noStore);
   }
 
-  if (file.size > INLINE_LIMIT) {
-    throw new Error(`${file.name} is over 1.5 MB and no blob store is configured. Add BLOB_READ_WRITE_TOKEN to attach files this size.`);
+  // A dev server or SPA fallback answers 200 with the app's HTML. That is not an upload,
+  // and treating it as one would store a path that never resolves.
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) return inline(noStore);
+
+  let body = {};
+  try {
+    body = await res.json();
+  } catch (err) {
+    return inline(noStore);
   }
-  return { ...meta, fileUrl: await readAsDataUrl(file) };
+
+  if (res.ok && body.path) return { ...meta, filePath: body.path };
+
+  // 501 means the route is live but no store is configured — degrade quietly.
+  if (res.status === 501) return inline(noStore);
+
+  // Anything else is the store actively refusing the file. Say so rather than
+  // silently storing something different from what the user asked for.
+  throw new Error(body.error || `Upload failed (${res.status}).`);
 }
 
 export function formatBytes(bytes) {

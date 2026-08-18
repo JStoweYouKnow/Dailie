@@ -1,8 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import mammoth from 'mammoth';
 
-// Set up pdf.js worker URL from CDN
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// The worker ships with the package and is bundled alongside the app. Loading it from a
+// CDN instead would break PDF import offline, under a strict CSP, and on any version
+// bump where the CDN path no longer matches.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 /**
  * Extracts plain text from an uploaded file (PDF, DOCX, DOC, Pages, TXT, MD)
