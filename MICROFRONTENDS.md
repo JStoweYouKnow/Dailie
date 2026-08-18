@@ -57,3 +57,37 @@ Checking the child app directly is misleading in two ways worth knowing:
 
 - Its routes are behind Clerk, and Clerk answers non-document requests with 404 rather than a redirect. A bare `curl` therefore reports 404 for healthy pages. Send `Accept: text/html` and `Sec-Fetch-Dest: document` to see the real behaviour — a 307 into the Clerk handshake is a working app, not a broken one.
 - Since Interface sets `basePath`, its own domain serves `interfacestudio.vercel.app/production/*` too. The bare paths 404 there by design.
+
+
+## Google Workspace
+
+Both apps share one Clerk session (see `src/lib/auth.jsx`), and Clerk's Google
+connection is already enabled — "Continue with Google" works today.
+
+Syncing Gmail and Calendar needs more than sign-in, and it is blocked on one thing:
+
+```
+oauth_google: enabled, custom_credentials = false
+```
+
+Clerk is using its **shared development** Google credentials, which are fixed to
+`openid`, `userinfo.email` and `userinfo.profile`. Extra scopes cannot be added to
+them, and neither can a Workspace domain restriction. To switch:
+
+1. In Google Cloud Console, create an OAuth client (Web application) for the
+   Workspace org. Authorised redirect URI: the one Clerk shows on its Google
+   connection page.
+2. Enable the **Gmail API** and **Google Calendar API** on that project.
+3. In the Clerk dashboard, open the Google connection, turn off "use shared
+   credentials", paste the client id and secret, and add the scopes:
+   - `https://www.googleapis.com/auth/gmail.readonly`
+   - `https://www.googleapis.com/auth/calendar.readonly`
+4. Existing users reconnect Google once, to consent to the wider scopes.
+
+To limit sign-in to the Workspace domain, restrict the OAuth client to internal
+users in Google Cloud — that is enforced by Google rather than by this app.
+
+Until then the sync buttons report exactly what is missing and the paste importers
+remain, so nothing is stranded. `api/google-sync.js` verifies the Clerk session,
+exchanges it for the user's Google token server-side and returns records already in
+the board's shape; the token never reaches the browser.

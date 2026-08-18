@@ -5,6 +5,8 @@ import { parseSyncPayload, isICalendarFeed } from "../calendarSync";
 import { makeTask } from "../lib/model";
 import { formatShort, formatClock, relativeDays, tsFromDateInput } from "../lib/format";
 import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
+import { syncFromGoogle } from "../lib/googleSync";
+import { useAccount } from "../lib/auth";
 
 /**
  * Google does not expose a calendar API to a browser app without an OAuth backend, but
@@ -13,6 +15,9 @@ import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
  */
 export default function SyncModal({ onClose }) {
   const { data, patch, add, updateSettings, currentUser, showToast } = useStore();
+  const { enabled: authEnabled, account } = useAccount();
+  const [googleState, setGoogleState] = useState("idle");
+  const [googleError, setGoogleError] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
   const [feedLabel, setFeedLabel] = useState("");
   const [busyFeed, setBusyFeed] = useState(null);
@@ -111,6 +116,35 @@ export default function SyncModal({ onClose }) {
 
   return (
     <ModalShell wide title="Connect Google Calendar" subtitle="Meetings sync into the board and the calendar" onClose={onClose}>
+      {authEnabled && (
+        <Section title="YOUR GOOGLE CALENDAR">
+          <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 12, lineHeight: 1.55 }}>
+            Pulls straight from the calendar of the account you signed in with
+            {account ? <> — <strong style={{ color: "var(--bone)" }}>{account.email}</strong></> : null}. No feed URL, no pasting.
+          </div>
+          <button className="md-btn md-btn-primary" disabled={googleState === "running"}
+            onClick={async () => {
+              setGoogleState("running");
+              setGoogleError("");
+              try {
+                const result = await syncFromGoogle("calendar");
+                const { added, updated } = mergeMeetings(result.meetings || []);
+                showToast(`Google Calendar: ${added} new, ${updated} updated.`, "success");
+                setGoogleState("idle");
+              } catch (err) {
+                setGoogleError(err.message || "Sync failed.");
+                setGoogleState("idle");
+              }
+            }}>
+            <RefreshCw size={13} className={googleState === "running" ? "md-spin" : ""} />
+            {googleState === "running" ? "Syncing…" : "Sync my Google Calendar"}
+          </button>
+          {googleError && (
+            <div style={{ fontSize: 12, color: "var(--red)", marginTop: 10, lineHeight: 1.55 }}>{googleError}</div>
+          )}
+        </Section>
+      )}
+
       <Section title="SUBSCRIBED CALENDARS">
         {feeds.length === 0 && (
           <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 12, lineHeight: 1.6 }}>

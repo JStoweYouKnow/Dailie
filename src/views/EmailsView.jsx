@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { Plus, Mail, ArrowDownLeft, ArrowUpRight, Eye, Zap, AlertTriangle, Inbox, Send } from "lucide-react";
+import { Plus, Mail, ArrowDownLeft, ArrowUpRight, Eye, Zap, AlertTriangle, Inbox, Send, RefreshCw } from "lucide-react";
 import { useStore } from "../lib/store";
 import { staleFollowUps, deriveDirectoryFromEmails, makeTask } from "../lib/model";
 import { parseEmailPaste, dedupeEmails } from "../lib/emailImport";
+import { syncFromGoogle } from "../lib/googleSync";
+import { useAccount } from "../lib/auth";
 import { formatShort, relativeDays, daysSince, parseEmailList } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, InlineText, InlineSelect,
@@ -11,6 +13,9 @@ import {
 
 export function EmailImportModal({ onClose }) {
   const { data, patch, updateSettings, showToast } = useStore();
+  const { enabled: authEnabled, account: signedIn } = useAccount();
+  const [googleState, setGoogleState] = useState("idle");
+  const [googleError, setGoogleError] = useState("");
   const [text, setText] = useState("");
   const [account, setAccount] = useState((data.settings.emailAccounts[0] || {}).address || "");
   const [newAccount, setNewAccount] = useState("");
@@ -50,9 +55,47 @@ export function EmailImportModal({ onClose }) {
 
   return (
     <ModalShell wide title="Sync Email" subtitle="Paste from any of your Gmail accounts" onClose={onClose}>
+      {authEnabled && (
+        <div style={{ border: "1px solid var(--rule)", borderRadius: 10, padding: 14, marginBottom: 18, background: "var(--panel-raised)" }}>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--accent)", letterSpacing: ".12em", marginBottom: 8, fontWeight: 700 }}>
+            SYNC FROM GOOGLE WORKSPACE
+          </div>
+          <div style={{ fontSize: 12.5, color: "var(--dim)", marginBottom: 12, lineHeight: 1.55 }}>
+            Reads the last 60 days from the mailbox you signed in with
+            {signedIn ? <> — <strong style={{ color: "var(--bone)" }}>{signedIn.email}</strong></> : null},
+            then builds the companies and people behind it.
+          </div>
+          <button className="md-btn md-btn-primary" disabled={googleState === "running"}
+            onClick={async () => {
+              setGoogleState("running");
+              setGoogleError("");
+              try {
+                const result = await syncFromGoogle("gmail", { account: signedIn ? signedIn.email : "" });
+                const fresh = dedupeEmails(data.emails, result.emails || []);
+                const withEmails = { ...data, emails: [...fresh, ...data.emails] };
+                const derived = deriveDirectoryFromEmails(withEmails);
+                patch({ emails: derived.emails, companies: derived.companies, people: derived.people });
+                showToast(
+                  `Gmail: ${fresh.length} new · ${derived.newCompanies.length} companies · ${derived.newPeople.length} people.`,
+                  "success"
+                );
+                onClose();
+              } catch (err) {
+                setGoogleError(err.message || "Sync failed.");
+                setGoogleState("idle");
+              }
+            }}>
+            <RefreshCw size={13} className={googleState === "running" ? "md-spin" : ""} />
+            {googleState === "running" ? "Syncing…" : "Sync my Gmail"}
+          </button>
+          {googleError && (
+            <div style={{ fontSize: 12, color: "var(--red)", marginTop: 10, lineHeight: 1.55 }}>{googleError}</div>
+          )}
+        </div>
+      )}
+
       <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16, lineHeight: 1.55 }}>
-        Open a Gmail thread (or your inbox list), select all, and paste it below. Dailie reads the
-        senders, subjects and dates, then creates the companies and people behind them.
+        Or paste instead: open a Gmail thread (or your inbox list), select all, and paste it below.
       </div>
 
       <Field label="WHICH ACCOUNT IS THIS FROM" hint="Mail from these addresses is treated as sent by us, everything else as received.">
