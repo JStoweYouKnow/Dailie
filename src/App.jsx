@@ -6,7 +6,7 @@ import {
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { normalizeData, staleFollowUps } from "./lib/model";
 import { parseDocumentFile } from "./documentParser";
-import { parseSyncPayload } from "./calendarSync";
+import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
 import { LoadingState, Stat, Avatar, ModalShell, Field } from "./ui/kit";
 import {
   DailieBrandLogo, Toast, NotificationCenter, LiveCallBanner, CommandPalette, AIAssistantDrawer, InfoModal,
@@ -134,7 +134,10 @@ function Board() {
         try {
           const res = await fetch(`/api/calendar?url=${encodeURIComponent(feed.url)}`);
           if (!res.ok) continue;
-          const parsed = parseSyncPayload(await res.text());
+          const text = await res.text();
+          // Never import from a response that is not actually a calendar.
+          if (!isICalendarFeed(text)) continue;
+          const parsed = parseSyncPayload(text);
           patch((current) => {
             const map = new Map(current.meetings.map((m) => [m.id, m]));
             parsed.meetings.forEach((event) => {

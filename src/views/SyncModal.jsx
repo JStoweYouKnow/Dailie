@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RefreshCw, Plus, X, Calendar as CalendarIcon, Trash2, CheckCircle2 } from "lucide-react";
 import { useStore } from "../lib/store";
-import { parseSyncPayload } from "../calendarSync";
+import { parseSyncPayload, isICalendarFeed } from "../calendarSync";
 import { makeTask } from "../lib/model";
 import { formatShort, formatClock, relativeDays, tsFromDateInput } from "../lib/format";
 import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
@@ -51,6 +51,9 @@ export default function SyncModal({ onClose }) {
         throw new Error(body.error || `The calendar feed returned ${res.status}.`);
       }
       const text = await res.text();
+      if (!isICalendarFeed(text)) {
+        throw new Error("That URL did not return a calendar. Use the Secret address in iCal format, not the calendar's web page.");
+      }
       const parsed = parseSyncPayload(text);
       const { added, updated } = mergeMeetings(parsed.meetings);
       updateSettings({

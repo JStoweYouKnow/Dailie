@@ -248,6 +248,15 @@ export function parseGmailTextInvite(rawEmailText) {
   };
 }
 
+/**
+ * True only for a real iCal document. A feed fetch that lands on an SPA fallback, an
+ * error page or a login redirect returns 200 with HTML — parsing that as an invite
+ * would manufacture a meeting out of markup.
+ */
+export function isICalendarFeed(text) {
+  return /BEGIN:VCALENDAR/i.test(String(text || ""));
+}
+
 export function looksLikeCalendarPayload(text) {
   const t = String(text || "").trim();
   if (t.length < 12) return false;
