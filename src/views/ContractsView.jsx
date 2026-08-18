@@ -95,6 +95,7 @@ export default function ContractsView({ searchQuery }) {
       list = list.filter((c) =>
         (c.title || "").toLowerCase().includes(q) ||
         companyName(c.companyId).toLowerCase().includes(q) ||
+        ((data.talent || []).find((t) => t.id === c.talentId) || {}).name?.toLowerCase().includes(q) ||
         (c.notes || "").toLowerCase().includes(q));
     }
     return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -115,8 +116,12 @@ export default function ContractsView({ searchQuery }) {
       <InlineSelect value={c.kind} options={CONTRACT_KINDS} onCommit={(v) => update("contracts", c.id, { kind: v })} />
     ) },
     { key: "company", label: "COUNTERPARTY", stopClick: true, render: (c) => (
-      <InlineSelect value={c.companyId} options={data.companies.map((x) => ({ key: x.id, label: x.name }))} placeholder="—"
-        onCommit={(v) => update("contracts", c.id, { companyId: v })} />
+      // A crew NDA belongs to a person on the roster, not a company.
+      c.talentId
+        ? <InlineSelect value={c.talentId} options={(data.talent || []).map((t) => ({ key: t.id, label: t.name }))} placeholder="—"
+            onCommit={(v) => update("contracts", c.id, { talentId: v })} />
+        : <InlineSelect value={c.companyId} options={data.companies.map((x) => ({ key: x.id, label: x.name }))} placeholder="—"
+            onCommit={(v) => update("contracts", c.id, { companyId: v })} />
     ) },
     { key: "project", label: "PROJECT", stopClick: true, render: (c) => (
       <InlineSelect value={c.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="—"

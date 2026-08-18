@@ -16,6 +16,7 @@ import ProjectsView from "./views/ProjectsView";
 import ProjectDetail from "./views/ProjectDetail";
 import NewProjectModal from "./views/NewProjectModal";
 import TasksView from "./views/TasksView";
+import TeamView from "./views/TeamView";
 import CalendarView from "./views/CalendarView";
 import MeetingsView, { NewMeetingModal } from "./views/MeetingsView";
 import CallsView from "./views/CallsView";
@@ -40,6 +41,7 @@ const TABS = [
   { key: "emails", label: "EMAILS" },
   { key: "companies", label: "COMPANIES" },
   { key: "people", label: "PEOPLE" },
+  { key: "team", label: "TEAM" },
   { key: "vendors", label: "VENDORS" },
   { key: "aitools", label: "AI TOOLS" },
   { key: "contracts", label: "NDAs & CONTRACTS" },
@@ -229,6 +231,8 @@ function Board() {
         return <CompaniesView searchQuery={searchQuery} onOpenTab={openTab} title="COMPANIES" />;
       case "people":
         return <PeopleView searchQuery={searchQuery} onOpenTab={openTab} />;
+      case "team":
+        return <TeamView searchQuery={searchQuery} />;
       case "vendors":
         return <CompaniesView searchQuery={searchQuery} onOpenTab={openTab} lockedType="vendor" title="VENDORS" />;
       case "aitools":

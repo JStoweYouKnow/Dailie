@@ -95,6 +95,34 @@ export const TASK_STATUSES = [
 
 export const PRIORITIES = ["HIGH", "MEDIUM", "LOW"];
 
+/**
+ * The roster: staff, freelancers and artists you are courting. Distinct from
+ * `team` (the accounts tasks get assigned to) — someone can sit on the roster for
+ * months before you sign them, and only then become assignable.
+ */
+export const TALENT_STATUSES = [
+  { key: "prospect", label: "Prospect", color: "#9a968e" },
+  { key: "in-talks", label: "In Talks", color: "#a7b3a4" },
+  { key: "offer-out", label: "Offer Out", color: "#c9a227" },
+  { key: "signed", label: "Signed", color: "#7c9473" },
+  { key: "passed", label: "Passed", color: "#6e6b65" },
+  { key: "alumni", label: "Past Collaborator", color: "#9b8aa4" },
+];
+
+export const RATE_UNITS = [
+  { key: "day", label: "per day" },
+  { key: "week", label: "per week" },
+  { key: "hour", label: "per hour" },
+  { key: "project", label: "per project" },
+  { key: "episode", label: "per episode" },
+];
+
+export const DISCIPLINES = [
+  "Director", "Producer", "Writer", "Director of Photography", "Editor",
+  "Production Designer", "Composer", "VFX Artist", "Colourist", "Sound Designer",
+  "Animator", "Illustrator", "Gaffer", "1st AD", "Casting Director",
+];
+
 export const CONTRACT_KINDS = [
   { key: "nda", label: "NDA" },
   { key: "deal", label: "Deal Contract" },
@@ -230,6 +258,7 @@ export const SEED_DATA = {
   ],
   contracts: [
     { id: "ct-1", kind: "nda", title: "A24 — Mutual NDA", companyId: "co-1", projectId: "proj-1", status: "signed", signedAt: now - 30 * DAY, expiresAt: now + 335 * DAY, ownerId: "u-1", fileName: "", filePath: "", fileUrl: "", notes: "Mutual, 2-year term.", createdAt: now - 30 * DAY },
+    { id: "ct-3", kind: "nda", title: "Ines Okafor — Crew NDA", companyId: null, talentId: "tal-1", projectId: "proj-2", status: "signed", signedAt: now - 60 * DAY, expiresAt: now + 305 * DAY, ownerId: "u-2", fileName: "", filePath: "", fileUrl: "", notes: "", createdAt: now - 60 * DAY },
     { id: "ct-2", kind: "vendor", title: "Harbour Post — Finishing Agreement", companyId: "co-5", projectId: "proj-2", status: "open", ownerId: "u-2", value: "$180,000", fileName: "", filePath: "", fileUrl: "", notes: "Awaiting counter-signature.", createdAt: now - 6 * DAY },
   ],
   invoices: [
@@ -238,6 +267,39 @@ export const SEED_DATA = {
   ],
   payments: [
     { id: "pay-1", companyId: "co-5", projectId: "proj-2", invoiceId: "inv-2", amount: 60000, currency: "USD", dueAt: now + 7 * DAY, status: "unpaid", method: "Wire", notes: "Colour pass 1 — release on delivery of graded reels.", createdAt: now - 8 * DAY },
+  ],
+  talent: [
+    {
+      id: "tal-1", name: "Ines Okafor", discipline: "Director of Photography", status: "signed",
+      email: "ines@okaforcine.com", phone: "+1 (323) 555-0117", agent: "WME — Dana Liu", location: "Los Angeles",
+      reel: "https://vimeo.com/inesokafor", rateAmount: "1450", rateUnit: "day", currency: "USD",
+      ndaContractId: "ct-3", teamMemberId: null, ownerId: "u-2", tags: ["doc", "handheld"],
+      notes: "Shot two features with Marcus. Prefers 6-week blocks.",
+      assignments: [
+        { id: "as-1", projectId: "proj-2", role: "DP — Unit B", startDate: now - 3 * DAY, endDate: now + 24 * DAY, allocation: 100, notes: "Alaska block" },
+      ],
+      createdAt: now - 70 * DAY,
+    },
+    {
+      id: "tal-2", name: "Ravi Chandrasekar", discipline: "VFX Artist", status: "in-talks",
+      email: "ravi@pixelforge.studio", phone: "", agent: "", location: "Remote — Bangalore",
+      reel: "https://pixelforge.studio/reel", rateAmount: "820", rateUnit: "day", currency: "USD",
+      ndaContractId: null, teamMemberId: null, ownerId: "u-3", tags: ["previz", "comp"],
+      notes: "Wants a 3-week trial before committing to Neon Horizon.",
+      assignments: [],
+      createdAt: now - 12 * DAY,
+    },
+    {
+      id: "tal-3", name: "Marta Lindqvist", discipline: "Editor", status: "prospect",
+      email: "marta@cutroom.se", phone: "", agent: "Salt Agency", location: "Stockholm",
+      reel: "", rateAmount: "6200", rateUnit: "week", currency: "USD",
+      ndaContractId: null, teamMemberId: null, ownerId: "u-1", tags: ["scripted"],
+      notes: "Recommended by Elena. Free from October.",
+      assignments: [
+        { id: "as-2", projectId: "proj-1", role: "Editor — assembly", startDate: now + 45 * DAY, endDate: now + 90 * DAY, allocation: 50, notes: "Tentative" },
+      ],
+      createdAt: now - 4 * DAY,
+    },
   ],
   logs: [],
 };
@@ -482,7 +544,14 @@ export function normalizeData(raw) {
     meetings: ensureArray(input.meetings).map((m) => ({ followUps: [], ...m, id: m.id || uid() })),
     calls: ensureArray(input.calls).map((c) => ({ nextSteps: [], ...c, id: c.id || uid() })),
     emails,
-    contracts: ensureArray(input.contracts).map((c) => ({ status: "draft", kind: "other", ...c, id: c.id || uid() })),
+    talent: ensureArray(input.talent).map((t) => ({
+      ...makeTalent({}),
+      ...t,
+      id: t.id || uid(),
+      assignments: ensureArray(t.assignments).map((a) => ({ ...makeAssignment({}), ...a, id: a.id || uid() })),
+      tags: ensureArray(t.tags),
+    })),
+    contracts: ensureArray(input.contracts).map((c) => ({ status: "draft", kind: "other", talentId: null, ...c, id: c.id || uid() })),
     invoices: ensureArray(input.invoices).map((i) => ({ status: "draft", direction: "incoming", currency: "USD", ...i, id: i.id || uid() })),
     payments: ensureArray(input.payments).map((p) => ({ status: "unpaid", currency: "USD", ...p, id: p.id || uid() })),
     logs: ensureArray(input.logs).filter((l) => l.id !== "log-1"),
@@ -652,6 +721,96 @@ export function deriveDirectoryFromEmails(data) {
   });
 
   return { companies, people, emails, newCompanies, newPeople };
+}
+
+/* ------------------------------------------------------------------ *
+ * Roster availability
+ * ------------------------------------------------------------------ */
+
+export function makeTalent(fields) {
+  return {
+    id: uid(),
+    name: "",
+    discipline: "",
+    status: "prospect",
+    email: "",
+    phone: "",
+    agent: "",
+    location: "",
+    reel: "",
+    rateAmount: "",
+    rateUnit: "day",
+    currency: "USD",
+    ndaContractId: null,
+    assignments: [],
+    tags: [],
+    notes: "",
+    ownerId: null,
+    teamMemberId: null,
+    createdAt: Date.now(),
+    ...fields,
+  };
+}
+
+export function makeAssignment(fields) {
+  return {
+    id: uid(),
+    projectId: null,
+    role: "",
+    startDate: null,
+    endDate: null,
+    allocation: 100,
+    notes: "",
+    ...fields,
+  };
+}
+
+/** Assignments with a usable date range, earliest first. */
+export function bookings(talent) {
+  return (talent.assignments || [])
+    .filter((a) => a.startDate)
+    .map((a) => ({ ...a, endDate: a.endDate || a.startDate }))
+    .sort((a, b) => a.startDate - b.startDate);
+}
+
+/** Total allocation booked on a given day — over 100 means double-booked. */
+export function loadOn(talent, ts) {
+  const day = new Date(ts).setHours(12, 0, 0, 0);
+  return bookings(talent)
+    .filter((a) => day >= new Date(a.startDate).setHours(0, 0, 0, 0) && day <= new Date(a.endDate).setHours(23, 59, 59, 999))
+    .reduce((sum, a) => sum + (Number(a.allocation) || 100), 0);
+}
+
+export function isBusyOn(talent, ts) {
+  return loadOn(talent, ts) >= 100;
+}
+
+/** First day from `from` where they are not fully booked. */
+export function nextFreeDay(talent, from = Date.now(), horizonDays = 180) {
+  for (let i = 0; i < horizonDays; i++) {
+    const day = from + i * DAY;
+    if (!isBusyOn(talent, day)) return day;
+  }
+  return null;
+}
+
+/** Share of a window that is already booked, 0–1, for the capacity column. */
+export function utilisation(talent, from, to) {
+  const days = Math.max(1, Math.round((to - from) / DAY));
+  let busy = 0;
+  for (let i = 0; i < days; i++) {
+    if (isBusyOn(talent, from + i * DAY)) busy += 1;
+  }
+  return busy / days;
+}
+
+export function ndaFor(data, talent) {
+  if (!talent) return null;
+  if (talent.ndaContractId) {
+    const hit = data.contracts.find((c) => c.id === talent.ndaContractId);
+    if (hit) return hit;
+  }
+  return data.contracts.find((c) => c.kind === "nda" && c.talentId === talent.id) || null;
 }
 
 export function makeTask(fields, currentUserId) {

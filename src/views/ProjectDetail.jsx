@@ -80,6 +80,9 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const invoices = data.invoices.filter((i) => i.projectId === project.id);
   const meetings = data.meetings.filter((m) => m.projectId === project.id);
   const history = [...(project.history || [])].sort((a, b) => b.date - a.date);
+  const booked = (data.talent || [])
+    .map((t) => ({ talent: t, assignment: (t.assignments || []).find((a) => a.projectId === project.id) }))
+    .filter((x) => x.assignment);
   const customFields = project.customFields || {};
 
   const addTask = () => {
@@ -235,6 +238,27 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
           <button className="md-btn" onClick={addTask}><Plus size={13} /> Add</button>
         </div>
       </Section>
+
+      {booked.length > 0 && (
+        <Section title={`CREW BOOKED · ${booked.length}`}>
+          {booked.map(({ talent, assignment }) => (
+            <div key={talent.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--rule)" }}>
+              <Avatar name={talent.name} size={26} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{talent.name}</div>
+                <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>
+                  {assignment.role || talent.discipline || "Crew"}
+                  {assignment.startDate ? ` · ${formatShort(assignment.startDate)} → ${formatShort(assignment.endDate || assignment.startDate)}` : ""}
+                </div>
+              </div>
+              {assignment.allocation && assignment.allocation < 100 && <Badge label={`${assignment.allocation}%`} subtle />}
+              {talent.rateAmount && (
+                <span className="md-mono" style={{ fontSize: 11, color: "var(--accent)" }}>{talent.rateAmount}/{talent.rateUnit || "day"}</span>
+              )}
+            </div>
+          ))}
+        </Section>
+      )}
 
       <Section title={`NOTES · ${notes.length}`}>
         {notes.map((n) => (

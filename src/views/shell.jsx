@@ -4,7 +4,7 @@ import {
   Mail, FileText, Receipt, Video, Info, Clock,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import { staleFollowUps, alertsFor, recordTypeInfo, makeTask } from "../lib/model";
+import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor } from "../lib/model";
 import { formatShort, formatClock, relativeDays, daysSince, formatMoney } from "../lib/format";
 import { ModalShell, Badge, Avatar, EmptyState, Section } from "../ui/kit";
 
@@ -206,7 +206,7 @@ export function CommandPalette({ onClose, onSelect }) {
     const tabs = [
       ["home", "Home dashboard"], ["projects", "Projects"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
       ["meetings", "Meetings"], ["calls", "Calls"], ["emails", "Emails"], ["companies", "Companies"],
-      ["people", "People"], ["vendors", "Vendors"], ["aitools", "AI Tools"], ["contracts", "NDAs & Contracts"],
+      ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"], ["contracts", "NDAs & Contracts"],
       ["finance", "Invoices & Payments"], ["timeline", "Timeline"],
     ];
     tabs.forEach(([key, label]) => { if (!q || label.toLowerCase().includes(q)) push("tab", key, `Go to ${label}`, "Navigation", null); });
@@ -294,6 +294,16 @@ export function AIAssistantDrawer({ isOpen, onClose }) {
       const overdue = data.invoices.filter((i) => i.status !== "paid" && i.dueAt && i.dueAt < Date.now());
       return `**Money**\n\n• Receivable outstanding: ${formatMoney(receivable)}\n• Payable outstanding: ${formatMoney(payable)}\n` +
         `• Vendor payments due: ${formatMoney(vendorDue)}\n• Overdue invoices: ${overdue.length}`;
+    }
+
+    if (/roster|crew|artist|talent|available|capacity|book/.test(p)) {
+      const roster = data.talent || [];
+      const free = roster.filter((t) => !isBusyOn(t, Date.now()));
+      const noNda = roster.filter((t) => !ndaFor(data, t));
+      return `**Roster: ${roster.length}**\n\n` +
+        `• Signed: ${roster.filter((t) => t.status === "signed").length}\n` +
+        `• Free today: ${free.length}${free.length ? ` — ${free.slice(0, 6).map((t) => t.name).join(", ")}` : ""}\n` +
+        `• No NDA on file: ${noNda.length}${noNda.length ? ` — ${noNda.slice(0, 6).map((t) => t.name).join(", ")}` : ""}`;
     }
 
     if (/company|companies|vendor|client|relationship/.test(p)) {
