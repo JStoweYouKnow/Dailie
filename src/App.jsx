@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink, Mic, MicOff, Play, Pause, Eye, Send, Radio, Zap, Bot, Sparkles, SendHorizontal, Sun, Moon } from "lucide-react";
+import { Film, Users, Plus, X, RefreshCw, CheckSquare, Square, Trash2, Download, Upload, Search, FileText, FolderPlus, MessageSquare, Info, HelpCircle, Layers, UserCheck, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Globe, Clock, CheckCircle2, LayoutGrid, Table, Command, DollarSign, Tag, Briefcase, Contact, Phone, ExternalLink, Mic, MicOff, Monitor, Play, Pause, Eye, Send, Radio, Zap, Bot, Sparkles, SendHorizontal, Sun, Moon, ClipboardPaste } from "lucide-react";
 import { parseDocumentFile } from "./documentParser";
-import { parseICSFeed, parseGmailTextInvite } from "./calendarSync";
+import { parseSyncPayload, looksLikeCalendarPayload } from "./calendarSync";
 
 const STAGES = [
   { key: "development", label: "Development", color: "#9a968e" },
@@ -107,6 +107,21 @@ const STORAGE_KEY = "dailie-data-v5";
 const OLD_STORAGE_KEY_V4 = "dailie-data-v4";
 const OLD_STORAGE_KEY_V3 = "dailie-data-v3";
 const AUTHOR_KEY = "dailie-author-name-v1";
+const GCAL_IMPORT_CLEANUP_KEY = "dailie-cleared-gcal-imports-v1";
+
+function isGoogleCalendarImport(meeting) {
+  if (!meeting) return false;
+  const id = String(meeting.id || "");
+  return id.startsWith("ics-") || meeting.attendees === "Google Calendar Sync";
+}
+
+function withoutGoogleCalendarImports(data) {
+  const meetings = (data.meetings || []).filter((m) => !isGoogleCalendarImport(m));
+  return {
+    next: { ...data, meetings },
+    removed: (data.meetings || []).length - meetings.length,
+  };
+}
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -398,16 +413,34 @@ function QuickLogBar({ onAdd, defaultAuthor, onOpenRecordModal }) {
   );
 }
 
-function CallRecorderModal({ onClose, onSaveCallNote, defaultAuthor }) {
+function recordingSrc(item) {
+  if (item && item.audioPath) return `/api/recording?path=${encodeURIComponent(item.audioPath)}`;
+  return (item && item.audioUrl) || "";
+}
+
+function CallRecorderModal({ onClose, onSaveCallNote, defaultAuthor, meeting }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [transcript, setTranscript] = useState("");
+  const [summary, setSummary] = useState("");
+  const [followUps, setFollowUps] = useState([]);
   const [author, setAuthor] = useState(defaultAuthor || "Producer");
-  const [callTitle, setCallTitle] = useState("Phone Call & Pitch Recording");
+  const [callTitle, setCallTitle] = useState(meeting ? `Call Recording: ${meeting.title}` : "Phone Call & Pitch Recording");
+  const [captureMode, setCaptureMode] = useState(meeting && meeting.meetingLink ? "tab" : "mic");
+  const [captureError, setCaptureError] = useState("");
+  const [transcribeState, setTranscribeState] = useState("idle");
+  const [transcribeError, setTranscribeError] = useState("");
   const timerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const streamsRef = useRef([]);
+  const audioCtxRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const placeholderRef = useRef("");
   const [audioUrl, setAudioUrl] = useState(null);
+  const [audioPath, setAudioPath] = useState("");
+
+  const tabCaptureSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
 
   useEffect(() => {
     if (isRecording) {
@@ -420,64 +453,172 @@ function CallRecorderModal({ onClose, onSaveCallNote, defaultAuthor }) {
     return () => clearInterval(timerRef.current);
   }, [isRecording]);
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      audioChunksRef.current = [];
+  // Never leave a mic or a tab share running if the modal closes mid-recording.
+  useEffect(() => () => teardownCapture(), []);
 
-      mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-      };
-
-      mediaRecorderRef.current.start();
-      setIsRecording(true);
-      setRecordSeconds(0);
-      setTranscript("Recording call audio live... Speaking into microphone...");
-
-      if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRec();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.onresult = (event) => {
-          let currentTrans = "";
-          for (let i = 0; i < event.results.length; i++) {
-            currentTrans += event.results[i][0].transcript + " ";
-          }
-          setTranscript(currentTrans);
-        };
-        recognition.start();
-      }
-    } catch (err) {
-      alert("Microphone access permission required to record calls.");
+  const teardownCapture = () => {
+    streamsRef.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+    streamsRef.current = [];
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (err) { /* already stopped */ }
+      recognitionRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (!transcript || transcript.startsWith("Recording")) {
-        setTranscript("Call Summary: Discussed production timeline, talent attachments, and budget allocations for upcoming shoot.");
+  // Browser speech recognition reads the default mic device, not our MediaStream — in tab
+  // mode it only hears this side. It is a live preview; /api/transcribe is authoritative.
+  const startSpeechRecognition = () => {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) return;
+    const recognition = new SpeechRec();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let currentTrans = "";
+      for (let i = 0; i < event.results.length; i++) {
+        currentTrans += event.results[i][0].transcript + " ";
       }
+      setTranscript(currentTrans);
+    };
+    recognition.start();
+    recognitionRef.current = recognition;
+  };
+
+  const transcribeAudio = async (blob) => {
+    setTranscribeState("running");
+    setTranscribeError("");
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/transcribe?date=${today}`, {
+        method: "POST",
+        headers: { "Content-Type": blob.type || "audio/webm" },
+        body: blob,
+      });
+      if (!res.ok) {
+        let message = `Transcription failed (${res.status}).`;
+        if (res.status === 404) {
+          message = "No transcription endpoint. Run the app with `vercel dev` so /api/transcribe is served locally.";
+        } else {
+          try {
+            const body = await res.json();
+            if (body && body.error) message = body.error;
+            if (body && body.audioPath) setAudioPath(body.audioPath);
+          } catch (err) { /* non-JSON error body */ }
+        }
+        throw new Error(message);
+      }
+      const data = await res.json();
+      setAudioPath(data.audioPath || "");
+      if (data.transcript) {
+        setTranscript(data.transcript);
+        setSummary(data.summary || "");
+        setFollowUps((data.followUps || []).map((f) => ({ id: uid(), text: f.text || "", owner: f.owner || "", dueDate: f.dueDate || "" })));
+        setTranscribeState("done");
+      } else {
+        setTranscribeState("error");
+        setTranscribeError(data.note || "No speech was detected in the recording.");
+      }
+    } catch (err) {
+      setTranscribeState("error");
+      setTranscribeError(err.message || "Transcription failed.");
     }
+  };
+
+  const startRecording = async () => {
+    setCaptureError("");
+    setTranscribeError("");
+    setTranscribeState("idle");
+    setSummary("");
+    setFollowUps([]);
+    setAudioPath("");
+    let mic;
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamsRef.current.push(mic);
+    } catch (err) {
+      setCaptureError("Microphone access permission required to record calls.");
+      return;
+    }
+
+    let recordStream = mic;
+
+    if (captureMode === "tab") {
+      let tabStream;
+      try {
+        // Chrome only offers the "share tab audio" checkbox when video is requested too.
+        tabStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+      } catch (err) {
+        teardownCapture();
+        setCaptureError("Tab sharing was cancelled. Nothing was recorded.");
+        return;
+      }
+      streamsRef.current.push(tabStream);
+
+      if (tabStream.getAudioTracks().length === 0) {
+        teardownCapture();
+        setCaptureError('No tab audio was shared — only your mic would have been captured. Re-share, pick the Google Meet or Zoom tab, and switch on "Also share tab audio".');
+        return;
+      }
+
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      audioCtxRef.current = ctx;
+      const dest = ctx.createMediaStreamDestination();
+      ctx.createMediaStreamSource(tabStream).connect(dest);
+      ctx.createMediaStreamSource(mic).connect(dest);
+      recordStream = dest.stream;
+
+      // Chrome's own "Stop sharing" bar can end the capture out from under us.
+      const videoTrack = tabStream.getVideoTracks()[0];
+      if (videoTrack) videoTrack.onended = () => stopRecording();
+    }
+
+    mediaRecorderRef.current = new MediaRecorder(recordStream);
+    audioChunksRef.current = [];
+
+    mediaRecorderRef.current.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    mediaRecorderRef.current.onstop = () => {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      setAudioUrl(URL.createObjectURL(blob));
+      transcribeAudio(blob);
+    };
+
+    mediaRecorderRef.current.start();
+    setIsRecording(true);
+    setRecordSeconds(0);
+    placeholderRef.current = captureMode === "tab"
+      ? "Recording meeting tab + microphone... Both sides are being captured. Live text below is a rough local preview of your mic only — the full transcript is generated when you stop."
+      : "Recording call audio live... Live text below is a rough local preview — the full transcript is generated when you stop.";
+    setTranscript(placeholderRef.current);
+    startSpeechRecognition();
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    teardownCapture();
+    setIsRecording(false);
+    setTranscript((t) => (t === placeholderRef.current ? "" : t));
   };
 
   const handleAudioFileUpload = (e) => {
     const file = e.target.files && e.target.files[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setAudioUrl(url);
-      setCallTitle(`Call Recording: ${file.name}`);
-      setTranscript(`Audio File Uploaded: ${file.name}\nExtracted Audio Notes: Producer line item adjustments and shooting permits approved.`);
-    }
+    if (!file) return;
+    setAudioUrl(URL.createObjectURL(file));
+    setCallTitle(`Call Recording: ${file.name}`);
+    setSummary("");
+    setFollowUps([]);
+    setAudioPath("");
+    setTranscript("");
+    transcribeAudio(file);
   };
 
   const formatTimer = (sec) => {
@@ -486,25 +627,83 @@ function CallRecorderModal({ onClose, onSaveCallNote, defaultAuthor }) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const updateFollowUp = (id, field, value) => setFollowUps((fs) => fs.map((f) => (f.id === id ? { ...f, [field]: value } : f)));
+  const addFollowUpRow = () => setFollowUps((fs) => [...fs, { id: uid(), text: "", owner: "", dueDate: "" }]);
+  const removeFollowUpRow = (id) => setFollowUps((fs) => fs.filter((f) => f.id !== id));
+
   const submit = () => {
     onSaveCallNote({
       title: callTitle,
-      transcript: transcript || "Recorded call memo",
+      summary,
+      transcript,
       author,
-      audioUrl
+      audioUrl,
+      audioPath,
+      meetingId: meeting ? meeting.id : null,
+      followUps: followUps
+        .filter((f) => f.text.trim())
+        .map((f) => ({ id: f.id, text: f.text.trim(), owner: f.owner.trim(), dueDate: f.dueDate, done: false }))
     });
     onClose();
   };
 
+  const canSave = !isRecording && transcribeState !== "running" && !!(summary.trim() || transcript.trim());
+
+  const modeBtnStyle = (mode) => ({
+    flex: 1,
+    justifyContent: "center",
+    borderColor: captureMode === mode ? "var(--accent)" : "var(--rule)",
+    color: captureMode === mode ? "var(--accent)" : "var(--dim)",
+    fontWeight: captureMode === mode ? 700 : 500
+  });
+
   return (
     <ModalShell title="Live Call Recording & Transcription" onClose={onClose}>
       <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16 }}>
-        Record phone calls, investor pitches, or upload voice memos to automatically transcribe and summarize them into Dailie notes.
+        Record phone calls, capture a Google Meet or Zoom call running in a browser tab, or upload voice memos to transcribe and summarize them into Dailie notes.
       </div>
+
+      {meeting && meeting.meetingLink && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", background: "var(--panel-raised)", border: "1px solid var(--accent)", borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 3 }}>CAPTURING</div>
+            <div style={{ fontSize: 13, color: "var(--bone)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{meeting.title}</div>
+          </div>
+          <a className="md-btn md-btn-ghost" href={meeting.meetingLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "var(--accent)", borderColor: "var(--accent)" }}>
+            <ExternalLink size={13} style={{ marginRight: 5 }} /> Open Meeting Tab
+          </a>
+        </div>
+      )}
 
       <Field label="CALL TITLE">
         <input className="md-input" value={callTitle} onChange={(e) => setCallTitle(e.target.value)} />
       </Field>
+
+      <Field label="CAPTURE SOURCE">
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="md-btn" style={modeBtnStyle("mic")} disabled={isRecording} onClick={() => setCaptureMode("mic")}>
+            <Mic size={14} style={{ marginRight: 6 }} /> Microphone Only
+          </button>
+          <button className="md-btn" style={modeBtnStyle("tab")} disabled={isRecording || !tabCaptureSupported} onClick={() => setCaptureMode("tab")}>
+            <Monitor size={14} style={{ marginRight: 6 }} /> Meet / Zoom Tab
+          </button>
+        </div>
+      </Field>
+
+      {captureMode === "tab" && (
+        <div style={{ fontSize: 12, color: "var(--dim)", background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8, padding: "10px 12px", marginBottom: 16, lineHeight: 1.5 }}>
+          {tabCaptureSupported ? (
+            <>
+              Captures both sides of the call by mixing the meeting tab's audio with your microphone. When the share picker opens, choose the <strong>Chrome Tab</strong> running Google Meet or Zoom and switch on <strong>Also share tab audio</strong>.
+              <div style={{ marginTop: 6, color: "var(--red)" }}>
+                Requires Chrome or Edge, and the meeting must be in a browser tab — the Zoom desktop app can't be captured this way. Tell participants they're being recorded.
+              </div>
+            </>
+          ) : (
+            <span style={{ color: "var(--red)" }}>This browser doesn't support tab audio capture. Use Chrome or Edge.</span>
+          )}
+        </div>
+      )}
 
       <div style={{ padding: 16, background: "var(--panel-raised)", borderRadius: 10, border: "1px solid var(--rule)", textAlign: "center", marginBottom: 16 }}>
         <div className="md-mono" style={{ fontSize: 32, fontWeight: 800, color: isRecording ? "var(--red)" : "var(--bone)", marginBottom: 10 }}>
@@ -512,38 +711,86 @@ function CallRecorderModal({ onClose, onSaveCallNote, defaultAuthor }) {
         </div>
 
         {!isRecording ? (
-          <button className="md-btn md-btn-primary" style={{ background: "var(--red)", borderColor: "var(--red)" }} onClick={startRecording}>
-            <Mic size={16} style={{ marginRight: 6 }} /> Start Call Recording
+          <button className="md-btn md-btn-primary" style={{ background: "var(--red)", borderColor: "var(--red)" }} onClick={startRecording} disabled={(captureMode === "tab" && !tabCaptureSupported) || transcribeState === "running"}>
+            <Mic size={16} style={{ marginRight: 6 }} /> {captureMode === "tab" ? "Share Tab & Start Recording" : "Start Call Recording"}
           </button>
         ) : (
           <button className="md-btn" style={{ borderColor: "var(--red)", color: "var(--red)" }} onClick={stopRecording}>
             <MicOff size={16} style={{ marginRight: 6 }} /> Stop & Transcribe Call
           </button>
         )}
+
+        {captureError && (
+          <div style={{ color: "var(--red)", fontSize: 12, marginTop: 12, lineHeight: 1.5 }}>{captureError}</div>
+        )}
       </div>
 
       <Field label="OR UPLOAD CALL AUDIO FILE (.MP3, .WAV, .M4A, .WEBM)">
-        <input type="file" accept="audio/*" onChange={handleAudioFileUpload} style={{ fontSize: 12, color: "var(--bone)" }} />
+        <input type="file" accept="audio/*" onChange={handleAudioFileUpload} disabled={isRecording || transcribeState === "running"} style={{ fontSize: 12, color: "var(--bone)" }} />
       </Field>
 
       {audioUrl && (
         <Field label="AUDIO PLAYBACK">
           <audio controls src={audioUrl} style={{ width: "100%", height: 36, marginTop: 4 }} />
+          {transcribeState !== "running" && !audioPath && (
+            <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 6 }}>
+              Stored for this session only — no blob store is configured, so this audio will not survive a reload.
+            </div>
+          )}
         </Field>
       )}
 
-      <Field label="AI TRANSCRIPTION & SUMMARY">
+      {transcribeState === "running" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--accent)", marginBottom: 14 }}>
+          <RefreshCw size={14} className="md-spin" /> Transcribing and summarizing the call...
+        </div>
+      )}
+
+      {transcribeState === "error" && (
+        <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 14, lineHeight: 1.5 }}>
+          {transcribeError} Anything below is unverified — edit it before saving.
+        </div>
+      )}
+
+      <Field label="SUMMARY & FOLLOW-UPS">
+        <textarea
+          className="md-textarea"
+          rows={4}
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          placeholder="Generated from the transcript once the recording is processed."
+        />
+      </Field>
+
+      <Field label={`FOLLOW-UPS EXTRACTED FROM THE CALL${followUps.length ? ` · ${followUps.length}` : ""}`}>
+        {followUps.length === 0 && (
+          <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 8 }}>
+            {transcribeState === "done" ? "No action items were committed to on this call." : "Action items appear here once the recording is processed."}
+          </div>
+        )}
+        {followUps.map((f) => (
+          <div key={f.id} style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+            <input className="md-input" style={{ flex: "2 1 auto" }} placeholder="Action item" value={f.text} onChange={(e) => updateFollowUp(f.id, "text", e.target.value)} />
+            <input className="md-input" style={{ flex: "1 1 90px" }} placeholder="Owner" value={f.owner} onChange={(e) => updateFollowUp(f.id, "owner", e.target.value)} />
+            <input type="date" className="md-input" style={{ flex: "1 1 120px" }} value={f.dueDate} onChange={(e) => updateFollowUp(f.id, "dueDate", e.target.value)} />
+            <button className="md-btn md-btn-ghost" style={{ padding: 6 }} onClick={() => removeFollowUpRow(f.id)}><X size={14} /></button>
+          </div>
+        ))}
+        <button className="md-btn md-btn-ghost" onClick={addFollowUpRow}><Plus size={13} /> Add follow-up</button>
+      </Field>
+
+      <Field label="FULL TRANSCRIPT">
         <textarea
           className="md-textarea"
           rows={4}
           value={transcript}
           onChange={(e) => setTranscript(e.target.value)}
-          placeholder="Transcription will appear here..."
+          placeholder="Transcript will appear here..."
         />
       </Field>
 
-      <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>
-        Save Call Summary & Audio to Timeline
+      <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center", opacity: canSave ? 1 : 0.5 }} onClick={submit} disabled={!canSave}>
+        {meeting ? `Save to "${meeting.title}"` : followUps.some((f) => f.text.trim()) ? "Save as Meeting Note with Follow-Ups" : "Save Call Summary & Audio to Timeline"}
       </button>
     </ModalShell>
   );
@@ -927,6 +1174,15 @@ function DirectoryView({ contacts, onAddContact, searchQuery }) {
   );
 }
 
+function calendarDateKey(dateTs) {
+  const d = new Date(dateTs);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function CalendarView({ projects, meetings, logs, onOpenProject, onOpenMeeting }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -946,7 +1202,8 @@ function CalendarView({ projects, meetings, logs, onOpenProject, onOpenMeeting }
     const map = {};
 
     const addEv = (dateTs, ev) => {
-      const dStr = new Date(dateTs).toISOString().slice(0, 10);
+      const dStr = calendarDateKey(dateTs);
+      if (!dStr) return;
       if (!map[dStr]) map[dStr] = [];
       map[dStr].push(ev);
     };
@@ -977,7 +1234,7 @@ function CalendarView({ projects, meetings, logs, onOpenProject, onOpenMeeting }
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateObj = new Date(year, month, d);
-    const dateStr = dateObj.toISOString().slice(0, 10);
+    const dateStr = calendarDateKey(dateObj);
     const isToday = new Date().toDateString() === dateObj.toDateString();
     const evs = eventsByDate[dateStr] || [];
     cells.push({ day: d, dateStr, isToday, events: evs, key: `day-${d}` });
@@ -1263,7 +1520,7 @@ function ProjectDetailModal({ project, onClose, onChangeStage, onLog, onDelete }
   );
 }
 
-function MeetingCard({ meeting, onToggleFollowUp, onDelete }) {
+function MeetingCard({ meeting, onToggleFollowUp, onDelete, onCaptureCall }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const open = meeting.followUps.filter((f) => !f.done).length;
   return (
@@ -1280,7 +1537,25 @@ function MeetingCard({ meeting, onToggleFollowUp, onDelete }) {
         </div>
         <button className="md-btn md-btn-ghost" style={{ padding: 6 }} onClick={() => setConfirmingDelete(true)}><Trash2 size={13} /></button>
       </div>
+      {meeting.meetingLink && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <a className="md-btn md-btn-ghost" href={meeting.meetingLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none", color: "var(--accent)", borderColor: "var(--accent)" }}>
+            <ExternalLink size={13} style={{ marginRight: 5 }} /> {/zoom\.us/i.test(meeting.meetingLink) ? "Join Zoom" : "Join Google Meet"}
+          </a>
+          {onCaptureCall && (
+            <button className="md-btn md-btn-ghost" onClick={() => onCaptureCall(meeting)} style={{ color: "var(--red)", borderColor: "var(--red)" }} title="Record this call from its browser tab">
+              <Monitor size={13} style={{ marginRight: 5 }} /> Capture Call
+            </button>
+          )}
+        </div>
+      )}
       {meeting.notes && <div style={{ fontSize: 14, color: "var(--bone)", opacity: 0.9, marginBottom: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{meeting.notes}</div>}
+      {recordingSrc(meeting) && (
+        <div style={{ marginBottom: 14 }}>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>CALL RECORDING</div>
+          <audio controls src={recordingSrc(meeting)} style={{ width: "100%", maxWidth: 320, height: 32 }} />
+        </div>
+      )}
       {meeting.followUps.length > 0 && (
         <div>
           <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>FOLLOW-UPS · {open} OPEN</div>
@@ -1307,7 +1582,7 @@ function MeetingCard({ meeting, onToggleFollowUp, onDelete }) {
   );
 }
 
-function MeetingsView({ meetings, onOpenNew, onToggleFollowUp, onDelete, searchQuery }) {
+function MeetingsView({ meetings, onOpenNew, onToggleFollowUp, onDelete, searchQuery, onCaptureCall }) {
   const filtered = useMemo(() => {
     let list = [...meetings].sort((a, b) => b.date - a.date);
     if (searchQuery) {
@@ -1325,7 +1600,7 @@ function MeetingsView({ meetings, onOpenNew, onToggleFollowUp, onDelete, searchQ
       </div>
       {filtered.length === 0 ? (
         <EmptyState title="No meeting notes found" subtitle="Log your next meeting with action items and follow-ups to stay synchronized." />
-      ) : filtered.map((m) => <MeetingCard key={m.id} meeting={m} onToggleFollowUp={onToggleFollowUp} onDelete={onDelete} />)}
+      ) : filtered.map((m) => <MeetingCard key={m.id} meeting={m} onToggleFollowUp={onToggleFollowUp} onDelete={onDelete} onCaptureCall={onCaptureCall} />)}
     </div>
   );
 }
@@ -1371,62 +1646,170 @@ function NewMeetingModal({ onClose, onCreate, defaultAuthor, initialTitle = "", 
   );
 }
 
-function GmailSyncModal({ onClose, onImportICS, onImportGmailInvite }) {
+function GmailSyncModal({ onClose, onImportMeetings, onClearSyncedEvents }) {
   const [gmailText, setGmailText] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef(null);
+  const pasteRef = useRef(null);
 
-  const handlePasteGmail = () => {
-    if (!gmailText.trim()) return;
-    const meeting = parseGmailTextInvite(gmailText);
-    onImportGmailInvite(meeting);
-    setStatusMsg("Gmail invite successfully parsed and added to Meeting Notes!");
+  useEffect(() => {
+    if (pasteRef.current) pasteRef.current.focus();
+  }, []);
+
+  const ingestText = (raw) => {
+    const parsed = parseSyncPayload(raw);
+    if (!parsed.meetings.length) {
+      setPreview(null);
+      setStatusMsg("Couldn't find a meeting invite in that content. Copy a Gmail invite or drop a .ics file.");
+      return;
+    }
+    setPreview(parsed);
+    setStatusMsg("");
     setGmailText("");
   };
 
-  const handleICalUpload = async (e) => {
-    const file = e.target.files && e.target.files[0];
+  const ingestFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const events = parseICSFeed(event.target.result);
-        if (events.length > 0) {
-          onImportICS(events);
-          setStatusMsg(`Successfully imported ${events.length} Google Calendar event(s)!`);
-        } else {
-          setStatusMsg("No events found in iCal file.");
-        }
-      } catch (err) {
-        setStatusMsg("Failed to parse iCal file.");
-      }
-    };
+    reader.onload = (event) => ingestText(String(event.target.result || ""));
     reader.readAsText(file);
-    e.target.value = "";
+  };
+
+  const handleClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        setStatusMsg("Clipboard is empty. Copy a Gmail invite first, then try again.");
+        return;
+      }
+      ingestText(text);
+    } catch (err) {
+      setStatusMsg("Clipboard access blocked. Paste the invite below or drop a file.");
+      if (pasteRef.current) pasteRef.current.focus();
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) {
+      ingestFile(file);
+      return;
+    }
+    const text = e.dataTransfer.getData("text/plain");
+    if (text) ingestText(text);
+  };
+
+  const addToBoard = () => {
+    if (!preview || !preview.meetings.length) return;
+    onImportMeetings(preview.meetings);
+    const count = preview.meetings.length;
+    setStatusMsg(`Added ${count} ${preview.kind === "calendar" ? "calendar event" : "Gmail invite"}${count === 1 ? "" : "s"} to the board.`);
+    setPreview(null);
   };
 
   return (
     <ModalShell title="Gmail & Google Calendar Sync" onClose={onClose}>
       <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16 }}>
-        Synchronize your <strong style={{ color: "var(--bone)" }}>Google Calendar</strong> schedule and <strong style={{ color: "var(--bone)" }}>Gmail meeting invites</strong> directly with Dailie's Live Calendar & Ops Board.
+        Copy a Gmail invite and import it in one click, or drop a Google Calendar <strong style={{ color: "var(--bone)" }}>.ics</strong> / <strong style={{ color: "var(--bone)" }}>.eml</strong> file. Dailie reads the title, time, guests, and location automatically.
       </div>
 
-      <Field label="OPTION 1: PASTE GMAIL MEETING INVITE / EMAIL THREAD">
-        <textarea
-          className="md-textarea"
-          rows={4}
-          value={gmailText}
-          onChange={(e) => setGmailText(e.target.value)}
-          placeholder="Paste email thread or calendar invite body here (Subject, From, Date, Discussion...)"
-        />
-        <button className="md-btn md-btn-primary" style={{ marginTop: 8, width: "100%", justifyContent: "center" }} onClick={handlePasteGmail}>
-          <Mail size={14} style={{ marginRight: 6 }} /> Sync Gmail Email to Meeting Notes
-        </button>
-      </Field>
+      <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center", marginBottom: 10 }} onClick={handleClipboard}>
+        <ClipboardPaste size={14} style={{ marginRight: 6 }} /> Import from clipboard
+      </button>
 
-      <div style={{ borderTop: "1px solid var(--rule)", margin: "16px 0", paddingTop: 16 }}>
-        <Field label="OPTION 2: IMPORT GOOGLE CALENDAR (.ICS FILE)">
-          <input type="file" accept=".ics" onChange={handleICalUpload} style={{ fontSize: 12, color: "var(--bone)" }} />
-        </Field>
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current && fileInputRef.current.click()}
+        style={{
+          border: `1px dashed ${dragging ? "var(--accent)" : "var(--rule-bright)"}`,
+          background: dragging ? "var(--panel-hover)" : "var(--panel-raised)",
+          borderRadius: 12,
+          padding: "22px 16px",
+          textAlign: "center",
+          cursor: "pointer",
+          marginBottom: 12,
+        }}
+      >
+        <Upload size={18} color="var(--accent)" style={{ marginBottom: 6 }} />
+        <div style={{ fontSize: 13, color: "var(--bone)", fontWeight: 600 }}>Drop .ics, .eml, or a copied invite</div>
+        <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 4, letterSpacing: ".08em" }}>CLICK TO UPLOAD · CMD+V TO PASTE</div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".ics,.eml,.txt,.text"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            ingestFile(e.target.files && e.target.files[0]);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      <textarea
+        ref={pasteRef}
+        className="md-textarea"
+        rows={3}
+        value={gmailText}
+        onChange={(e) => setGmailText(e.target.value)}
+        onPaste={(e) => {
+          const text = e.clipboardData.getData("text/plain");
+          if (looksLikeCalendarPayload(text)) {
+            e.preventDefault();
+            ingestText(text);
+          }
+        }}
+        placeholder="Or paste a Gmail invite / calendar email here…"
+      />
+      {gmailText.trim() && (
+        <button className="md-btn" style={{ marginTop: 8, width: "100%", justifyContent: "center" }} onClick={() => ingestText(gmailText)}>
+          <Mail size={14} style={{ marginRight: 6 }} /> Parse pasted invite
+        </button>
+      )}
+
+      {preview && preview.meetings.length > 0 && (
+        <div style={{ marginTop: 14, padding: 12, background: "var(--panel-raised)", border: "1px solid var(--rule-bright)", borderRadius: 10 }}>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--accent)", letterSpacing: ".1em", marginBottom: 8 }}>
+            READY TO ADD · {preview.meetings.length} {preview.kind === "calendar" ? "EVENT" : "INVITE"}{preview.meetings.length === 1 ? "" : "S"}
+          </div>
+          <div style={{ display: "grid", gap: 8, maxHeight: 180, overflowY: "auto", marginBottom: 12 }}>
+            {preview.meetings.slice(0, 8).map((m) => (
+              <div key={m.id} style={{ fontSize: 13 }}>
+                <div style={{ color: "var(--bone)", fontWeight: 700 }}>{m.title}</div>
+                <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>
+                  {formatShort(m.date)} · {m.attendees}
+                </div>
+              </div>
+            ))}
+            {preview.meetings.length > 8 && (
+              <div style={{ fontSize: 12, color: "var(--dim)" }}>+ {preview.meetings.length - 8} more</div>
+            )}
+          </div>
+          <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={addToBoard}>
+            <CalendarIcon size={14} style={{ marginRight: 6 }} /> Add to Dailie board
+          </button>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--rule)" }}>
+        <button
+          className="md-btn md-btn-ghost"
+          style={{ border: "1px solid var(--rule)", color: "var(--red)" }}
+          onClick={() => {
+            const removed = onClearSyncedEvents();
+            setPreview(null);
+            setStatusMsg(removed > 0
+              ? `Removed ${removed} previously imported Google Calendar event${removed === 1 ? "" : "s"}.`
+              : "No imported Google Calendar events to remove.");
+          }}
+        >
+          <Trash2 size={14} style={{ marginRight: 6 }} /> Remove synced calendar events
+        </button>
       </div>
 
       {statusMsg && (
@@ -1723,6 +2106,7 @@ export default function App() {
   const [showNewMeeting, setShowNewMeeting] = useState(false);
   const [showNewContact, setShowNewContact] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
+  const [recordMeeting, setRecordMeeting] = useState(null);
   const [showTrackEmailModal, setShowTrackEmailModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showGmailModal, setShowGmailModal] = useState(false);
@@ -1757,7 +2141,18 @@ export default function App() {
 
   const load = async () => {
     const stored = await getStoredData();
-    setData(stored);
+    let next = stored;
+    try {
+      if (!localStorage.getItem(GCAL_IMPORT_CLEANUP_KEY)) {
+        const cleaned = withoutGoogleCalendarImports(stored);
+        if (cleaned.removed > 0) {
+          next = cleaned.next;
+          await setStoredData(next);
+        }
+        localStorage.setItem(GCAL_IMPORT_CLEANUP_KEY, "1");
+      }
+    } catch (e) {}
+    setData(next);
   };
 
   useEffect(() => {
@@ -1872,27 +2267,78 @@ export default function App() {
     alert(`Document "${fileName}" added to Timeline log!`);
   };
 
-  const handleImportICSEvents = (events) => {
-    const newMeetings = events.map(e => ({
-      id: e.id, title: e.title, date: e.date, attendees: "Google Calendar Sync", notes: e.notes || "Synced from Google Calendar", followUps: []
+  const handleClearSyncedCalendarEvents = () => {
+    const cleaned = withoutGoogleCalendarImports(data);
+    persist(cleaned.next);
+    return cleaned.removed;
+  };
+
+  const handleImportSyncedMeetings = (meetings) => {
+    const newMeetings = meetings.map((e) => ({
+      id: e.id || uid(),
+      title: e.title || "Synced meeting",
+      date: Number.isFinite(e.date) ? e.date : Date.now(),
+      attendees: e.attendees || "Google Calendar Sync",
+      notes: e.notes || "Synced from Google Calendar",
+      meetingLink: e.meetingLink || "",
+      followUps: Array.isArray(e.followUps) ? e.followUps : [],
     }));
     persist({ ...data, meetings: [...newMeetings, ...data.meetings] });
+    setActiveTab(newMeetings.length > 1 ? "calendar" : "meetings");
   };
 
-  const handleImportGmailInvite = (meeting) => {
-    persist({ ...data, meetings: [meeting, ...data.meetings] });
-  };
+  const handleSaveCallNote = ({ title, summary, transcript, author, audioUrl, audioPath, meetingId, followUps }) => {
+    const callFollowUps = Array.isArray(followUps) ? followUps : [];
+    const body = summary || transcript;
+    const countLabel = `${callFollowUps.length} follow-up${callFollowUps.length === 1 ? "" : "s"}`;
 
-  const handleSaveCallNote = ({ title, transcript, author, audioUrl }) => {
+    // Follow-ups are only tracked and counted on meeting notes, so a call that produced
+    // action items lands there rather than as a loose timeline log.
+    const linked = meetingId && data.meetings.find((m) => m.id === meetingId);
+    if (linked) {
+      const meetings = data.meetings.map((m) => (m.id !== meetingId ? m : {
+        ...m,
+        notes: [m.notes, `🎙️ ${title}\n${body}`].filter(Boolean).join("\n\n"),
+        followUps: [...m.followUps, ...callFollowUps],
+        transcript,
+        audioUrl,
+        audioPath
+      }));
+      persist({ ...data, meetings });
+      setActiveTab("meetings");
+      alert(`Call summary and ${countLabel} added to "${linked.title}".`);
+      return;
+    }
+
+    if (callFollowUps.length) {
+      const meeting = {
+        id: uid(),
+        title,
+        date: Date.now(),
+        attendees: author || authorName || "Producer",
+        notes: body,
+        followUps: callFollowUps,
+        transcript,
+        audioUrl,
+        audioPath
+      };
+      persist({ ...data, meetings: [meeting, ...data.meetings] });
+      setActiveTab("meetings");
+      alert(`Call saved as a meeting note with ${countLabel}.`);
+      return;
+    }
+
     const log = {
       id: uid(),
       date: Date.now(),
-      text: `🎙️ ${title}: ${transcript}`,
+      text: `🎙️ ${title}: ${body}`,
       author: author || authorName || "Producer",
-      audioUrl
+      transcript,
+      audioUrl,
+      audioPath
     };
     persist({ ...data, logs: [log, ...data.logs] });
-    alert("Call recording and AI summary saved to Timeline!");
+    alert("Call recording and AI summary saved to Timeline.");
   };
 
   const handleSaveTrackedEmail = (emailObj) => {
@@ -1983,11 +2429,12 @@ export default function App() {
       entries.push({
         id: "m-" + m.id, ts: m.date, type: "meeting", kindLabel: "MEETING", title: m.title,
         subtitle: m.followUps.length ? `${openCount} open follow-up${openCount === 1 ? "" : "s"} of ${m.followUps.length}` : m.attendees, dotColor: "var(--accent)",
+        audioUrl: recordingSrc(m),
       });
     });
     (data.logs || []).forEach((l) => {
       if (l.id === "log-1") return;
-      entries.push({ id: "l-" + l.id, ts: l.date, type: "log", kindLabel: "NOTE", title: l.text, subtitle: l.author ? `Logged by ${l.author}` : "", dotColor: "var(--bone)", audioUrl: l.audioUrl });
+      entries.push({ id: "l-" + l.id, ts: l.date, type: "log", kindLabel: "NOTE", title: l.text, subtitle: l.author ? `Logged by ${l.author}` : "", dotColor: "var(--bone)", audioUrl: recordingSrc(l) });
     });
     entries.sort((a, b) => b.ts - a.ts);
     return entries;
@@ -2052,7 +2499,7 @@ export default function App() {
             <div>
               <input className="md-input" style={{ fontSize: 12, padding: "6px 10px", width: 100 }} value={authorName} onChange={(e) => handleAuthorChange(e.target.value)} placeholder="Logged by..." />
             </div>
-            <button className="md-btn md-btn-ghost" onClick={() => setShowRecordModal(true)} title="Live Call Recorder" style={{ padding: 8, color: "var(--red)" }}>
+            <button className="md-btn md-btn-ghost" onClick={() => { setRecordMeeting(null); setShowRecordModal(true); }} title="Live Call Recorder" style={{ padding: 8, color: "var(--red)" }}>
               <Mic size={14} />
             </button>
             <button className="md-btn md-btn-ghost" onClick={() => setShowGmailModal(true)} title="Gmail & Google Calendar Sync" style={{ padding: 8, color: "var(--accent)" }}>
@@ -2099,17 +2546,23 @@ export default function App() {
           <div key={t.key} className={"md-tab" + (activeTab === t.key ? " active" : "")} onClick={() => setActiveTab(t.key)} role="button" tabIndex={0}
             onKeyDown={(e) => { if (e.key === "Enter") setActiveTab(t.key); }}>{t.label}</div>
         ))}
+        {/* Cross-zone: /production is served by the Interface microfrontend,
+            so this is a real navigation, not a tab switch. */}
+        <a className="md-tab" href="/production" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+          PRODUCTION
+          <ExternalLink size={11} />
+        </a>
       </div>
 
       <div style={{ padding: "24px 32px 48px" }}>
         {loading ? (
           <LoadingState />
         ) : activeTab === "timeline" ? (
-          <TimelineView entries={allTimelineEntries} filter={timelineFilter} setFilter={setTimelineFilter} onAddLog={addQuickLog} defaultAuthor={authorName} searchQuery={searchQuery} onOpenRecordModal={() => setShowRecordModal(true)} />
+          <TimelineView entries={allTimelineEntries} filter={timelineFilter} setFilter={setTimelineFilter} onAddLog={addQuickLog} defaultAuthor={authorName} searchQuery={searchQuery} onOpenRecordModal={() => { setRecordMeeting(null); setShowRecordModal(true); }} />
         ) : activeTab === "projects" ? (
           <ProjectsView projects={data.projects} onOpenNew={() => { setInitialModalData({ projectTitle: "", projectDesc: "" }); setShowNewProject(true); }} onOpenDetail={setDetailProject} onChangeStage={changeProjectStage} searchQuery={searchQuery} />
         ) : activeTab === "meetings" ? (
-          <MeetingsView meetings={data.meetings} onOpenNew={() => { setInitialModalData({ meetingTitle: "", meetingNotes: "" }); setShowNewMeeting(true); }} onToggleFollowUp={toggleFollowUp} onDelete={deleteMeeting} searchQuery={searchQuery} />
+          <MeetingsView meetings={data.meetings} onOpenNew={() => { setInitialModalData({ meetingTitle: "", meetingNotes: "" }); setShowNewMeeting(true); }} onToggleFollowUp={toggleFollowUp} onDelete={deleteMeeting} searchQuery={searchQuery} onCaptureCall={(m) => { setRecordMeeting(m); setShowRecordModal(true); }} />
         ) : activeTab === "calendar" ? (
           <CalendarView projects={data.projects} meetings={data.meetings} logs={data.logs} onOpenProject={setDetailProject} onOpenMeeting={(m) => setActiveTab("meetings")} />
         ) : activeTab === "directory" ? (
@@ -2122,7 +2575,7 @@ export default function App() {
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={createProject} initialTitle={initialModalData.projectTitle} initialDesc={initialModalData.projectDesc} />}
       {showNewContact && <NewContactModal onClose={() => setShowNewContact(false)} onCreate={createContact} />}
       {showNewMeeting && <NewMeetingModal onClose={() => setShowNewMeeting(false)} onCreate={createMeeting} defaultAuthor={authorName} initialTitle={initialModalData.meetingTitle} initialNotes={initialModalData.meetingNotes} />}
-      {showRecordModal && <CallRecorderModal onClose={() => setShowRecordModal(false)} onSaveCallNote={handleSaveCallNote} defaultAuthor={authorName} />}
+      {showRecordModal && <CallRecorderModal onClose={() => { setShowRecordModal(false); setRecordMeeting(null); }} onSaveCallNote={handleSaveCallNote} defaultAuthor={authorName} meeting={recordMeeting} />}
       {showTrackEmailModal && <LogTrackedEmailModal onClose={() => setShowTrackEmailModal(false)} onSaveTrackedEmail={handleSaveTrackedEmail} projects={data.projects} />}
       {detailProject && (
         <ProjectDetailModal
@@ -2143,7 +2596,7 @@ export default function App() {
         />
       )}
       {showInfoModal && <InfoDialogModal onClose={() => setShowInfoModal(false)} />}
-      {showGmailModal && <GmailSyncModal onClose={() => setShowGmailModal(false)} onImportICS={handleImportICSEvents} onImportGmailInvite={handleImportGmailInvite} />}
+      {showGmailModal && <GmailSyncModal onClose={() => setShowGmailModal(false)} onImportMeetings={handleImportSyncedMeetings} onClearSyncedEvents={handleClearSyncedCalendarEvents} />}
       {showCmdPalette && (
         <CommandPaletteModal
           onClose={() => setShowCmdPalette(false)}

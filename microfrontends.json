@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/microfrontends.json",
+  "applications": {
+    "dailie": {
+      "development": {
+        "fallback": "dailie.vercel.app"
+      }
+    },
+    "interface": {
+      "packageName": "interface-flow",
+      "routing": [
+        {
+          "group": "production-tracking",
+          "paths": ["/production/:path*"]
+        }
+      ]
+    }
+  }
+}
