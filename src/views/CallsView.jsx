@@ -1,16 +1,10 @@
 import { useMemo, useState } from "react";
-import { Mic, Video, FileText, Sparkles, Send, CheckCircle2, Clock, Plus, Mail } from "lucide-react";
+import { Mic, Video, Sparkles, Send, CheckCircle2, Clock, Plus, Mail, Play } from "lucide-react";
 import { useStore } from "../lib/store";
-import { makeTask } from "../lib/model";
-import { formatShort, formatClock, formatDuration, relativeDays, uid, parseEmailList, tsFromDateInput } from "../lib/format";
-import { fileSrc } from "../lib/files";
-import { ViewHeader, EmptyState, Badge, Section, ModalShell, Field, ConfirmButton, InlineText, InlineSelect } from "../ui/kit";
-
-function mediaSrc(call, kind) {
-  if (!call) return "";
-  if (kind === "video") return call.videoPath ? `/api/files?path=${encodeURIComponent(call.videoPath)}` : call.videoUrl || "";
-  return call.audioPath ? `/api/recording?path=${encodeURIComponent(call.audioPath)}` : call.audioUrl || "";
-}
+import { participantNames, speakersIn } from "../lib/model";
+import { formatShort, formatClock, formatDuration, parseEmailList } from "../lib/format";
+import { ViewHeader, EmptyState, Badge, Section, ModalShell, Field, Avatar } from "../ui/kit";
+import CallDetail, { mediaSrc } from "./CallDetail";
 
 /**
  * Drafts the follow-up email from the call's summary and next steps, shows it for
@@ -163,103 +157,48 @@ export function FollowUpEmailModal({ call, onClose }) {
   );
 }
 
-function CallCard({ call, onOpenEmail }) {
-  const { data, update, remove, add, currentUser, projectName, memberName, showToast } = useStore();
-  const [showTranscript, setShowTranscript] = useState(false);
+function CallRow({ call, onOpen }) {
+  const { data, projectName } = useStore();
   const video = mediaSrc(call, "video");
-  const audio = mediaSrc(call, "audio");
-  const linkedTasks = data.tasks.filter((t) => t.callId === call.id);
-
-  const flagAsTask = (step) => {
-    add("tasks", makeTask({
-      title: step.text,
-      dueDate: step.dueDate ? tsFromDateInput(step.dueDate) : null,
-      projectId: call.projectId || null,
-      callId: call.id,
-      source: "call",
-      priority: "HIGH",
-      assigneeIds: currentUser ? [currentUser.id] : [],
-    }, currentUser && currentUser.id));
-    showToast("Next step flagged as a task.", "success");
-  };
+  const names = participantNames(call);
+  const openTasks = data.tasks.filter((t) => t.callId === call.id && t.status !== "done").length;
 
   return (
-    <div className="md-card" style={{ padding: 18, marginBottom: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <div style={{ minWidth: 0, flex: "1 1 240px" }}>
-          <div className="md-mono" style={{ fontSize: 11, color: "var(--accent)", marginBottom: 4, fontWeight: 600 }}>
-            {formatShort(call.startedAt)} · {formatClock(call.startedAt)} · {formatDuration(call.durationSec)}
-          </div>
-          <InlineText value={call.title} style={{ fontSize: 16, fontWeight: 700 }} onCommit={(v) => update("calls", call.id, { title: v })} />
-          {call.participants && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 4 }}>{call.participants}</div>}
-        </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          {video && <Badge label="VIDEO" color="#8aa4c4" icon={<Video size={10} />} />}
-          {call.emailSent && <Badge label="FOLLOW-UP SENT" color="var(--sage)" icon={<CheckCircle2 size={10} />} />}
-          <InlineSelect value={call.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="Link project"
-            onCommit={(v) => update("calls", call.id, { projectId: v })} />
-        </div>
+    <div className="md-card" role="button" tabIndex={0}
+      onClick={() => onOpen(call)} onKeyDown={(e) => { if (e.key === "Enter") onOpen(call); }}
+      style={{ padding: 16, marginBottom: 12, cursor: "pointer", display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div style={{
+        width: 92, height: 58, flexShrink: 0, borderRadius: 8, background: "var(--panel-raised)",
+        border: "1px solid var(--rule)", display: "flex", alignItems: "center", justifyContent: "center",
+        color: video ? "var(--accent)" : "var(--dim-2)",
+      }}>
+        {video ? <Play size={20} /> : <Mic size={18} />}
       </div>
 
-      {video ? (
-        <video controls src={video} style={{ width: "100%", maxHeight: 320, borderRadius: 8, background: "#000", marginBottom: 14 }} />
-      ) : audio ? (
-        <audio controls src={audio} style={{ width: "100%", maxWidth: 380, height: 34, marginBottom: 14 }} />
-      ) : null}
-
-      {call.summary && (
-        <div style={{ marginBottom: 14 }}>
-          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>AI SUMMARY</div>
-          <InlineText value={call.summary} multiline style={{ fontSize: 14, lineHeight: 1.55 }} onCommit={(v) => update("calls", call.id, { summary: v })} />
+      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+        <div className="md-mono" style={{ fontSize: 10, color: "var(--accent)", marginBottom: 4, fontWeight: 600, letterSpacing: ".08em" }}>
+          {formatShort(call.startedAt)} · {formatClock(call.startedAt)} · {formatDuration(call.durationSec)}
         </div>
-      )}
-
-      {(call.nextSteps || []).length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>
-            SUGGESTED NEXT STEPS · {(call.nextSteps || []).length}
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--bone)", marginBottom: 6 }}>{call.title}</div>
+        {call.summary && (
+          <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {call.summary}
           </div>
-          {(call.nextSteps || []).map((s, i) => {
-            const tracked = linkedTasks.some((t) => t.title === s.text);
-            return (
-              <div key={s.id || i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 13 }}>
-                <span style={{ flex: 1, color: "var(--bone)" }}>
-                  {s.text}
-                  {s.owner && <span className="md-mono" style={{ color: "var(--dim)", fontSize: 11 }}> — {s.owner}</span>}
-                  {s.dueDate && <span className="md-mono" style={{ color: "var(--dim)", fontSize: 11 }}> · due {s.dueDate}</span>}
-                </span>
-                {tracked ? (
-                  <Badge label="TASK CREATED" color="var(--sage)" />
-                ) : (
-                  <button className="md-btn md-btn-ghost" style={{ fontSize: 11, border: "1px solid var(--rule)" }} onClick={() => flagAsTask(s)}>
-                    <Plus size={11} /> Flag as task
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid var(--rule)", paddingTop: 12 }}>
-        <button className="md-btn md-btn-primary" onClick={() => onOpenEmail(call)}>
-          <Mail size={13} /> {call.emailSent ? "Send another follow-up" : "Draft follow-up email"}
-        </button>
-        {call.transcript && (
-          <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)" }} onClick={() => setShowTranscript((s) => !s)}>
-            <FileText size={13} /> {showTranscript ? "Hide transcript" : "Transcript"}
-          </button>
         )}
-        <span style={{ marginLeft: "auto" }}>
-          <ConfirmButton label="Delete call" confirmLabel="Yes, delete" onConfirm={() => remove("calls", call.id)} />
-        </span>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 9, flexWrap: "wrap" }}>
+          {names.slice(0, 4).map((n) => <Avatar key={n} name={n} size={20} />)}
+          {names.length > 4 && <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>+{names.length - 4}</span>}
+          {names.length === 0 && <span className="md-mono" style={{ fontSize: 10, color: "var(--dim-2)" }}>NO PARTICIPANTS RECORDED</span>}
+        </div>
       </div>
 
-      {showTranscript && (
-        <div className="md-scroll" style={{ marginTop: 12, maxHeight: 260, overflowY: "auto", padding: 12, background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8, fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "var(--dim)" }}>
-          {call.transcript}
-        </div>
-      )}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {video && <Badge label="VIDEO" color="#8aa4c4" icon={<Video size={10} />} />}
+        {(call.segments || []).length > 0 && <Badge label={`${speakersIn(call).length || 1} SPEAKERS`} subtle />}
+        {call.projectId && <Badge label={projectName(call.projectId)} subtle />}
+        {openTasks > 0 && <Badge label={`${openTasks} OPEN TASK${openTasks === 1 ? "" : "S"}`} color="#c9a227" />}
+        {call.emailSent && <Badge label="FOLLOWED UP" color="var(--sage)" icon={<CheckCircle2 size={10} />} />}
+      </div>
     </div>
   );
 }
@@ -267,6 +206,7 @@ function CallCard({ call, onOpenEmail }) {
 export default function CallsView({ searchQuery, onStartRecording }) {
   const { data, updateSettings } = useStore();
   const [emailCall, setEmailCall] = useState(null);
+  const [openCall, setOpenCall] = useState(null);
 
   const calls = useMemo(() => {
     let list = [...data.calls].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
@@ -328,7 +268,15 @@ export default function CallsView({ searchQuery, onStartRecording }) {
           }
         />
       ) : (
-        calls.map((c) => <CallCard key={c.id} call={c} onOpenEmail={setEmailCall} />)
+        calls.map((c) => <CallRow key={c.id} call={c} onOpen={setOpenCall} />)
+      )}
+
+      {openCall && (
+        <CallDetail
+          call={data.calls.find((c) => c.id === openCall.id) || openCall}
+          onClose={() => setOpenCall(null)}
+          onOpenEmail={(c) => { setOpenCall(null); setEmailCall(c); }}
+        />
       )}
 
       {emailCall && <FollowUpEmailModal call={data.calls.find((c) => c.id === emailCall.id) || emailCall} onClose={() => setEmailCall(null)} />}

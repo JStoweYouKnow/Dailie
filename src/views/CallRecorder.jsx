@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, MicOff, Monitor, RefreshCw, Plus, X, ExternalLink, Video } from "lucide-react";
 import { useStore } from "../lib/store";
-import { makeTask } from "../lib/model";
+import { makeTask, makeParticipant, normalizeParticipants } from "../lib/model";
 import { uid, formatDuration, tsFromDateInput, dateInputValue } from "../lib/format";
 import { uploadFile } from "../lib/files";
-import { ModalShell, Field } from "../ui/kit";
+import { ModalShell, Field, Avatar, Badge } from "../ui/kit";
 
 /**
  * Tab capture records two streams at once: a small mixed-audio track that goes to
@@ -17,11 +17,13 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [transcript, setTranscript] = useState("");
+  const [segments, setSegments] = useState([]);
   const [summary, setSummary] = useState("");
   const [nextSteps, setNextSteps] = useState([]);
   const [title, setTitle] = useState(meeting ? `Call: ${meeting.title}` : "Call Recording");
   const [projectId, setProjectId] = useState((meeting && meeting.projectId) || "");
-  const [participants, setParticipants] = useState((meeting && meeting.attendees) || "");
+  const [participants, setParticipants] = useState(() => normalizeParticipants((meeting && meeting.attendees) || ""));
+  const [participantDraft, setParticipantDraft] = useState("");
   const [captureMode, setCaptureMode] = useState(meeting && meeting.meetingLink ? "tab" : "mic");
   const [captureError, setCaptureError] = useState("");
   const [state, setState] = useState("idle");
@@ -31,6 +33,8 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPath, setVideoPath] = useState("");
   const [videoNote, setVideoNote] = useState("");
+  const [videoProgress, setVideoProgress] = useState(null);
+  const [videoBytes, setVideoBytes] = useState(0);
 
   const timerRef = useRef(null);
   const audioRecorderRef = useRef(null);
@@ -91,7 +95,11 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
       const today = new Date().toISOString().slice(0, 10);
       const res = await fetch(`/api/transcribe?date=${today}`, {
         method: "POST",
-        headers: { "Content-Type": blob.type || "audio/webm" },
+        headers: {
+          "Content-Type": blob.type || "audio/webm",
+          // Naming who was on the call is what lets the transcript attribute speakers.
+          "x-participants": encodeURIComponent(JSON.stringify(participants.map((p) => p.name || p.email).filter(Boolean))),
+        },
         body: blob,
       });
       if (!res.ok) {
@@ -109,6 +117,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
       }
       const body = await res.json();
       setAudioPath(body.audioPath || "");
+      setSegments(body.segments || []);
       if (body.transcript) {
         setTranscript(body.transcript);
         setSummary(body.summary || "");
@@ -126,13 +135,17 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
 
   const storeVideo = async (blob) => {
     setVideoUrl(URL.createObjectURL(blob));
+    setVideoBytes(blob.size);
     try {
       const file = new File([blob], `call-${Date.now()}.webm`, { type: "video/webm" });
-      const meta = await uploadFile(file, "video");
+      // Anything sizeable streams straight to storage rather than through a function.
+      const meta = await uploadFile(file, "video", (pct) => setVideoProgress(Math.round(pct)));
+      setVideoProgress(null);
       if (meta.filePath) setVideoPath(meta.filePath);
-      else setVideoNote("Video is held for this session only — no blob store is configured.");
+      else setVideoNote("Video is held for this session only — no blob store is configured, so it will not survive a reload.");
     } catch (err) {
-      setVideoNote(err.message || "The video was too large to store; it stays available until you reload.");
+      setVideoProgress(null);
+      setVideoNote(err.message || "The video could not be stored; it stays available until you reload.");
     }
   };
 
@@ -142,6 +155,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     setState("idle");
     setSummary("");
     setNextSteps([]);
+    setSegments([]);
     setAudioPath("");
     setVideoPath("");
     setVideoNote("");
@@ -261,6 +275,8 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
       durationSec: seconds,
       source: captureMode === "tab" ? "meeting" : "phone",
       participants,
+      segments,
+      videoBytes,
       projectId: projectId || null,
       meetingId: meeting ? meeting.id : null,
       transcript,
@@ -307,6 +323,30 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     onClose();
   };
 
+  // Everyone the board already knows about, so a participant links to a real record.
+  const knownPeople = [
+    ...data.people.map((p) => ({ key: `person-${p.id}`, label: p.name, email: p.email, personId: p.id })),
+    ...data.team.map((m) => ({ key: `team-${m.id}`, label: m.name, email: m.email, teamMemberId: m.id })),
+    ...(data.talent || []).map((t) => ({ key: `talent-${t.id}`, label: t.name, email: t.email })),
+  ];
+
+  const addParticipant = () => {
+    const raw = participantDraft.trim();
+    if (!raw) return;
+    const known = knownPeople.find((k) => k.label.toLowerCase() === raw.toLowerCase());
+    const isEmail = raw.includes("@");
+    setParticipants((list) => {
+      if (list.some((p) => (p.name || "").toLowerCase() === raw.toLowerCase() || (p.email && p.email === raw.toLowerCase()))) return list;
+      return [...list, makeParticipant({
+        name: known ? known.label : (isEmail ? raw.split("@")[0] : raw),
+        email: known ? known.email || "" : (isEmail ? raw.toLowerCase() : ""),
+        personId: known ? known.personId || null : null,
+        teamMemberId: known ? known.teamMemberId || null : null,
+      })];
+    });
+    setParticipantDraft("");
+  };
+
   const canSave = !isRecording && state !== "running" && !!(summary.trim() || transcript.trim());
 
   const modeStyle = (mode) => ({
@@ -341,8 +381,33 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
         </Field>
       </div>
 
-      <Field label="PARTICIPANTS">
-        <input className="md-input" value={participants} onChange={(e) => setParticipants(e.target.value)} placeholder="Names or emails, comma separated" />
+      <Field label={`PARTICIPANTS${participants.length ? ` · ${participants.length}` : ""}`}
+        hint="Naming who is on the call lets the transcript label who said what.">
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: participants.length ? 9 : 0 }}>
+          {participants.map((p) => (
+            <span key={p.id} style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 6px 4px 4px",
+              background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 100, fontSize: 12,
+            }}>
+              <Avatar name={p.name || p.email} size={20} />
+              <span style={{ color: "var(--bone)" }}>{p.name || p.email}</span>
+              <button className="md-btn md-btn-ghost" style={{ padding: 2 }} title="Remove"
+                onClick={() => setParticipants((list) => list.filter((x) => x.id !== p.id))}>
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input className="md-input" list="dailie-call-people" value={participantDraft}
+            onChange={(e) => setParticipantDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addParticipant(); } }}
+            placeholder="Add someone — pick from your people or type a name" />
+          <button className="md-btn" onClick={addParticipant} disabled={!participantDraft.trim()}><Plus size={13} /></button>
+        </div>
+        <datalist id="dailie-call-people">
+          {knownPeople.map((k) => <option key={k.key} value={k.label} />)}
+        </datalist>
       </Field>
 
       <Field label="CAPTURE SOURCE">
@@ -396,6 +461,18 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
       {videoUrl && (
         <Field label="CALL VIDEO">
           <video controls src={videoUrl} style={{ width: "100%", borderRadius: 8, background: "#000", maxHeight: 260 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
+            {videoBytes > 0 && <Badge label={`${(videoBytes / (1024 * 1024)).toFixed(1)} MB`} subtle />}
+            {videoProgress != null && (
+              <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: "var(--accent)" }}>
+                <span style={{ width: 90, height: 4, background: "var(--panel-raised)", borderRadius: 3, overflow: "hidden" }}>
+                  <span style={{ display: "block", width: `${videoProgress}%`, height: "100%", background: "var(--accent)" }} />
+                </span>
+                Uploading {videoProgress}%
+              </span>
+            )}
+            {videoPath && videoProgress == null && <Badge label="STORED" color="var(--sage)" />}
+          </div>
           {videoNote && <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 6 }}>{videoNote}</div>}
         </Field>
       )}

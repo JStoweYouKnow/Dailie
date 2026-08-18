@@ -542,7 +542,20 @@ export function normalizeData(raw) {
     tasks,
     notes: ensureArray(input.notes).map((n) => ({ comments: [], collaboratorIds: [], ...n, id: n.id || uid() })),
     meetings: ensureArray(input.meetings).map((m) => ({ followUps: [], ...m, id: m.id || uid() })),
-    calls: ensureArray(input.calls).map((c) => ({ nextSteps: [], ...c, id: c.id || uid() })),
+    calls: ensureArray(input.calls).map((c) => ({
+      nextSteps: [],
+      ...c,
+      id: c.id || uid(),
+      // Participants used to be one free-text field; give every call the structured
+      // list the transcript needs to attribute speakers.
+      participants: normalizeParticipants(c.participants),
+      segments: ensureArray(c.segments).map((seg) => ({
+        start: Number(seg.start) || 0,
+        end: Number(seg.end) || 0,
+        text: String(seg.text || ""),
+        speaker: String(seg.speaker || ""),
+      })),
+    })),
     emails,
     talent: ensureArray(input.talent).map((t) => ({
       ...makeTalent({}),
@@ -811,6 +824,76 @@ export function ndaFor(data, talent) {
     if (hit) return hit;
   }
   return data.contracts.find((c) => c.kind === "nda" && c.talentId === talent.id) || null;
+}
+
+/* ------------------------------------------------------------------ *
+ * Calls
+ * ------------------------------------------------------------------ */
+
+export function makeParticipant(fields = {}) {
+  return { id: uid(), name: "", email: "", personId: null, teamMemberId: null, ...fields };
+}
+
+/** Accepts the old comma-separated string as well as the structured list. */
+export function normalizeParticipants(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((p) => (typeof p === "string" ? makeParticipant({ name: p.trim() }) : makeParticipant(p)))
+      .filter((p) => p.name || p.email);
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .split(/[,;]/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        // "Elena Rostova (elena@x.com)" and "Elena <elena@x.com>" both appear in synced data.
+        const paren = chunk.match(/^(.*?)[\(<]\s*([^\s)>]+@[^\s)>]+)\s*[\)>]$/);
+        if (paren) return makeParticipant({ name: paren[1].trim(), email: paren[2].toLowerCase() });
+        if (chunk.includes("@")) return makeParticipant({ name: chunk.split("@")[0], email: chunk.toLowerCase() });
+        return makeParticipant({ name: chunk });
+      });
+  }
+  return [];
+}
+
+export function participantNames(call) {
+  return (call.participants || []).map((p) => p.name || p.email).filter(Boolean);
+}
+
+/** Stable colour per speaker so the transcript reads like a conversation. */
+const SPEAKER_COLORS = ["#a7b3a4", "#e8553c", "#5e8c86", "#9b8aa4", "#c9a227", "#8aa4c4", "#c47a8a", "#7c9473"];
+export function speakerColor(name) {
+  const s = String(name || "");
+  if (!s) return "#6e6b65";
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return SPEAKER_COLORS[hash % SPEAKER_COLORS.length];
+}
+
+/** Distinct speakers in the order they first talk. */
+export function speakersIn(call) {
+  const seen = [];
+  (call.segments || []).forEach((seg) => {
+    if (seg.speaker && !seen.includes(seg.speaker)) seen.push(seg.speaker);
+  });
+  return seen;
+}
+
+/** Share of talking time per speaker, for the "who spoke" bar. */
+export function talkTime(call) {
+  const totals = {};
+  let total = 0;
+  (call.segments || []).forEach((seg) => {
+    const span = Math.max(0, (seg.end || 0) - (seg.start || 0));
+    const who = seg.speaker || "Unattributed";
+    totals[who] = (totals[who] || 0) + span;
+    total += span;
+  });
+  if (!total) return [];
+  return Object.entries(totals)
+    .map(([speaker, seconds]) => ({ speaker, seconds, share: seconds / total }))
+    .sort((a, b) => b.seconds - a.seconds);
 }
 
 export function makeTask(fields, currentUserId) {

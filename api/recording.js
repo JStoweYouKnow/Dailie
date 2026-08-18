@@ -1,4 +1,4 @@
-import { get } from "@vercel/blob";
+import { get, issueSignedToken, presignUrl } from "@vercel/blob";
 
 // Recordings are stored privately, so they are not reachable from the blob CDN
 // directly. This route is the only read path.
@@ -11,6 +11,17 @@ export async function GET(request) {
   // turn the route into an open proxy.
   if (!RECORDING_PATH.test(path)) {
     return Response.json({ error: "Invalid recording path." }, { status: 400 });
+  }
+
+  // Same reasoning as /api/files: a presigned redirect gives the player byte ranges,
+  // which is what makes scrubbing and transcript seeking work.
+  try {
+    const validUntil = Date.now() + 60 * 60 * 1000;
+    const token = await issueSignedToken({ pathname: path, operations: ["get"], validUntil });
+    const { presignedUrl } = await presignUrl(token, { operation: "get", pathname: path, access: "private", validUntil });
+    return new Response(null, { status: 302, headers: { Location: presignedUrl, "Cache-Control": "private, no-store" } });
+  } catch (err) {
+    console.error("presign failed, streaming instead", err);
   }
 
   let result;
@@ -29,7 +40,6 @@ export async function GET(request) {
     headers: {
       "Content-Type": result.blob.contentType || "audio/webm",
       "Content-Length": String(result.blob.size),
-      // Streamed whole; the player buffers rather than seeking by byte range.
       "Accept-Ranges": "none",
       "Cache-Control": "private, max-age=3600",
     },

@@ -1,4 +1,4 @@
-import { put, get, del } from "@vercel/blob";
+import { put, get, del, issueSignedToken, presignUrl } from "@vercel/blob";
 
 // Attachments are private: NDAs, deal contracts and invoices must not be reachable
 // from the blob CDN by anyone holding the URL. This route is the only read path.
@@ -48,11 +48,41 @@ export async function POST(request) {
   }
 }
 
+// A short-lived presigned URL, so the browser talks to blob storage directly.
+const SIGNED_URL_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Redirecting beats streaming for anything you scrub through. Piping a call video
+ * back through a function gives the player no byte-range support, so seeking to a
+ * transcript timestamp silently fails; blob storage handles ranges natively, and a
+ * 200 MB recording never has to pass through the function at all.
+ */
+async function redirectToBlob(path) {
+  const validUntil = Date.now() + SIGNED_URL_TTL_MS;
+  const token = await issueSignedToken({ pathname: path, operations: ["get"], validUntil });
+  const { presignedUrl } = await presignUrl(token, { operation: "get", pathname: path, access: "private", validUntil });
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: presignedUrl,
+      // The redirect target is time-limited, so the redirect itself must not be cached.
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
+
 export async function GET(request) {
   const path = new URL(request.url).searchParams.get("path") || "";
 
   // Only ever fetch keys this app wrote — otherwise the route is an open proxy.
   if (!PATH_RE.test(path)) return Response.json({ error: "Invalid attachment path." }, { status: 400 });
+
+  try {
+    return await redirectToBlob(path);
+  } catch (err) {
+    // Older stores, or a token that cannot be issued: fall back to streaming it.
+    console.error("presign failed, streaming instead", err);
+  }
 
   let result;
   try {
