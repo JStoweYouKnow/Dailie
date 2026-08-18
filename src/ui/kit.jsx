@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, GripVertical } from "lucide-react";
 import { initials, colorForName, dateInputValue, tsFromDateInput } from "../lib/format";
+import { looksLikeMarkdown } from "../lib/textFormats";
+import Markdown from "./Markdown";
 import { uploadFile, formatBytes, fileSrc } from "../lib/files";
 
 export function Stat({ label, value, accent, onClick }) {
@@ -145,7 +147,7 @@ export function AvatarStack({ names, size = 24, max = 4 }) {
  * Inline editors — everything on a record is editable in place.
  * ------------------------------------------------------------------ */
 
-export function InlineText({ value, onCommit, placeholder = "—", multiline, style, mono }) {
+export function InlineText({ value, onCommit, placeholder = "—", multiline, style, mono, markdown }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
   useEffect(() => { setDraft(value || ""); }, [value]);
@@ -174,12 +176,20 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, st
     );
   }
 
+  // Imported documents can keep their formatting, so a note that carries Markdown is
+  // rendered rather than shown as raw syntax — until you click into it to edit.
+  const showRendered = markdown && multiline && value && looksLikeMarkdown(value);
+
   return (
     <div
       className={mono ? "md-mono" : undefined}
       role="button"
       tabIndex={0}
-      onClick={() => setEditing(true)}
+      onClick={(e) => {
+        // A link inside rendered Markdown should open, not drop you into an editor.
+        if (e.target.closest && e.target.closest("a")) return;
+        setEditing(true);
+      }}
       onKeyDown={(e) => { if (e.key === "Enter") setEditing(true); }}
       title="Click to edit"
       style={{
@@ -192,7 +202,7 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, st
       onMouseEnter={(e) => { e.currentTarget.style.background = "var(--panel-hover)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
-      {value || placeholder}
+      {showRendered ? <Markdown source={value} compact /> : (value || placeholder)}
     </div>
   );
 }

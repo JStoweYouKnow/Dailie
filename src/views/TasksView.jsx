@@ -164,7 +164,7 @@ function NotesPane({ searchQuery }) {
                 </div>
                 <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("notes", n.id)} />
               </div>
-              <InlineText value={n.body} multiline placeholder="Write…" style={{ fontSize: 13, color: "var(--dim)" }}
+              <InlineText value={n.body} multiline markdown placeholder="Write…" style={{ fontSize: 13, color: "var(--dim)" }}
                 onCommit={(v) => update("notes", n.id, { body: v, updatedAt: Date.now() })} />
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                 <Avatar name={memberName(n.authorId) || "?"} size={22} />

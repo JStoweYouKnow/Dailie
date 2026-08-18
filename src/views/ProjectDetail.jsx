@@ -134,7 +134,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
         <InlineText value={project.title} style={{ fontSize: 18, fontWeight: 700 }} onCommit={(v) => v.trim() && patchProject({ title: v.trim() }, `Renamed to ${v.trim()}`)} />
       </Field>
       <Field label="LOGLINE / DESCRIPTION">
-        <InlineText value={project.description} multiline placeholder="What is this project about?" onCommit={(v) => patchProject({ description: v })} />
+        <InlineText value={project.description} multiline markdown placeholder="What is this project about?" onCommit={(v) => patchProject({ description: v })} />
       </Field>
 
       <Section title="NEXT STEP">
@@ -266,7 +266,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 4 }}>
               {memberName(n.authorId) || "Unknown"} · {formatShort(n.createdAt)}
             </div>
-            <InlineText value={n.body} multiline onCommit={(v) => update("notes", n.id, { body: v, updatedAt: Date.now() })} />
+            <InlineText value={n.body} multiline markdown onCommit={(v) => update("notes", n.id, { body: v, updatedAt: Date.now() })} />
           </div>
         ))}
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>

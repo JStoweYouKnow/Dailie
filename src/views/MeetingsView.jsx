@@ -58,7 +58,7 @@ function MeetingCard({ meeting, onRecord }) {
         </div>
       )}
 
-      <InlineText value={meeting.notes} multiline placeholder="Add meeting notes…" style={{ fontSize: 14, lineHeight: 1.55, marginBottom: 14 }}
+      <InlineText value={meeting.notes} multiline markdown placeholder="Add meeting notes…" style={{ fontSize: 14, lineHeight: 1.55, marginBottom: 14 }}
         onCommit={(v) => update("meetings", meeting.id, { notes: v })} />
 
       <div>

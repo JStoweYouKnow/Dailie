@@ -8,6 +8,8 @@ import { normalizeData, staleFollowUps } from "./lib/model";
 import { parseDocumentFile } from "./documentParser";
 import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
 import { LoadingState, Stat, Avatar, ModalShell, Field } from "./ui/kit";
+import Markdown from "./ui/Markdown";
+import { IMPORT_FORMATS, pickFormat } from "./lib/textFormats";
 import {
   DailieBrandLogo, Toast, NotificationCenter, LiveCallBanner, CommandPalette, AIAssistantDrawer, InfoModal,
 } from "./views/shell";
@@ -49,19 +51,63 @@ const TABS = [
   { key: "timeline", label: "TIMELINE" },
 ];
 
-function ImportDocumentModal({ fileInfo, onClose, onProject, onMeeting, onNote }) {
+function ImportDocumentModal({ fileInfo, onClose, onImport }) {
+  const formats = fileInfo.formats;
+  // Nothing to preserve in a flat source, so do not offer a choice that does nothing.
+  const [format, setFormat] = useState(formats.hasFormatting ? "markdown" : "text");
+  const body = pickFormat(formats, format);
+
+  const options = IMPORT_FORMATS.filter((o) => o.key !== "markdown" || formats.hasFormatting);
+
   return (
-    <ModalShell title={`Imported: ${fileInfo.fileName}`} onClose={onClose}>
-      <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 14 }}>
-        Extracted {fileInfo.extractedText.length.toLocaleString()} characters. What should Dailie do with it?
-      </div>
-      <div className="md-scroll" style={{ maxHeight: 200, overflowY: "auto", padding: 12, background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8, fontSize: 12, color: "var(--dim)", whiteSpace: "pre-wrap", marginBottom: 18 }}>
-        {fileInfo.extractedText.slice(0, 1200)}
-      </div>
+    <ModalShell
+      wide
+      title={`Import: ${fileInfo.fileName}`}
+      subtitle={`${body.length.toLocaleString()} characters`}
+      onClose={onClose}
+    >
+      <Field label="HOW SHOULD THE TEXT COME IN">
+        <div style={{ display: "grid", gap: 8 }}>
+          {options.map((o) => (
+            <label key={o.key}
+              style={{
+                display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", cursor: "pointer",
+                border: `1px solid ${format === o.key ? "var(--accent)" : "var(--rule)"}`,
+                borderRadius: 9, background: format === o.key ? "var(--panel-raised)" : "transparent",
+              }}>
+              <input type="radio" name="import-format" checked={format === o.key} onChange={() => setFormat(o.key)} style={{ marginTop: 3 }} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--bone)" }}>{o.label}</span>
+                <span style={{ display: "block", fontSize: 11.5, color: "var(--dim)", marginTop: 2 }}>{o.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {!formats.hasFormatting && (
+          <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 9, lineHeight: 1.5 }}>
+            This file carries no formatting to keep — {/\.(txt)$/i.test(fileInfo.fileName)
+              ? "plain text files have none to begin with."
+              : "only loose text could be recovered from it."}
+          </div>
+        )}
+      </Field>
+
+      <Field label="PREVIEW">
+        <div className="md-scroll" style={{ maxHeight: 260, overflowY: "auto", padding: 13, background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8 }}>
+          {format === "markdown"
+            ? <Markdown source={body.slice(0, 4000)} />
+            : <div style={{ fontSize: 12.5, color: "var(--dim)", whiteSpace: format === "compact" ? "normal" : "pre-wrap", lineHeight: 1.6 }}>
+                {body.slice(0, 4000) || "Nothing was extracted from this file."}
+              </div>}
+        </div>
+      </Field>
+
+      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>WHERE SHOULD IT GO</div>
       <div style={{ display: "grid", gap: 8 }}>
-        <button className="md-btn md-btn-primary" style={{ justifyContent: "center" }} onClick={onProject}>Create a project from it</button>
-        <button className="md-btn" style={{ justifyContent: "center" }} onClick={onMeeting}>Create a meeting note from it</button>
-        <button className="md-btn md-btn-ghost" style={{ justifyContent: "center", border: "1px solid var(--rule)" }} onClick={onNote}>Log it to the timeline</button>
+        <button className="md-btn md-btn-primary" style={{ justifyContent: "center" }} onClick={() => onImport("project", body)}>Create a project from it</button>
+        <button className="md-btn" style={{ justifyContent: "center" }} onClick={() => onImport("meeting", body)}>Create a meeting note from it</button>
+        <button className="md-btn" style={{ justifyContent: "center" }} onClick={() => onImport("note", body)}>Save it as a shared note</button>
+        <button className="md-btn md-btn-ghost" style={{ justifyContent: "center", border: "1px solid var(--rule)" }} onClick={() => onImport("log", body)}>Log it to the timeline</button>
       </div>
     </ModalShell>
   );
@@ -193,8 +239,8 @@ function Board() {
     }
 
     try {
-      const extractedText = await parseDocumentFile(file);
-      setImportDoc({ fileName: file.name, extractedText });
+      const formats = await parseDocumentFile(file);
+      setImportDoc({ fileName: file.name, formats });
     } catch (err) {
       showToast(`Could not read ${file.name}.`, "error");
     }
@@ -390,19 +436,38 @@ function Board() {
           <ImportDocumentModal
             fileInfo={importDoc}
             onClose={() => setImportDoc(null)}
-            onProject={() => {
-              setDocSeed({ title: importDoc.fileName.replace(/\.[^/.]+$/, ""), body: importDoc.extractedText.slice(0, 500) });
+            onImport={(destination, body) => {
+              const base = importDoc.fileName.replace(/\.[^/.]+$/, "");
               setImportDoc(null);
-              setShowNewProject(true);
-            }}
-            onMeeting={() => {
-              setDocSeed({ title: `Meeting notes: ${importDoc.fileName.replace(/\.[^/.]+$/, "")}`, body: importDoc.extractedText.slice(0, 1000) });
-              setImportDoc(null);
-              setShowNewMeeting(true);
-            }}
-            onNote={() => {
-              add("logs", { date: Date.now(), text: `Imported ${importDoc.fileName}: ${importDoc.extractedText.slice(0, 200)}…`, author: currentUser ? currentUser.name : "Import" });
-              setImportDoc(null);
+              if (destination === "project") {
+                setDocSeed({ title: base, body });
+                setShowNewProject(true);
+                return;
+              }
+              if (destination === "meeting") {
+                setDocSeed({ title: `Meeting notes: ${base}`, body });
+                setShowNewMeeting(true);
+                return;
+              }
+              if (destination === "note") {
+                add("notes", {
+                  title: base,
+                  body,
+                  authorId: currentUser && currentUser.id,
+                  projectId: null,
+                  collaboratorIds: [],
+                  comments: [],
+                  updatedAt: Date.now(),
+                });
+                showToast(`"${base}" saved to Notes.`, "success");
+                openTab("tasks");
+                return;
+              }
+              add("logs", {
+                date: Date.now(),
+                text: `Imported ${importDoc.fileName}: ${body.slice(0, 300)}${body.length > 300 ? "…" : ""}`,
+                author: currentUser ? currentUser.name : "Import",
+              });
               showToast("Document logged to the timeline.", "success");
             }}
           />
