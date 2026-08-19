@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useRef, useEffect, useState } from "react";
-import { ConvexReactClient, useQuery, useMutation } from "convex/react";
+import { ConvexReactClient, useQuery, useMutation, useConvexAuth } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { useAuth } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
@@ -43,7 +43,8 @@ export function SharedProvider({ children }) {
 
 /** Mirrors useBoardStore's API, backed by the shared board instead of localStorage. */
 export function useSharedBoard(account) {
-  const board = useQuery(api.board.get, {});
+  const { isLoading: authLoading, isAuthenticated } = useConvexAuth();
+  const board = useQuery(api.board.get, isAuthenticated ? {} : "skip");
   const put = useMutation(api.board.put);
   const removeRecord = useMutation(api.board.remove);
   const putMany = useMutation(api.board.putMany);
@@ -56,6 +57,7 @@ export function useSharedBoard(account) {
   // Records sitting in this browser that the shared board has never seen.
   const [pendingLocal, setPendingLocal] = useState(null);
   const [toast, setToast] = useState(null);
+  const [authGaveUp, setAuthGaveUp] = useState(false);
   const seeded = useRef(false);
   const announced = useRef(false);
 
@@ -68,7 +70,20 @@ export function useSharedBoard(account) {
 
   const fallback = useMemo(() => normalizeData(SEED_DATA), []);
   const data = useMemo(() => fromSharedBoard(board, fallback), [board, fallback]);
-  const loading = board === undefined;
+  const loading = authLoading || !isAuthenticated || board == null;
+
+  // Clerk can be signed in while Convex still has no JWT (missing "convex" template
+  // or a mismatched CLERK_JWT_ISSUER_DOMAIN). Wait a beat, then fall through to the
+  // local board rather than spinning forever.
+  useEffect(() => {
+    if (isAuthenticated) {
+      setAuthGaveUp(false);
+      return undefined;
+    }
+    if (authLoading) return undefined;
+    const t = setTimeout(() => setAuthGaveUp(true), 8000);
+    return () => clearTimeout(t);
+  }, [isAuthenticated, authLoading]);
 
   // Anyone who signs in joins the directory, which is what the team list reads from.
   useEffect(() => {
@@ -203,6 +218,15 @@ export function useSharedBoard(account) {
     return hit ? hit[field] : "";
   };
 
+  const memberName = useCallback((id) => nameOf(data.team, id), [data.team]);
+  const projectName = useCallback((id) => nameOf(data.projects, id, "title"), [data.projects]);
+  const companyName = useCallback((id) => nameOf(data.companies, id), [data.companies]);
+  const personName = useCallback((id) => nameOf(data.people, id), [data.people]);
+
+  if (authGaveUp && !isAuthenticated) {
+    throw new Error("Not signed in.");
+  }
+
   return {
     data,
     loading,
@@ -213,10 +237,10 @@ export function useSharedBoard(account) {
     persist: () => {},
     reload: async () => data,
     currentUser,
-    memberName: useCallback((id) => nameOf(data.team, id), [data.team]),
-    projectName: useCallback((id) => nameOf(data.projects, id, "title"), [data.projects]),
-    companyName: useCallback((id) => nameOf(data.companies, id), [data.companies]),
-    personName: useCallback((id) => nameOf(data.people, id), [data.people]),
+    memberName,
+    projectName,
+    companyName,
+    personName,
     toast, showToast,
     pendingLocal, publishLocal, importBoard,
     linkAccount: () => { /* handled by touchMember */ },

@@ -1,12 +1,30 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-/** Every function is gated: no identity, no board. */
+/** Writes stay gated. Reads return null when there is no session so the client can wait. */
 async function requireIdentity(ctx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not signed in.");
   return identity;
 }
+
+const boardReturn = v.object({
+  collections: v.any(),
+  team: v.array(
+    v.object({
+      id: v.string(),
+      clerkId: v.string(),
+      name: v.string(),
+      email: v.string(),
+      role: v.string(),
+      imageUrl: v.string(),
+      status: v.string(),
+      lastSeenAt: v.number(),
+    })
+  ),
+  settings: v.union(v.any(), v.null()),
+  pipelines: v.union(v.any(), v.null()),
+});
 
 /**
  * The whole board in one reactive read. Convex pushes an update to every open client
@@ -15,8 +33,10 @@ async function requireIdentity(ctx) {
  */
 export const get = query({
   args: {},
+  returns: v.union(boardReturn, v.null()),
   handler: async (ctx) => {
-    await requireIdentity(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     const rows = await ctx.db.query("records").collect();
     const collections = {};
@@ -36,8 +56,8 @@ export const get = query({
         .map((m) => ({
           id: m.clerkId,
           clerkId: m.clerkId,
-          name: m.name,
-          email: m.email,
+          name: m.name || "",
+          email: m.email || "",
           role: m.role || "",
           imageUrl: m.imageUrl || "",
           status: m.status,
