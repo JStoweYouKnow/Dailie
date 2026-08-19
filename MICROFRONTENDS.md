@@ -45,6 +45,10 @@ Edit `microfrontends.json` and deploy this repo. Two cautions:
 
 ## Troubleshooting
 
+Clerk on `/production` fails with `failed_to_load_clerk_js` for `/__clerk/npm/@clerk/clerk-js@…`:
+
+Interface's Clerk SDK loads first-party scripts from `/__clerk/…` on this origin. That path is not under `/production`, so the group sent it to Dailie and it 404'd. `vercel.json` rewrites `/__clerk/:path*` to `https://clerk.thewizardofops.app/:path*` (the Clerk Frontend API host). Do not add `/__clerk` to Interface's routing unless its middleware also treats those URLs as public — `auth.protect()` currently 404s them when signed out.
+
 `/production` returns 404 while `interfacestudio.vercel.app` looks fine:
 
 ```bash
@@ -91,3 +95,38 @@ Until then the sync buttons report exactly what is missing and the paste importe
 remain, so nothing is stranded. `api/google-sync.js` verifies the Clerk session,
 exchanges it for the user's Google token server-side and returns records already in
 the board's shape; the token never reaches the browser.
+
+
+## Shared board
+
+Dailie's data lived in each browser's localStorage, so two people signing in saw two
+different boards. `convex/` holds the shared one: a live query that pushes changes to
+everyone with the app open, and per-record writes so two people editing different
+projects do not overwrite each other.
+
+The team list is the directory. A row is written the first time someone signs in, so
+a new colleague appears as an active member without anyone adding them by hand.
+
+It is inert until a deployment exists, exactly like the auth layer: without
+`VITE_CONVEX_URL` the app keeps the browser-local board and nothing changes.
+
+### Turning it on
+
+```bash
+npx convex dev            # creates the project, prints the deployment URL
+```
+
+Then, using the Clerk Frontend API URL as the issuer:
+
+```bash
+npx convex env set CLERK_JWT_ISSUER_DOMAIN https://measured-camel-85.clerk.accounts.dev
+npx convex env set CLERK_JWT_ISSUER_DOMAIN https://clerk.thewizardofops.app --prod
+```
+
+Add `VITE_CONVEX_URL` to the Vercel project for every environment, and redeploy.
+Clerk needs a JWT template named `convex` — Interface already uses one on the same
+instance, so there is nothing new to create.
+
+The first person to open the app after that has their local board lifted into the
+shared one; the mutation refuses if anything is already there, so a second person
+cannot overwrite it.

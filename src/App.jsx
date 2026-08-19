@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
+import { SHARED_ENABLED, useSharedBoard } from "./lib/convexBoard";
 import { normalizeData, staleFollowUps } from "./lib/model";
 import { parseDocumentFile } from "./documentParser";
 import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
@@ -216,8 +217,17 @@ function ImportDocumentModal({ fileInfo, onClose, onImport }) {
   );
 }
 
-function Board() {
-  const store = useBoardStore();
+function LocalBoard() {
+  return <Board store={useBoardStore()} />;
+}
+
+/** Same board, read from and written to the shared deployment. */
+function SharedBoard() {
+  const { account } = useAccount();
+  return <Board store={useSharedBoard(account)} />;
+}
+
+function Board({ store }) {
   const { data, patch, add, currentUser, loading, saveError, reload, toast, showToast, linkAccount } = store;
 
   const [activeTab, setActiveTab] = useState("home");
@@ -249,9 +259,9 @@ function Board() {
   // only for boards running without auth.
   const { enabled: authEnabled, account } = useAccount();
   useEffect(() => {
-    if (!authEnabled || loading || !account) return;
+    if (!authEnabled || loading || !account || store.shared) return;
     linkAccount(account);
-  }, [authEnabled, loading, account && account.id, linkAccount]);
+  }, [authEnabled, loading, account && account.id, linkAccount, store.shared]);
 
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("dailie-theme-v1") || "dark"; } catch (e) { return "dark"; }
@@ -584,9 +594,10 @@ function Board() {
 }
 
 export default function App() {
+  // The shared board needs a session to read anything, so it always sits behind the gate.
   return (
     <AuthGate>
-      <Board />
+      {SHARED_ENABLED ? <SharedBoard /> : <LocalBoard />}
     </AuthGate>
   );
 }
