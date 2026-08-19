@@ -6,7 +6,7 @@ import { makeTask } from "../lib/model";
 import { formatShort, formatClock, relativeDays, tsFromDateInput } from "../lib/format";
 import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
 import { syncFromGoogle } from "../lib/googleSync";
-import { useAccount } from "../lib/auth";
+import { useAccount, useAuthToken } from "../lib/auth";
 
 /**
  * Google does not expose a calendar API to a browser app without an OAuth backend, but
@@ -16,6 +16,7 @@ import { useAccount } from "../lib/auth";
 export default function SyncModal({ onClose }) {
   const { data, patch, add, updateSettings, currentUser, showToast } = useStore();
   const { enabled: authEnabled, account } = useAccount();
+  const getToken = useAuthToken();
   const [googleState, setGoogleState] = useState("idle");
   const [googleError, setGoogleError] = useState("");
   const [feedUrl, setFeedUrl] = useState("");
@@ -127,7 +128,7 @@ export default function SyncModal({ onClose }) {
               setGoogleState("running");
               setGoogleError("");
               try {
-                const result = await syncFromGoogle("calendar");
+                const result = await syncFromGoogle("calendar", { getToken });
                 const { added, updated } = mergeMeetings(result.meetings || []);
                 showToast(`Google Calendar: ${added} new, ${updated} updated.`, "success");
                 setGoogleState("idle");

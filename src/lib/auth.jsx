@@ -1,4 +1,4 @@
-import { ClerkProvider, SignedIn, SignedOut, SignIn, useUser, useClerk } from "@clerk/clerk-react";
+import { ClerkProvider, SignedIn, SignedOut, SignIn, useUser, useClerk, useAuth } from "@clerk/clerk-react";
 
 /**
  * Dailie and Interface share one Clerk session.
@@ -142,4 +142,17 @@ export function useSignOut() {
   if (!AUTH_ENABLED) return null;
   const { signOut } = useClerk();
   return signOut;
+}
+
+/**
+ * Session token for calling our own API routes.
+ *
+ * The cookie alone is not enough: Clerk's development instances wrap the session in
+ * a handshake, so a plain fetch from the browser reached the function unauthenticated
+ * and it answered 401. Sending the token explicitly works on both instance types.
+ */
+export function useAuthToken() {
+  if (!AUTH_ENABLED) return null;
+  const { getToken } = useAuth();
+  return getToken;
 }

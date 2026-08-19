@@ -3,12 +3,21 @@
  * this posts to /api/google-sync, which verifies the Clerk session, exchanges it for
  * the user's Google token and returns records already in the board's shape.
  */
-export async function syncFromGoogle(what, { account } = {}) {
+export async function syncFromGoogle(what, { account, getToken } = {}) {
+  // Explicit bearer token — see useAuthToken for why the cookie is not enough.
+  let token = "";
+  if (typeof getToken === "function") {
+    try { token = (await getToken()) || ""; } catch (err) { /* falls back to the cookie */ }
+  }
+
   let res;
   try {
     res = await fetch("/api/google-sync", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ what, account }),
     });
   } catch (err) {

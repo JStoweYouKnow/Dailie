@@ -186,16 +186,35 @@ export async function POST(request) {
     return fail("Authentication is not configured on the server.", 501);
   }
 
-  const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+  const clerk = createClerkClient({
+    secretKey: process.env.CLERK_SECRET_KEY,
+    // Development instances wrap the session in a handshake; without the
+    // publishable key `authenticateRequest` cannot resolve it and every call 401s.
+    publishableKey: process.env.CLERK_PUBLISHABLE_KEY || undefined,
+  });
 
   let auth;
   try {
-    const state = await clerk.authenticateRequest(request);
+    const state = await clerk.authenticateRequest(request, {
+      // The apps share an origin, so the token is issued for these hosts.
+      authorizedParties: [
+        "https://www.thewizardofops.app",
+        "https://thewizardofops.app",
+        "https://dailie.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:3460",
+      ],
+    });
     auth = state.toAuth();
+    if (!auth || !auth.userId) {
+      return fail(
+        `Could not verify your session${state.reason ? ` (${state.reason})` : ""}. Try signing out and back in.`,
+        401
+      );
+    }
   } catch (err) {
     return fail("Could not verify your session.", 401);
   }
-  if (!auth || !auth.userId) return fail("You are not signed in.", 401);
 
   let body = {};
   try {

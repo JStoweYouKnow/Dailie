@@ -4,7 +4,7 @@ import { useStore } from "../lib/store";
 import { staleFollowUps, deriveDirectoryFromEmails, makeTask } from "../lib/model";
 import { parseEmailPaste, dedupeEmails } from "../lib/emailImport";
 import { syncFromGoogle } from "../lib/googleSync";
-import { useAccount } from "../lib/auth";
+import { useAccount, useAuthToken } from "../lib/auth";
 import { formatShort, relativeDays, daysSince, parseEmailList } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, InlineText, InlineSelect,
@@ -14,6 +14,7 @@ import {
 export function EmailImportModal({ onClose }) {
   const { data, patch, updateSettings, showToast } = useStore();
   const { enabled: authEnabled, account: signedIn } = useAccount();
+  const getToken = useAuthToken();
   const [googleState, setGoogleState] = useState("idle");
   const [googleError, setGoogleError] = useState("");
   const [text, setText] = useState("");
@@ -70,7 +71,7 @@ export function EmailImportModal({ onClose }) {
               setGoogleState("running");
               setGoogleError("");
               try {
-                const result = await syncFromGoogle("gmail", { account: signedIn ? signedIn.email : "" });
+                const result = await syncFromGoogle("gmail", { account: signedIn ? signedIn.email : "", getToken });
                 const fresh = dedupeEmails(data.emails, result.emails || []);
                 const withEmails = { ...data, emails: [...fresh, ...data.emails] };
                 const derived = deriveDirectoryFromEmails(withEmails);
