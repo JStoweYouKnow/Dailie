@@ -10,6 +10,19 @@ export const SHARED_COLLECTIONS = [
   "calls", "emails", "contracts", "invoices", "payments", "talent", "logs",
 ];
 
+/**
+ * Just the records.
+ *
+ * Contributing to a board someone else already set up must not carry your own
+ * settings or pipelines across — those are the team's, and a joiner should not
+ * silently redefine them. Only `seed`, which runs on a genuinely empty board,
+ * takes those too.
+ */
+export function toRecordsPayload(data) {
+  const { collections } = toSharedPayload(data);
+  return { collections };
+}
+
 /** Local board -> the payload the seed mutation expects. */
 export function toSharedPayload(data) {
   const collections = {};

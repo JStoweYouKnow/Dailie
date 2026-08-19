@@ -534,7 +534,9 @@ function Board({ store }) {
               <button className="md-btn md-btn-primary" disabled={publishingLocal}
                 onClick={async () => {
                   setPublishingLocal(true);
-                  try { await store.publishLocal(); } finally { setPublishingLocal(false); }
+                  try { await store.publishLocal(); }
+                  catch (err) { /* surfaced by the store as a banner and a toast */ }
+                  finally { setPublishingLocal(false); }
                 }}>
                 <UploadIcon size={13} /> {publishingLocal ? "Sharing…" : "Share with the team"}
               </button>

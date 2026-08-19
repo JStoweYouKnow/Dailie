@@ -6,7 +6,7 @@ import { api } from "../../convex/_generated/api";
 import { normalizeData, SEED_DATA } from "./model";
 import { AUTH_ENABLED } from "./auth";
 import { uid } from "./format";
-import { fromSharedBoard, toSharedPayload, hasLocalContent, SHARED_COLLECTIONS } from "./sharedBoard";
+import { fromSharedBoard, toSharedPayload, toRecordsPayload, hasLocalContent, SHARED_COLLECTIONS } from "./sharedBoard";
 import { loadStoredData } from "./store";
 
 /**
@@ -133,15 +133,23 @@ export function useSharedBoard(account) {
 
   const publishLocal = useCallback(async () => {
     const local = await loadStoredData();
-    const result = await merge(toSharedPayload(local));
-    setPendingLocal(null);
-    showToast(
-      result.total
-        ? `Shared ${result.total} record${result.total === 1 ? "" : "s"} with the team.`
-        : "Everything on this device is already shared.",
-      "success"
-    );
-    return result;
+    try {
+      const result = await merge(toRecordsPayload(local));
+      setPendingLocal(null);
+      showToast(
+        result.total
+          ? `Shared ${result.total} record${result.total === 1 ? "" : "s"} with the team.`
+          : "Everything on this device is already shared.",
+        "success"
+      );
+      return result;
+    } catch (err) {
+      // Publishing failed silently before this: the promise rejected, the banner
+      // stayed put, and the only sign was a console line nobody was watching.
+      setSaveError(err && err.message ? err.message : "Could not share these records.");
+      showToast("Could not share these records — see the message above.", "error");
+      throw err;
+    }
   }, [merge, showToast]);
 
   /**
@@ -150,7 +158,7 @@ export function useSharedBoard(account) {
    * is missing and leaves the rest alone.
    */
   const importBoard = useCallback(async (parsed) => {
-    const result = await merge(toSharedPayload(normalizeData(parsed)));
+    const result = await merge(toRecordsPayload(normalizeData(parsed)));
     showToast(
       result.total
         ? `Added ${result.total} record${result.total === 1 ? "" : "s"} from the backup${result.skipped ? `, ${result.skipped} already there` : ""}.`

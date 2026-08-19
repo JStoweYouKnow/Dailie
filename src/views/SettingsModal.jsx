@@ -79,7 +79,9 @@ export default function SettingsModal({ onClose }) {
             <button className="md-btn md-btn-primary" disabled={publishing}
               onClick={async () => {
                 setPublishing(true);
-                try { await publishLocal(); } finally { setPublishing(false); }
+                try { await publishLocal(); }
+                catch (err) { /* surfaced by the store */ }
+                finally { setPublishing(false); }
               }}>
               <Upload size={13} /> {publishing ? "Sharing…" : "Share these with the team"}
             </button>
