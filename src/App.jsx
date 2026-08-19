@@ -3,7 +3,7 @@ import {
   Search, Sparkles, Sun, Moon, RefreshCw, Download, Upload, Info, Mic, Mail,
   Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
   Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
-  MoreHorizontal, ChevronLeft, ChevronRight, Plus,
+  MoreHorizontal, ChevronLeft, ChevronRight, Plus, Upload as UploadIcon, X,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
@@ -274,6 +274,8 @@ function Board({ store }) {
   const [importDoc, setImportDoc] = useState(null);
   const [docSeed, setDocSeed] = useState({ title: "", body: "" });
   const [dismissedCalls, setDismissedCalls] = useState([]);
+  const [dismissedPublish, setDismissedPublish] = useState(false);
+  const [publishingLocal, setPublishingLocal] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(() => {
     try { return localStorage.getItem("dailie-nav-collapsed-v1") === "1"; } catch (e) { return false; }
   });
@@ -512,6 +514,36 @@ function Board({ store }) {
 
             <input type="file" ref={fileInputRef} style={{ display: "none" }} accept=".json,.pdf,.doc,.docx,.pages,.txt,.md" onChange={importFile} />
           </header>
+
+          {/* Someone whose projects are suddenly missing will not think to look in
+              Settings, so the offer to publish them belongs where they cannot miss it. */}
+          {store.shared && store.pendingLocal && !dismissedPublish && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+              padding: "12px 28px", background: "var(--accent-soft)", borderBottom: "1px solid var(--accent)",
+            }}>
+              <UploadIcon size={15} color="var(--accent)" />
+              <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--bone)" }}>
+                  {store.pendingLocal.total} record{store.pendingLocal.total === 1 ? "" : "s"} on this device are not on the shared board
+                </div>
+                <div className="md-mono" style={{ fontSize: 10.5, color: "var(--dim)", marginTop: 2 }}>
+                  {Object.entries(store.pendingLocal.counts).map(([k, n]) => `${n} ${k}`).join(" · ")} — only you can see them
+                </div>
+              </div>
+              <button className="md-btn md-btn-primary" disabled={publishingLocal}
+                onClick={async () => {
+                  setPublishingLocal(true);
+                  try { await store.publishLocal(); } finally { setPublishingLocal(false); }
+                }}>
+                <UploadIcon size={13} /> {publishingLocal ? "Sharing…" : "Share with the team"}
+              </button>
+              <button className="md-btn md-btn-ghost" style={{ padding: 6 }} title="Dismiss"
+                onClick={() => setDismissedPublish(true)}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           <LiveCallBanner meeting={liveMeeting} onRecord={(m) => setRecorder({ meeting: m })}
             onDismiss={() => liveMeeting && setDismissedCalls((d) => [...d, liveMeeting.id])} />
