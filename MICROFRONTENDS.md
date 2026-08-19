@@ -15,17 +15,9 @@ Interface is the [production-tracking app](https://github.com/JStoweYouKnow/Inte
 
 ## The contract with Interface
 
-Requests reach the child app with the `/production` prefix still on them. Interface therefore sets `basePath: "/production"` in its `next.config.ts`. Break that and every route behind `/production` returns 404 while both projects still look healthy on their own domains. If you ever change the prefix here, change `basePath` there in the same cutover.
+Requests reach the child app with the `/production` prefix still on them. Interface therefore sets `basePath: "/production"` in its `next.config.ts`, which also puts its static assets under `/production/_next/*` — inside the same routing rule, so no separate asset prefix is needed.
 
-**Static assets do not live under `/production`.** Interface also applies `withMicrofrontends`, which sets Next's `assetPrefix` to an auto-generated `/vc-ap-<hash>` derived from the Vercel project name — currently `/vc-ap-8eb58d`. `basePath` and `assetPrefix` are independent in Next: routes get the former, chunks get the latter. Verify against a build rather than assuming:
-
-```bash
-# in the Interface repo, after `npm run build`
-node -e "const c=require('./.next/required-server-files.json').config; console.log(c.basePath, c.assetPrefix)"
-# → /production /vc-ap-8eb58d
-```
-
-The group routes that prefix to the `interface` project implicitly, because it derives the same hash from the project name — which is why no `assetPrefix` entry appears in `microfrontends.json`. That implicit routing is the whole reason it works; do not "simplify" it by assuming assets are covered by the `/production` rule, or every chunk 404s and the app renders unstyled and inert.
+Break that and every route behind `/production` returns 404 while both projects still look healthy on their own domains. If you ever change the prefix here, change `basePath` there in the same cutover.
 
 ## Local development
 
