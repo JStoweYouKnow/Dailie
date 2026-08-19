@@ -4,6 +4,7 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { useAuth } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
 import { normalizeData, SEED_DATA } from "./model";
+import { AUTH_ENABLED } from "./auth";
 import { uid } from "./format";
 import { fromSharedBoard, toSharedPayload, hasLocalContent, SHARED_COLLECTIONS } from "./sharedBoard";
 import { loadStoredData } from "./store";
@@ -20,7 +21,14 @@ import { loadStoredData } from "./store";
  * smaller product rather than a broken one.
  */
 export const CONVEX_URL = import.meta.env.VITE_CONVEX_URL || "";
-export const SHARED_ENABLED = !!CONVEX_URL;
+
+/**
+ * The shared board is only reachable with a session — every function requires an
+ * identity — and its provider reads Clerk's useAuth, which throws outside a
+ * ClerkProvider. So a Convex URL without a publishable key is not a half-working
+ * setup, it is a crash; fall back to the local board instead.
+ */
+export const SHARED_ENABLED = !!CONVEX_URL && AUTH_ENABLED;
 
 export const convexClient = SHARED_ENABLED ? new ConvexReactClient(CONVEX_URL) : null;
 

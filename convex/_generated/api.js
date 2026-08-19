@@ -1,13 +1,23 @@
 /* eslint-disable */
 /**
- * Placeholder for Convex's generated API.
+ * Generated `api` utility.
  *
- * `npx convex dev` overwrites this directory with a typed version. Until then this
- * keeps the app building, and it is functionally correct: anyApi resolves a function
- * reference from its path at runtime, which is exactly what the generated file does
- * for JavaScript projects.
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
  */
-import { anyApi } from "convex/server";
 
+import { anyApi, componentsGeneric } from "convex/server";
+
+/**
+ * A utility for referencing Convex functions in your app's API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
 export const api = anyApi;
 export const internal = anyApi;
+export const components = componentsGeneric();
