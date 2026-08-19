@@ -50,8 +50,11 @@ export function useSharedBoard(account) {
   const setWorkspace = useMutation(api.board.setWorkspace);
   const touchMember = useMutation(api.board.touchMember);
   const seed = useMutation(api.board.seed);
+  const merge = useMutation(api.board.merge);
 
   const [saveError, setSaveError] = useState("");
+  // Records sitting in this browser that the shared board has never seen.
+  const [pendingLocal, setPendingLocal] = useState(null);
   const [toast, setToast] = useState(null);
   const seeded = useRef(false);
   const announced = useRef(false);
@@ -90,6 +93,56 @@ export function useSharedBoard(account) {
       }
     })();
   }, [loading, board, seed, showToast]);
+
+  /**
+   * Anyone who used the board before it was shared still has those records in their
+   * own browser. `seed` only fires on an empty board, so everyone after the first
+   * person needs a way to contribute theirs — this counts what is still only local.
+   */
+  useEffect(() => {
+    if (loading || !board) return;
+    let cancelled = false;
+    (async () => {
+      const local = await loadStoredData();
+      const counts = {};
+      for (const name of SHARED_COLLECTIONS) {
+        const shared = new Set(((board.collections && board.collections[name]) || []).map((r) => String(r.id)));
+        const missing = (local[name] || []).filter((r) => r && r.id && !shared.has(String(r.id)));
+        if (missing.length) counts[name] = missing.length;
+      }
+      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      if (!cancelled) setPendingLocal(total ? { counts, total } : null);
+    })();
+    return () => { cancelled = true; };
+  }, [loading, board]);
+
+  const publishLocal = useCallback(async () => {
+    const local = await loadStoredData();
+    const result = await merge(toSharedPayload(local));
+    setPendingLocal(null);
+    showToast(
+      result.total
+        ? `Shared ${result.total} record${result.total === 1 ? "" : "s"} with the team.`
+        : "Everything on this device is already shared.",
+      "success"
+    );
+    return result;
+  }, [merge, showToast]);
+
+  /**
+   * Restoring a backup onto a shared board must not mean "make the board look like
+   * my file" — that would delete every record a colleague added since. It adds what
+   * is missing and leaves the rest alone.
+   */
+  const importBoard = useCallback(async (parsed) => {
+    const result = await merge(toSharedPayload(normalizeData(parsed)));
+    showToast(
+      result.total
+        ? `Added ${result.total} record${result.total === 1 ? "" : "s"} from the backup${result.skipped ? `, ${result.skipped} already there` : ""}.`
+        : "Everything in that backup is already on the board.",
+      "success"
+    );
+  }, [merge, showToast]);
 
   const guard = (promise) => promise.catch((err) => setSaveError(err.message || "Could not save to the shared board."));
 
@@ -165,6 +218,7 @@ export function useSharedBoard(account) {
     companyName: useCallback((id) => nameOf(data.companies, id), [data.companies]),
     personName: useCallback((id) => nameOf(data.people, id), [data.people]),
     toast, showToast,
+    pendingLocal, publishLocal, importBoard,
     linkAccount: () => { /* handled by touchMember */ },
   };
 }

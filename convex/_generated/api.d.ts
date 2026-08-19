@@ -9,6 +9,7 @@
  */
 
 import type * as board from "../board.js";
+import type * as maintenance from "../maintenance.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   board: typeof board;
+  maintenance: typeof maintenance;
 }>;
 
 /**

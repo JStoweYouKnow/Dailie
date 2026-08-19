@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Plus, Trash2, UserCheck, LogOut, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, UserCheck, LogOut, ShieldCheck, Upload, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { useAccount, useSignOut } from "../lib/auth";
 import { uid } from "../lib/format";
 import { ModalShell, Field, Section, Avatar, InlineText, ConfirmButton, Badge } from "../ui/kit";
 
 export default function SettingsModal({ onClose }) {
-  const { data, patch, updateSettings, currentUser } = useStore();
+  const { data, patch, updateSettings, currentUser, shared, pendingLocal, publishLocal } = useStore();
+  const [publishing, setPublishing] = useState(false);
   const { enabled: authEnabled, account: signedIn } = useAccount();
   const signOut = useSignOut();
   const [name, setName] = useState("");
@@ -59,6 +60,42 @@ export default function SettingsModal({ onClose }) {
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 9, lineHeight: 1.55 }}>
             The same session covers <strong style={{ color: "var(--bone)" }}>production tracking</strong> — both apps sit on one domain, so signing in here signs you in there.
+          </div>
+        </Section>
+      )}
+
+      {shared && pendingLocal && (
+        <Section title="RECORDS ONLY ON THIS DEVICE">
+          <div style={{ padding: "12px 14px", border: "1px solid var(--warn)", borderRadius: 10, background: "var(--panel-raised)" }}>
+            <div style={{ fontSize: 13, color: "var(--bone)", marginBottom: 8, lineHeight: 1.55 }}>
+              You have <strong>{pendingLocal.total}</strong> record{pendingLocal.total === 1 ? "" : "s"} from before the board was
+              shared. Nobody else can see them yet.
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {Object.entries(pendingLocal.counts).map(([name, count]) => (
+                <Badge key={name} label={`${count} ${name}`} subtle />
+              ))}
+            </div>
+            <button className="md-btn md-btn-primary" disabled={publishing}
+              onClick={async () => {
+                setPublishing(true);
+                try { await publishLocal(); } finally { setPublishing(false); }
+              }}>
+              <Upload size={13} /> {publishing ? "Sharing…" : "Share these with the team"}
+            </button>
+            <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 9, lineHeight: 1.5 }}>
+              Adds them to the shared board. Anything already there is left untouched, so this cannot
+              overwrite a colleague's work.
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {shared && !pendingLocal && (
+        <Section title="SHARED BOARD">
+          <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, color: "var(--dim)" }}>
+            <Users size={14} color="var(--sage)" />
+            Everything on this device is on the shared board. {data.team.length} member{data.team.length === 1 ? "" : "s"} can see it.
           </div>
         </Section>
       )}

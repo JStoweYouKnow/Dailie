@@ -172,6 +172,51 @@ export const touchMember = mutation({
 });
 
 /**
+ * Contribute records from a browser-local board into the shared one.
+ *
+ * Unlike `seed` this is additive and can run at any time, by anyone: a record whose
+ * id is already shared is left alone rather than overwritten, so publishing your own
+ * work can never clobber a colleague's edit to the same project. That makes it safe
+ * for the second, third and fourth person to arrive with a board of their own.
+ */
+export const merge = mutation({
+  args: { collections: v.any() },
+  handler: async (ctx, { collections }) => {
+    const identity = await requireIdentity(ctx);
+    const now = Date.now();
+    const added = {};
+    let skipped = 0;
+
+    for (const [collection, records] of Object.entries(collections || {})) {
+      if (!Array.isArray(records)) continue;
+
+      const existing = await ctx.db
+        .query("records")
+        .withIndex("by_collection", (q) => q.eq("collection", collection))
+        .collect();
+      const known = new Set(existing.map((r) => r.docId));
+
+      for (const record of records) {
+        if (!record || !record.id) continue;
+        const docId = String(record.id);
+        if (known.has(docId)) { skipped += 1; continue; }
+        await ctx.db.insert("records", {
+          collection,
+          docId,
+          data: record,
+          updatedAt: now,
+          updatedBy: identity.subject,
+        });
+        known.add(docId);
+        added[collection] = (added[collection] || 0) + 1;
+      }
+    }
+
+    return { added, total: Object.values(added).reduce((a, b) => a + b, 0), skipped };
+  },
+});
+
+/**
  * One-time lift of a browser-local board into the shared one. Refuses if anything is
  * already there, so a second person opening the app cannot overwrite what the first
  * one uploaded.

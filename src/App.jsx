@@ -356,8 +356,9 @@ function Board({ store }) {
       reader.onload = (event) => {
         try {
           const parsed = JSON.parse(event.target.result);
-          patch(normalizeData(parsed));
-          showToast("Board restored from backup.", "success");
+          // On a shared board this adds rather than replaces — see importBoard.
+          store.importBoard(parsed);
+          if (!store.shared) showToast("Board restored from backup.", "success");
         } catch (err) {
           showToast("That file is not a Dailie backup.", "error");
         }
