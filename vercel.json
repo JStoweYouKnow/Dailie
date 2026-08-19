@@ -5,12 +5,6 @@
       "maxDuration": 300
     }
   },
-  "rewrites": [
-    {
-      "source": "/__clerk/:path*",
-      "destination": "https://clerk.thewizardofops.app/:path*"
-    }
-  ],
   "redirects": [
     {
       "source": "/:section(members|playlists|projects|review|schedule|settings|tasks|usage|sign-in|sign-up)",
