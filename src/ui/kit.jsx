@@ -448,20 +448,34 @@ export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAd
   };
 
   return (
-    <div className="md-scroll" style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 14, alignItems: "flex-start" }}>
+    // Columns stretch to a common height: with flex-start each one ended where its
+    // last card did, so the empty space below was not a drop target and a card had
+    // to be released precisely on the stack.
+    <div className="md-scroll" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 14, alignItems: "stretch", minHeight: 340 }}>
       {columns.map((col) => {
         const cards = items.filter((i) => columnOf(i) === col.key);
         const isOver = overColumn === col.key;
         return (
           <div key={col.key}
             data-kanban-column={col.key}
-            onDragOver={(e) => { e.preventDefault(); setOverColumn(col.key); }}
-            onDragLeave={() => setOverColumn((c) => (c === col.key ? null : c))}
+            onDragOver={(e) => {
+              e.preventDefault();
+              // Without this the cursor shows "no drop" over most of the column.
+              if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+              if (overColumn !== col.key) setOverColumn(col.key);
+            }}
+            onDragLeave={(e) => {
+              // dragleave also fires when the pointer crosses onto a card inside this
+              // column, which used to clear the target and make the drop miss.
+              if (e.currentTarget.contains(e.relatedTarget)) return;
+              setOverColumn((c) => (c === col.key ? null : c));
+            }}
             onDrop={(e) => endDrag(e, col.key)}
             style={{
               minWidth: 262, flex: "0 0 262px", borderRadius: 12, padding: 8,
+              display: "flex", flexDirection: "column",
               background: isOver ? "var(--panel-raised)" : "transparent",
-              border: `1px dashed ${isOver ? col.color : "transparent"}`,
+              border: `1px dashed ${isOver && !dragColumn ? col.color : "transparent"}`,
               opacity: dragColumn === col.key ? 0.4 : 1,
               // While a column is in flight, show where it would land rather than a drop zone.
               borderLeft: isOver && dragColumn && dragColumn !== col.key ? `3px solid ${col.color}` : undefined,
@@ -493,19 +507,39 @@ export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAd
                   onClick={() => onRemoveColumn(col.key)}><X size={12} /></button>
               )}
             </div>
-            {cards.map((item) => (
-              <div key={item.id} draggable
-                onDragStart={(e) => startDrag(e, item.id)}
-                onDragEnd={clearDrag}
-                style={{ opacity: dragId === item.id ? 0.4 : 1, cursor: "grab" }}>
-                {renderCard(item)}
-              </div>
-            ))}
-            {cards.length === 0 && (
-              <div style={{ fontSize: 11, color: "var(--dim-2)", padding: "14px 6px", textAlign: "center", border: "1px dashed var(--rule)", borderRadius: 10 }}>
-                {emptyHint || "Drop here"}
-              </div>
-            )}
+            {/* flex:1 makes everything below the last card part of the drop target. */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 60 }}>
+              {cards.map((item) => (
+                <div key={item.id} draggable
+                  onDragStart={(e) => startDrag(e, item.id)}
+                  onDragEnd={clearDrag}
+                  style={{ opacity: dragId === item.id ? 0.4 : 1, cursor: "grab" }}>
+                  {renderCard(item)}
+                </div>
+              ))}
+
+              {cards.length === 0 && !dragId && (
+                <div style={{ fontSize: 11, color: "var(--dim-2)", padding: "14px 6px", textAlign: "center", border: "1px dashed var(--rule)", borderRadius: 10 }}>
+                  {emptyHint || "Drop here"}
+                </div>
+              )}
+
+              {/* A landing strip while a card is in flight, so the target is somewhere
+                  to aim at rather than a guess. It fills the rest of the column. */}
+              {dragId && !dragColumn && (
+                <div style={{
+                  flex: 1, minHeight: 56, marginTop: cards.length ? 2 : 0,
+                  border: `1px dashed ${isOver ? col.color : "var(--rule)"}`,
+                  background: isOver ? `${col.color}1f` : "transparent",
+                  borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 11, fontWeight: 600,
+                  color: isOver ? col.color : "var(--dim-2)",
+                  transition: "background .12s, border-color .12s, color .12s",
+                }}>
+                  {isOver ? `Move to ${col.label}` : ""}
+                </div>
+              )}
+            </div>
           </div>
         );
       })}
