@@ -33,13 +33,16 @@ export function EmptyState({ title, subtitle, action }) {
   );
 }
 
-export function ModalShell({ title, subtitle, onClose, children, wide }) {
+export function ModalShell({ title, subtitle, status, onClose, children, wide }) {
   return (
     <div className="md-overlay" onClick={onClose}>
       <div className="md-modal" onClick={(e) => e.stopPropagation()} style={wide ? { maxWidth: 860 } : undefined}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", borderBottom: "1px solid var(--rule)", position: "sticky", top: 0, background: "var(--panel)", zIndex: 2, borderRadius: "16px 16px 0 0" }}>
           <div style={{ minWidth: 0 }}>
-            <div className="md-display" style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <div className="md-display" style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
+              {status}
+            </div>
             {subtitle && <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", marginTop: 2 }}>{subtitle}</div>}
           </div>
           <button className="md-btn md-btn-ghost" onClick={onClose} style={{ padding: 6 }}><X size={16} /></button>

@@ -4,7 +4,7 @@ import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, stageInfo } from "../
 import { ModalShell, Field, FileAttachButton, AttachmentRow } from "../ui/kit";
 
 export default function NewProjectModal({ onClose, initialTitle = "", initialDesc = "", onCreated }) {
-  const { data, add, currentUser } = useStore();
+  const { data, add, currentUser, showToast } = useStore();
   const [form, setForm] = useState({
     title: initialTitle,
     description: initialDesc,
@@ -46,6 +46,7 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
       updatedAt: now,
       history: [{ id: `h-${now}`, date: now, note: `Added to the board — ${recordTypeInfo(form.recordType).label}` }],
     });
+    showToast(`"${project.title}" saved.`, "success");
     if (onCreated) onCreated(project);
     onClose();
   };

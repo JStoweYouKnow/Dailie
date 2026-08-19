@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2 } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
@@ -69,8 +69,21 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const [newTask, setNewTask] = useState("");
   const [note, setNote] = useState("");
   const [newFieldName, setNewFieldName] = useState("");
+  const [saveStatus, setSaveStatus] = useState(null);
+  const saveTimer = useRef(null);
 
-  const patchProject = (changes, note) => updateProject(project.id, changes, note);
+  useEffect(() => () => clearTimeout(saveTimer.current), []);
+
+  const flashSave = (kind) => {
+    setSaveStatus(kind);
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => setSaveStatus(null), 2200);
+  };
+
+  const patchProject = (changes, note, kind = "edited") => {
+    updateProject(project.id, changes, note);
+    flashSave(kind);
+  };
   const type = recordTypeInfo(project.recordType);
   const pipeline = data.pipelines[project.recordType] || [];
 
@@ -93,6 +106,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
       assigneeIds: project.ownerId ? [project.ownerId] : [],
     }, currentUser && currentUser.id));
     setNewTask("");
+    flashSave("saved");
   };
 
   const addNote = () => {
@@ -107,12 +121,13 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
       updatedAt: Date.now(),
     });
     setNote("");
+    flashSave("saved");
   };
 
   const addCustomField = () => {
     const name = newFieldName.trim();
     if (!name) return;
-    patchProject({ customFields: { ...customFields, [name]: "" } });
+    patchProject({ customFields: { ...customFields, [name]: "" } }, undefined, "saved");
     setNewFieldName("");
   };
 
@@ -127,8 +142,22 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   };
 
   return (
-    <ModalShell wide title={project.title} subtitle={`${type.label} · updated ${formatShort(project.updatedAt)}`} onClose={onClose}>
-      <ImageHeader project={project} onChange={(changes) => patchProject(changes)} />
+    <ModalShell
+      wide
+      title={project.title}
+      subtitle={`${type.label} · updated ${formatShort(project.updatedAt)}`}
+      status={saveStatus && (
+        <span className="md-mono" style={{
+          display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700,
+          letterSpacing: ".12em", color: "var(--sage)", flexShrink: 0,
+        }}>
+          <CheckCircle2 size={12} color="var(--sage)" />
+          {saveStatus === "edited" ? "EDITED" : "SAVED"}
+        </span>
+      )}
+      onClose={onClose}
+    >
+      <ImageHeader project={project} onChange={(changes) => patchProject(changes, undefined, project.imageUrl || project.imagePath ? "edited" : "saved")} />
 
       <Field label="TITLE">
         <InlineText value={project.title} style={{ fontSize: 18, fontWeight: 700 }} onCommit={(v) => v.trim() && patchProject({ title: v.trim() }, `Renamed to ${v.trim()}`)} />
@@ -219,15 +248,18 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
         {tasks.map((t) => (
           <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
             <button className="md-btn md-btn-ghost" style={{ padding: 2 }}
-              onClick={() => update("tasks", t.id, { status: t.status === "done" ? "todo" : "done", completedAt: t.status === "done" ? null : Date.now() })}>
+              onClick={() => {
+                update("tasks", t.id, { status: t.status === "done" ? "todo" : "done", completedAt: t.status === "done" ? null : Date.now() });
+                flashSave("edited");
+              }}>
               {t.status === "done" ? <CheckSquare size={15} color="var(--sage)" /> : <Square size={15} color="var(--dim)" />}
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <InlineText value={t.title} onCommit={(v) => update("tasks", t.id, { title: v })}
+              <InlineText value={t.title} onCommit={(v) => { update("tasks", t.id, { title: v }); flashSave("edited"); }}
                 style={{ textDecoration: t.status === "done" ? "line-through" : "none", color: t.status === "done" ? "var(--dim)" : "var(--bone)" }} />
             </div>
             <div style={{ width: 150, flexShrink: 0 }}>
-              <MemberPicker team={data.team} selectedIds={t.assigneeIds || []} label="Assign" onChange={(ids) => update("tasks", t.id, { assigneeIds: ids })} />
+              <MemberPicker team={data.team} selectedIds={t.assigneeIds || []} label="Assign" onChange={(ids) => { update("tasks", t.id, { assigneeIds: ids }); flashSave("edited"); }} />
             </div>
             <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("tasks", t.id)} />
           </div>
@@ -266,7 +298,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 4 }}>
               {memberName(n.authorId) || "Unknown"} · {formatShort(n.createdAt)}
             </div>
-            <InlineText value={n.body} multiline markdown onCommit={(v) => update("notes", n.id, { body: v, updatedAt: Date.now() })} />
+            <InlineText value={n.body} multiline markdown onCommit={(v) => { update("notes", n.id, { body: v, updatedAt: Date.now() }); flashSave("edited"); }} />
           </div>
         ))}
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>

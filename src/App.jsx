@@ -8,6 +8,7 @@ import {
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
 import { SHARED_ENABLED, useSharedBoard } from "./lib/convexBoard";
+import SharedBoundary from "./lib/SharedBoundary";
 import { normalizeData, staleFollowUps } from "./lib/model";
 import { parseDocumentFile } from "./documentParser";
 import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
@@ -225,6 +226,33 @@ function LocalBoard() {
 function SharedBoard() {
   const { account } = useAccount();
   return <Board store={useSharedBoard(account)} />;
+}
+
+/** Falls back to this device's board rather than a blank screen. */
+function SharedBoardOrLocal() {
+  return (
+    <SharedBoundary
+      fallback={({ hint, message, retry }) => (
+        <>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+            padding: "11px 28px", background: "var(--red-soft)", borderBottom: "1px solid var(--red)",
+            fontSize: 12.5, color: "var(--bone)",
+          }}>
+            <strong style={{ color: "var(--red)" }}>Shared board unavailable</strong>
+            <span style={{ color: "var(--dim)" }}>Showing this device&rsquo;s copy — nothing has been lost.</span>
+            <span className="md-mono" style={{ fontSize: 10.5, color: "var(--dim-2)", flexBasis: "100%" }}>{hint}</span>
+            <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)", fontSize: 12 }} onClick={retry}>
+              Try again
+            </button>
+          </div>
+          <LocalBoard />
+        </>
+      )}
+    >
+      <SharedBoard />
+    </SharedBoundary>
+  );
 }
 
 function Board({ store }) {
@@ -598,7 +626,7 @@ export default function App() {
   // The shared board needs a session to read anything, so it always sits behind the gate.
   return (
     <AuthGate>
-      {SHARED_ENABLED ? <SharedBoard /> : <LocalBoard />}
+      {SHARED_ENABLED ? <SharedBoardOrLocal /> : <LocalBoard />}
     </AuthGate>
   );
 }
