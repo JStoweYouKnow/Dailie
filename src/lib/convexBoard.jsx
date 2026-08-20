@@ -22,6 +22,10 @@ import { loadStoredData } from "./store";
  */
 export const CONVEX_URL = import.meta.env.VITE_CONVEX_URL || "";
 
+// A Convex mutation takes a bounded argument payload, and an imported mailbox is far
+// past it. Records are written in batches of this many.
+const CHUNK_SIZE = 200;
+
 /**
  * The shared board is only reachable with a session — every function requires an
  * identity — and its provider reads Clerk's useAuth, which throws outside a
@@ -48,6 +52,7 @@ export function useSharedBoard(account) {
   const put = useMutation(api.board.put);
   const removeRecord = useMutation(api.board.remove);
   const putMany = useMutation(api.board.putMany);
+  const pruneCollection = useMutation(api.board.pruneCollection);
   const setWorkspace = useMutation(api.board.setWorkspace);
   const touchMember = useMutation(api.board.touchMember);
   const seed = useMutation(api.board.seed);
@@ -56,6 +61,16 @@ export function useSharedBoard(account) {
   const [saveError, setSaveError] = useState("");
   // Records sitting in this browser that the shared board has never seen.
   const [pendingLocal, setPendingLocal] = useState(null);
+  /**
+   * Edits applied locally while their write is in flight.
+   *
+   * Without this an inline field re-syncs from the server value the moment it
+   * commits — and that value has not come back yet, so the edit appears to revert
+   * and the record looks uneditable. The local board never showed this because its
+   * writes are synchronous.
+   */
+  const [overlay, setOverlay] = useState({});
+  const inFlight = useRef(0);
   const [toast, setToast] = useState(null);
   const [authGaveUp, setAuthGaveUp] = useState(false);
   const seeded = useRef(false);
@@ -69,7 +84,29 @@ export function useSharedBoard(account) {
   }, [toast]);
 
   const fallback = useMemo(() => normalizeData(SEED_DATA), []);
-  const data = useMemo(() => fromSharedBoard(board, fallback), [board, fallback]);
+  const serverData = useMemo(() => fromSharedBoard(board, fallback), [board, fallback]);
+  const data = useMemo(() => {
+    const keys = Object.keys(overlay);
+    if (!keys.length) return serverData;
+    const next = { ...serverData };
+    for (const key of keys) {
+      const at = key.indexOf(":");
+      const collection = key.slice(0, at);
+      const id = key.slice(at + 1);
+      const record = overlay[key];
+      const list = [...(next[collection] || [])];
+      const idx = list.findIndex((r) => String(r.id) === id);
+      if (record === null) {
+        if (idx >= 0) list.splice(idx, 1);
+      } else if (idx >= 0) {
+        list[idx] = record;
+      } else {
+        list.unshift(record);
+      }
+      next[collection] = list;
+    }
+    return next;
+  }, [serverData, overlay]);
   const loading = authLoading || !isAuthenticated || board == null;
 
   // Clerk can be signed in while Convex still has no JWT (missing "convex" template
@@ -167,11 +204,38 @@ export function useSharedBoard(account) {
     );
   }, [merge, showToast]);
 
-  const guard = (promise) => promise.catch((err) => setSaveError(err.message || "Could not save to the shared board."));
+  /**
+   * Shows the change immediately, then trusts the server once every write has
+   * settled — clearing early would flash the pre-edit value back.
+   */
+  const stage = (collection, id, record) =>
+    setOverlay((o) => ({ ...o, [`${collection}:${id}`]: record }));
+
+  const settle = (promise) => {
+    inFlight.current += 1;
+    return promise
+      .catch((err) => {
+        setSaveError(err && err.message ? err.message : "Could not save to the shared board.");
+        throw err;
+      })
+      .finally(() => {
+        inFlight.current -= 1;
+        if (inFlight.current === 0) setOverlay({});
+      });
+  };
+
+  // Bulk writes used to fail with nothing but a red line above the header, which is
+  // easy to miss when the button you pressed is halfway down the page.
+  const guard = (promise) => promise.catch((err) => {
+    const message = (err && err.message) || "Could not save to the shared board.";
+    setSaveError(message);
+    showToast("That did not save — see the message at the top of the page.", "error");
+  });
 
   const add = useCallback((collection, record, { prepend = true } = {}) => {
     const item = { id: uid(), createdAt: Date.now(), ...record };
-    guard(put({ collection, docId: String(item.id), data: item }));
+    stage(collection, String(item.id), item);
+    settle(put({ collection, docId: String(item.id), data: item })).catch(() => {});
     return item;
   }, [put]);
 
@@ -179,11 +243,14 @@ export function useSharedBoard(account) {
     const current = (data[collection] || []).find((r) => r.id === id);
     if (!current) return;
     const delta = typeof changes === "function" ? changes(current) : changes;
-    guard(put({ collection, docId: String(id), data: { ...current, ...delta } }));
+    const next = { ...current, ...delta };
+    stage(collection, String(id), next);
+    settle(put({ collection, docId: String(id), data: next })).catch(() => {});
   }, [data, put]);
 
   const remove = useCallback((collection, id) => {
-    guard(removeRecord({ collection, docId: String(id) }));
+    stage(collection, String(id), null);
+    settle(removeRecord({ collection, docId: String(id) })).catch(() => {});
   }, [removeRecord]);
 
   const updateSettings = useCallback((changes) => {
@@ -195,8 +262,28 @@ export function useSharedBoard(account) {
     if (!current) return;
     const delta = typeof changes === "function" ? changes(current) : changes;
     const history = note ? [...(current.history || []), { id: uid(), date: Date.now(), note }] : current.history;
-    guard(put({ collection: "projects", docId: String(id), data: { ...current, ...delta, updatedAt: Date.now(), history } }));
+    const next = { ...current, ...delta, updatedAt: Date.now(), history };
+    stage("projects", String(id), next);
+    settle(put({ collection: "projects", docId: String(id), data: next })).catch(() => {});
   }, [data.projects, put]);
+
+  /**
+   * A whole collection in one mutation, or several when it is too big for one.
+   *
+   * "Populate from email" re-sends every message it has ever imported, and a mailbox
+   * of any size blows past the per-mutation argument limit — which is what made the
+   * button look like it did nothing. Chunks are written with prune off, since a chunk
+   * cannot tell a deleted record from one sitting in the next chunk; the final pass
+   * carries the whole id list and does the pruning.
+   */
+  const writeCollection = useCallback(async (collection, records) => {
+    if (records.length <= CHUNK_SIZE) return putMany({ collection, records });
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      await putMany({ collection, records: records.slice(i, i + CHUNK_SIZE), prune: false });
+    }
+    // Everything is stored; this last call only removes what is no longer in the list.
+    return pruneCollection({ collection, keepIds: records.map((r) => String(r.id)) });
+  }, [putMany, pruneCollection]);
 
   /**
    * Bulk edits. `patch` is how views change a whole collection at once (reordering a
@@ -208,10 +295,10 @@ export function useSharedBoard(account) {
     for (const [key, value] of Object.entries(delta || {})) {
       if (key === "settings") guard(setWorkspace({ key: "settings", value }));
       else if (key === "pipelines") guard(setWorkspace({ key: "pipelines", value }));
-      else if (SHARED_COLLECTIONS.includes(key) && Array.isArray(value)) guard(putMany({ collection: key, records: value }));
+      else if (SHARED_COLLECTIONS.includes(key) && Array.isArray(value)) guard(writeCollection(key, value));
       // `team` is the directory and is not writable from the client.
     }
-  }, [data, setWorkspace, putMany]);
+  }, [data, setWorkspace, writeCollection]);
 
   const currentUser = useMemo(() => {
     if (account) {

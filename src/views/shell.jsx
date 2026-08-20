@@ -202,11 +202,15 @@ export function CommandPalette({ onClose, onSelect }) {
     data.people.forEach((p) => { if (q && (p.name.toLowerCase().includes(q) || (p.email || "").includes(q))) push("people", p.id, p.name, p.organization || p.email, p); });
     data.companies.forEach((c) => { if (q && c.name.toLowerCase().includes(q)) push("companies", c.id, c.name, c.domain, c); });
     data.tasks.forEach((t) => { if (q && t.title.toLowerCase().includes(q)) push("tasks", t.id, t.title, "Task", t); });
+    (data.events || []).forEach((e) => { if (q && (e.name || "").toLowerCase().includes(q)) push("events", e.id, e.name, e.venue || "Event", e); });
+    (data.press || []).forEach((r) => { if (q && ((r.title || "").toLowerCase().includes(q) || (r.outlet || "").toLowerCase().includes(q))) push("press", r.id, r.title, r.outlet || "Press", r); });
+    (data.legal || []).forEach((l) => { if (q && ((l.name || "").toLowerCase().includes(q) || (l.firm || "").toLowerCase().includes(q))) push("legal", l.id, l.name, l.firm || "Legal", l); });
 
     const tabs = [
       ["home", "Home dashboard"], ["projects", "Projects"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
-      ["meetings", "Meetings"], ["calls", "Calls"], ["emails", "Emails"], ["companies", "Companies"],
-      ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"], ["contracts", "NDAs & Contracts"],
+      ["meetings", "Meetings"], ["calls", "Calls"], ["events", "Events & Speaking"], ["emails", "Emails"], ["companies", "Companies"],
+      ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"],
+      ["press", "Press & PR"], ["contracts", "NDAs & Contracts"], ["legal", "Legal & Counsel"],
       ["finance", "Invoices & Payments"], ["timeline", "Timeline"],
     ];
     tabs.forEach(([key, label]) => { if (!q || label.toLowerCase().includes(q)) push("tab", key, `Go to ${label}`, "Navigation", null); });

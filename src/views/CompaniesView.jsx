@@ -218,6 +218,12 @@ export default function CompaniesView({ searchQuery, onOpenTab, lockedType, titl
 
   /** Rebuilds companies and people from every email that has been imported. */
   const populateFromEmail = () => {
+    // With no mail on the board the old message read "everything is already here",
+    // which looks exactly like a button that does nothing.
+    if (!data.emails.length) {
+      showToast("No email on the board yet — sync a Gmail account first, then run this.", "info");
+      return;
+    }
     const result = deriveDirectoryFromEmails(data);
     patch({ companies: result.companies, people: result.people, emails: result.emails });
     const added = result.newCompanies.length;

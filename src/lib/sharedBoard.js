@@ -7,7 +7,8 @@ import { normalizeData } from "./model";
 /** Collections that live as rows in the shared board. */
 export const SHARED_COLLECTIONS = [
   "companies", "people", "projects", "tasks", "notes", "meetings",
-  "calls", "emails", "contracts", "invoices", "payments", "talent", "logs",
+  "calls", "emails", "contracts", "invoices", "payments", "talent",
+  "events", "press", "legal", "logs",
 ];
 
 /**

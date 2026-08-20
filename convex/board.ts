@@ -100,8 +100,8 @@ export const remove = mutation({
 
 /** Replace a whole collection — used for reordering and other bulk edits. */
 export const putMany = mutation({
-  args: { collection: v.string(), records: v.array(v.any()) },
-  handler: async (ctx, { collection, records }) => {
+  args: { collection: v.string(), records: v.array(v.any()), prune: v.optional(v.boolean()) },
+  handler: async (ctx, { collection, records, prune }) => {
     const identity = await requireIdentity(ctx);
     const existing = await ctx.db
       .query("records")
@@ -110,18 +110,49 @@ export const putMany = mutation({
     const byId = new Map(existing.map((r) => [r.docId, r]));
     const now = Date.now();
 
+    let written = 0;
     for (const record of records) {
       const docId = String(record.id);
       const prior = byId.get(docId);
       if (prior) {
-        await ctx.db.patch(prior._id, { data: record, updatedAt: now, updatedBy: identity.subject });
         byId.delete(docId);
+        // Rewriting an unchanged record costs a write and risks the transaction's
+        // limits for nothing. "Populate from email" re-sends every message it has
+        // seen, and almost none of them differ.
+        if (JSON.stringify(prior.data) === JSON.stringify(record)) continue;
+        await ctx.db.patch(prior._id, { data: record, updatedAt: now, updatedBy: identity.subject });
       } else {
         await ctx.db.insert("records", { collection, docId, data: record, updatedAt: now, updatedBy: identity.subject });
       }
+      written += 1;
     }
-    // Anything left was removed in this edit.
-    for (const orphan of byId.values()) await ctx.db.delete(orphan._id);
+    // Anything left was removed in this edit — unless this is one chunk of a larger
+    // write, where the records not in this chunk are still perfectly alive.
+    let deleted = 0;
+    if (prune !== false) {
+      for (const orphan of byId.values()) { await ctx.db.delete(orphan._id); deleted += 1; }
+    }
+    return { written, deleted, unchanged: records.length - written };
+  },
+});
+
+/** Removes records no longer in the collection. Pairs with chunked putMany writes. */
+export const pruneCollection = mutation({
+  args: { collection: v.string(), keepIds: v.array(v.string()) },
+  handler: async (ctx, { collection, keepIds }) => {
+    await requireIdentity(ctx);
+    const keep = new Set(keepIds);
+    const existing = await ctx.db
+      .query("records")
+      .withIndex("by_collection", (q) => q.eq("collection", collection))
+      .collect();
+    let deleted = 0;
+    for (const row of existing) {
+      if (keep.has(row.docId)) continue;
+      await ctx.db.delete(row._id);
+      deleted += 1;
+    }
+    return { deleted };
   },
 });
 

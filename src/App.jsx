@@ -4,6 +4,7 @@ import {
   Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
   Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
   MoreHorizontal, ChevronLeft, ChevronRight, Plus, Upload as UploadIcon, X,
+  Mic2, Megaphone, Scale,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
@@ -36,6 +37,9 @@ import FinanceView from "./views/FinanceView";
 import TimelineView from "./views/TimelineView";
 import SyncModal from "./views/SyncModal";
 import SettingsModal from "./views/SettingsModal";
+import EventsView from "./views/EventsView";
+import PressView from "./views/PressView";
+import LegalView from "./views/LegalView";
 import SchedulerAgent from "./views/SchedulerAgent";
 
 /**
@@ -55,6 +59,7 @@ const NAV = [
       { key: "calendar", label: "Calendar", icon: CalendarIcon },
       { key: "meetings", label: "Meetings", icon: Users },
       { key: "calls", label: "Calls", icon: Mic },
+      { key: "events", label: "Events", icon: Mic2 },
     ],
   },
   {
@@ -71,7 +76,9 @@ const NAV = [
   {
     group: "Business",
     items: [
+      { key: "press", label: "Press & PR", icon: Megaphone },
       { key: "contracts", label: "NDAs & Contracts", icon: FileText },
+      { key: "legal", label: "Legal", icon: Scale },
       { key: "finance", label: "Invoices", icon: Receipt },
       { key: "timeline", label: "Timeline", icon: History },
     ],
@@ -442,6 +449,12 @@ function Board({ store }) {
         return <CompaniesView searchQuery={searchQuery} onOpenTab={openTab} lockedType="vendor" title="VENDORS" />;
       case "aitools":
         return <CompaniesView searchQuery={searchQuery} onOpenTab={openTab} lockedType="ai-tool" title="AI TOOL RELATIONSHIPS" />;
+      case "events":
+        return <EventsView searchQuery={searchQuery} />;
+      case "press":
+        return <PressView searchQuery={searchQuery} />;
+      case "legal":
+        return <LegalView searchQuery={searchQuery} />;
       case "contracts":
         return <ContractsView searchQuery={searchQuery} />;
       case "finance":

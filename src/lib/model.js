@@ -143,6 +143,54 @@ export const DISCIPLINES = [
   "Animator", "Illustrator", "Gaffer", "1st AD", "Casting Director",
 ];
 
+/** Events we host or speak at. */
+export const EVENT_KINDS = [
+  { key: "hosting", label: "We're Hosting", color: HUE.clay },
+  { key: "keynote", label: "Keynote", color: HUE.sage },
+  { key: "panel", label: "Panel", color: HUE.teal },
+  { key: "demo", label: "Demo", color: HUE.slate },
+  { key: "pitch", label: "Pitch", color: HUE.sand },
+  { key: "attending", label: "Attending", color: HUE.stone },
+];
+
+export const EVENT_STATUSES = [
+  { key: "invited", label: "Invited", color: HUE.stone },
+  { key: "submitted", label: "Submitted", color: HUE.sand },
+  { key: "confirmed", label: "Confirmed", color: HUE.sage },
+  { key: "done", label: "Done", color: HUE.moss },
+  { key: "declined", label: "Declined", color: HUE.faint },
+];
+
+/** Press: outlets we talk to, and the coverage that comes out of it. */
+export const PRESS_KINDS = [
+  { key: "outlet", label: "Outlet / Journalist", color: HUE.teal },
+  { key: "article", label: "Article", color: HUE.sage },
+  { key: "interview", label: "Interview", color: HUE.slate },
+  { key: "release", label: "Press Release", color: HUE.sand },
+  { key: "kit", label: "Press Kit", color: HUE.plum },
+];
+
+export const PRESS_STATUSES = [
+  { key: "pitching", label: "Pitching", color: HUE.stone },
+  { key: "in-talks", label: "In Talks", color: HUE.sand },
+  { key: "scheduled", label: "Scheduled", color: HUE.teal },
+  { key: "published", label: "Published", color: HUE.moss },
+  { key: "passed", label: "Passed", color: HUE.faint },
+];
+
+/** Legal: the people we call when something needs a lawyer. */
+export const LEGAL_KINDS = [
+  { key: "attorney", label: "Attorney", color: HUE.teal },
+  { key: "firm", label: "Firm", color: HUE.sage },
+  { key: "counsel", label: "In-House Counsel", color: HUE.slate },
+  { key: "agent", label: "Agent / Business Affairs", color: HUE.sand },
+];
+
+export const LEGAL_SPECIALTIES = [
+  "Production Legal", "IP & Copyright", "Contracts", "Employment",
+  "Corporate", "Litigation", "Immigration / Visas", "Music Clearance",
+];
+
 export const CONTRACT_KINDS = [
   { key: "nda", label: "NDA" },
   { key: "deal", label: "Deal Contract" },
@@ -577,6 +625,22 @@ export function normalizeData(raw) {
       })),
     })),
     emails,
+    events: ensureArray(input.events).map((e) => ({
+      kind: "panel", status: "invited", name: "", venue: "", location: "",
+      projectId: null, companyId: null, notes: "", url: "", cost: "",
+      ...e, id: e.id || uid(), speakerIds: ensureArray(e.speakerIds),
+    })),
+    press: ensureArray(input.press).map((r) => ({
+      kind: "outlet", status: "pitching", title: "", outlet: "", journalist: "",
+      email: "", url: "", projectId: null, ownerId: null, notes: "",
+      publishedAt: null, scheduledFor: null,
+      ...r, id: r.id || uid(),
+    })),
+    legal: ensureArray(input.legal).map((l) => ({
+      kind: "attorney", name: "", firm: "", specialty: "", email: "", phone: "",
+      companyId: null, projectId: null, rate: "", notes: "", preferred: false,
+      ...l, id: l.id || uid(),
+    })),
     talent: ensureArray(input.talent).map((t) => ({
       ...makeTalent({}),
       ...t,

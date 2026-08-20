@@ -163,7 +163,9 @@ export function AvatarStack({ names, size = 24, max = 4 }) {
 export function InlineText({ value, onCommit, placeholder = "—", multiline, style, mono, markdown }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
-  useEffect(() => { setDraft(value || ""); }, [value]);
+  // Take the incoming value only while idle. On a shared board someone else's edit
+  // can land mid-sentence, and resyncing then would wipe what you are typing.
+  useEffect(() => { if (!editing) setDraft(value || ""); }, [value, editing]);
 
   const commit = () => {
     setEditing(false);
