@@ -11,7 +11,12 @@
       "routing": [
         {
           "group": "production-tracking",
-          "paths": ["/production", "/production/:path*"]
+          "paths": [
+            "/production",
+            "/production/:path*",
+            "/__clerk",
+            "/__clerk/:path*"
+          ]
         }
       ]
     }
