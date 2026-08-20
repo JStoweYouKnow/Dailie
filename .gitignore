@@ -13,6 +13,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Sentry build-plugin token (never commit)
+.env.sentry-build-plugin
+
 # Editor & OS files
 .DS_Store
 .vscode
