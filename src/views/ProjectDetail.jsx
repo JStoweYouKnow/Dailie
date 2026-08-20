@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
@@ -53,6 +53,32 @@ function ImageHeader({ project, onChange }) {
       {error && <div style={{ fontSize: 11, color: "var(--red)", marginTop: 6 }}>{error}</div>}
     </div>
   );
+}
+
+
+function codeFromTitle(title) {
+  const words = String(title || "")
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && !/^(the|a|an)$/i.test(w));
+  if (!words.length) return "PROJ";
+  if (words.length === 1) {
+    const cleaned = words[0].replace(/[^a-zA-Z0-9]/g, "").slice(0, 4).toUpperCase();
+    return cleaned || "PROJ";
+  }
+  return words.slice(0, 4).map((w) => w[0]).join("").toUpperCase();
+}
+
+function sendToProductionHref(project) {
+  const params = new URLSearchParams({
+    from: "dailie",
+    dailieProjectId: String(project.id),
+    name: project.title || "",
+    description: project.description || "",
+    code: codeFromTitle(project.title || ""),
+    return: "1",
+  });
+  return `/production/projects?${params.toString()}`;
 }
 
 function Row({ label, children }) {
@@ -242,6 +268,42 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             onChange={(e) => setNewFieldName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addCustomField(); }} />
           <button className="md-btn" onClick={addCustomField}><Plus size={13} /> Add field</button>
         </div>
+      </Section>
+
+
+      <Section title="PRODUCTION TRACKING">
+        <p style={{ fontSize: 12, color: "var(--dim)", marginBottom: 12, lineHeight: 1.45 }}>
+          Interface is the studio shot / task / review tracker. Dailie stays the slate for deals, meetings, and paperwork.
+        </p>
+        {project.interfaceProjectId ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <a className="md-btn" href={`/production/projects/${project.interfaceProjectId}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+              <Clapperboard size={13} /> Open in Interface
+            </a>
+            <span className="md-mono" style={{ fontSize: 10, color: "var(--dim-2)" }}>{project.interfaceProjectId}</span>
+            <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }}
+              onClick={() => patchProject({ interfaceProjectId: "" }, "Unlinked Interface project")}>
+              Unlink
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <a className="md-btn" href={sendToProductionHref(project)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+              <ExternalLink size={13} /> Send to production
+            </a>
+            <span style={{ fontSize: 11, color: "var(--dim)" }}>Creates a linked Interface project (producer role).</span>
+          </div>
+        )}
+        <Row label="INTERFACE ID">
+          <InlineText
+            value={project.interfaceProjectId || ""}
+            mono
+            placeholder="Paste Interface project id to link an existing show"
+            onCommit={(v) => patchProject({ interfaceProjectId: v.trim() }, v.trim() ? `Linked Interface ${v.trim()}` : "Cleared Interface link")}
+          />
+        </Row>
       </Section>
 
       <Section title={`TASKS · ${tasks.filter((t) => t.status !== "done").length} OPEN`}>

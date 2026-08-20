@@ -263,7 +263,7 @@ function SharedBoardOrLocal() {
 }
 
 function Board({ store }) {
-  const { data, patch, add, currentUser, loading, saveError, reload, toast, showToast, linkAccount } = store;
+  const { data, patch, add, updateProject, currentUser, loading, saveError, reload, toast, showToast, linkAccount } = store;
 
   const [activeTab, setActiveTab] = useState("home");
   const [searchQuery, setSearchQuery] = useState("");
@@ -308,6 +308,37 @@ function Board({ store }) {
     document.documentElement.classList.toggle("light-theme", theme === "light");
     try { localStorage.setItem("dailie-theme-v1", theme); } catch (e) { /* private mode */ }
   }, [theme]);
+
+
+  // Deep links from Interface: /?dailieProject=…&interfaceProjectId=…
+  useEffect(() => {
+    if (loading || !data?.projects) return;
+    let params;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch (e) {
+      return;
+    }
+    const dailieId = params.get("dailieProject");
+    const interfaceId = (params.get("interfaceProjectId") || "").trim();
+    if (!dailieId) return;
+
+    const project = data.projects.find((p) => String(p.id) === String(dailieId));
+    if (!project) return;
+
+    if (interfaceId && project.interfaceProjectId !== interfaceId) {
+      updateProject(project.id, { interfaceProjectId: interfaceId }, `Linked Interface ${interfaceId}`);
+    }
+
+    setActiveTab("projects");
+    setDetailProject(project);
+
+    params.delete("dailieProject");
+    params.delete("interfaceProjectId");
+    const next = params.toString();
+    const url = next ? `${window.location.pathname}?${next}` : window.location.pathname;
+    window.history.replaceState({}, "", url);
+  }, [loading, data && data.projects, updateProject]);
 
   useEffect(() => {
     const onKey = (e) => {
