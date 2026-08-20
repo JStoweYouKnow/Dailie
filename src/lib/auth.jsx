@@ -119,6 +119,12 @@ export function AuthGate({ children }) {
 }
 
 /** The signed-in account, flattened to what the board needs. Null when auth is off. */
+export function useClerkUser() {
+  if (!AUTH_ENABLED) return { enabled: false, isLoaded: true, user: null };
+  const { isLoaded, user } = useUser();
+  return { enabled: true, isLoaded, user: user || null };
+}
+
 export function useAccount() {
   if (!AUTH_ENABLED) return { enabled: false, ready: true, account: null };
   // Safe: AUTH_ENABLED is fixed for the lifetime of the bundle, so the hook order

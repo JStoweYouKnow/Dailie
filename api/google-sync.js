@@ -27,23 +27,42 @@ function fail(message, status = 400, extra = {}) {
   return Response.json({ error: message, ...extra }, { status });
 }
 
+function normalizeScopes(scopes) {
+  if (Array.isArray(scopes)) return scopes.filter(Boolean);
+  if (typeof scopes === "string") return scopes.split(/[\s,]+/).filter(Boolean);
+  return [];
+}
+
 async function googleToken(clerk, userId) {
-  let tokens;
-  try {
-    const res = await clerk.users.getUserOauthAccessToken(userId, "google");
-    tokens = Array.isArray(res) ? res : res && res.data;
-  } catch (err) {
-    return { error: "Could not read your Google connection from Clerk." };
+  // Clerk's docs and SDK have used both ids; try each rather than failing closed.
+  const providers = ["oauth_google", "google"];
+  for (const provider of providers) {
+    try {
+      const res = await clerk.users.getUserOauthAccessToken(userId, provider);
+      const tokens = Array.isArray(res) ? res : res && res.data;
+      const entry = (tokens || [])[0];
+      if (entry && entry.token) {
+        return { token: entry.token, scopes: normalizeScopes(entry.scopes) };
+      }
+    } catch (err) {
+      const lastError = (err && err.message) || "";
+      if (/unprocessable|422/i.test(lastError)) {
+        return {
+          error: "Google needs you to reconnect so the calendar token can be refreshed.",
+          needsReauth: true,
+        };
+      }
+    }
   }
-  const entry = (tokens || [])[0];
-  if (!entry || !entry.token) {
-    return { error: "No Google account is connected. Sign in with Google, or connect it from your account settings." };
-  }
-  return { token: entry.token, scopes: entry.scopes || [] };
+  return {
+    error: "No Google account is connected. Sign in with Google, or connect it from your account settings.",
+    needsConnection: true,
+  };
 }
 
 function hasScope(scopes, needed) {
-  return (scopes || []).some((s) => s === needed || s.endsWith(needed.split("/").pop()));
+  const needle = needed.split("/").pop();
+  return normalizeScopes(scopes).some((s) => s === needed || s.endsWith(needle));
 }
 
 async function googleGet(url, token) {
@@ -143,42 +162,79 @@ function meetingLink(event) {
   return zoom ? zoom[0].replace(/[.,;)\]]+$/, "") : "";
 }
 
+function mapEvent(e, calendar) {
+  // All-day events carry a bare date. Parsing that as-is lands on UTC midnight,
+  // which reads as the previous day anywhere west of Greenwich — so pin it to
+  // midday, the same convention the board's own date fields use.
+  const timed = e.start && e.start.dateTime;
+  const allDay = e.start && e.start.date;
+  const date = timed
+    ? new Date(timed).getTime()
+    : allDay
+      ? new Date(`${allDay}T12:00:00`).getTime()
+      : Date.now();
+  const where = e.location ? `Where: ${e.location}` : "";
+  const calName = calendar && calendar.summary && calendar.id !== "primary" && !calendar.primary
+    ? calendar.summary
+    : "";
+  const people = attendeeLine(e);
+  return {
+    // Stable across syncs, so a repeated pull updates rather than duplicates.
+    // Primary keeps the original id so existing meetings are updated in place.
+    id: calendar && calendar.primary ? `gcal-${e.id}` : `gcal-${calendar && calendar.id}-${e.id}`,
+    title: e.summary,
+    date,
+    attendees: calName ? `${calName} · ${people}` : people,
+    notes: [where, e.description].filter(Boolean).join("\n\n").slice(0, 2000) || "Synced from Google Calendar",
+    meetingLink: meetingLink(e),
+    followUps: [],
+    projectId: null,
+  };
+}
+
+async function listCalendars(token) {
+  try {
+    const data = await googleGet(`${CALENDAR}/users/me/calendarList?maxResults=50`, token);
+    const items = (data.items || []).filter((c) => c.id && c.selected !== false);
+    if (items.length) return items;
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) throw err;
+  }
+  return [{ id: "primary", summary: "Primary", primary: true }];
+}
+
+async function eventsForCalendar(token, calendar, timeMin, timeMax) {
+  const data = await googleGet(
+    `${CALENDAR}/calendars/${encodeURIComponent(calendar.id)}/events?singleEvents=true&orderBy=startTime&maxResults=${MAX_EVENTS}` +
+      `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`,
+    token
+  );
+  return (data.items || [])
+    .filter((e) => e.status !== "cancelled" && e.summary)
+    .map((e) => mapEvent(e, calendar));
+}
+
 /** Calendar events, in the shape the Calendar and Meetings tabs already store. */
 async function syncCalendar(token) {
   const timeMin = new Date(Date.now() - 30 * 86400000).toISOString();
   const timeMax = new Date(Date.now() + 120 * 86400000).toISOString();
-  const data = await googleGet(
-    `${CALENDAR}/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=${MAX_EVENTS}` +
-      `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`,
-    token
+  const calendars = await listCalendars(token);
+  const pages = await Promise.all(
+    calendars.map(async (calendar) => {
+      try {
+        return await eventsForCalendar(token, calendar, timeMin, timeMax);
+      } catch (err) {
+        if (err.status === 401 || err.status === 403) throw err;
+        return [];
+      }
+    })
   );
-
-  return (data.items || [])
-    .filter((e) => e.status !== "cancelled" && e.summary)
-    .map((e) => {
-      // All-day events carry a bare date. Parsing that as-is lands on UTC midnight,
-      // which reads as the previous day anywhere west of Greenwich — so pin it to
-      // midday, the same convention the board's own date fields use.
-      const timed = e.start && e.start.dateTime;
-      const allDay = e.start && e.start.date;
-      const date = timed
-        ? new Date(timed).getTime()
-        : allDay
-          ? new Date(`${allDay}T12:00:00`).getTime()
-          : Date.now();
-      const where = e.location ? `Where: ${e.location}` : "";
-      return {
-        // Stable across syncs, so a repeated pull updates rather than duplicates.
-        id: `gcal-${e.id}`,
-        title: e.summary,
-        date,
-        attendees: attendeeLine(e),
-        notes: [where, e.description].filter(Boolean).join("\n\n").slice(0, 2000) || "Synced from Google Calendar",
-        meetingLink: meetingLink(e),
-        followUps: [],
-        projectId: null,
-      };
-    });
+  const seen = new Set();
+  return pages.flat().filter((m) => {
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
+  });
 }
 
 export async function POST(request) {
@@ -222,16 +278,22 @@ export async function POST(request) {
   } catch (err) { /* defaults below */ }
   const what = body.what === "gmail" ? "gmail" : "calendar";
 
-  const { token, scopes, error } = await googleToken(clerk, auth.userId);
-  if (error) return fail(error, 400, { needsConnection: true });
+  const { token, scopes, error, needsReauth, needsConnection } = await googleToken(clerk, auth.userId);
+  if (error) {
+    return fail(error, needsReauth ? 403 : 400, {
+      needsConnection: !!needsConnection,
+      needsReauth: !!needsReauth,
+      missingScope: needsReauth ? NEEDED[what] : undefined,
+    });
+  }
 
-  if (!hasScope(scopes, NEEDED[what])) {
+  // Empty scopes means Clerk did not tell us — try Google and reauth only if it refuses.
+  if (scopes.length && !hasScope(scopes, NEEDED[what])) {
     return fail(
-      `Your Google connection is missing the ${what === "gmail" ? "Gmail" : "Calendar"} permission. ` +
-        "Clerk's shared Google credentials only grant sign-in — add your own Google OAuth client with " +
-        `the ${NEEDED[what]} scope to enable syncing.`,
+      `Google has not granted ${what === "gmail" ? "Gmail" : "Calendar"} access yet. ` +
+        "You will be asked to allow it, then sync runs again.",
       403,
-      { missingScope: NEEDED[what], grantedScopes: scopes }
+      { missingScope: NEEDED[what], grantedScopes: scopes, needsReauth: true }
     );
   }
 
@@ -243,7 +305,18 @@ export async function POST(request) {
     const meetings = await syncCalendar(token);
     return Response.json({ what, meetings, count: meetings.length });
   } catch (err) {
-    const status = err.status === 401 || err.status === 403 ? 403 : 502;
-    return fail(err.message || "Google refused the request.", status);
+    const googleAuthFail = err.status === 401 || err.status === 403;
+    const apiDisabled = /has not been used in project|is disabled|accessNotConfigured/i.test(err.message || "");
+    if (apiDisabled) {
+      return fail(
+        "The Google Calendar API is not enabled on the OAuth client that Clerk uses. Enable it in Google Cloud Console, then reconnect Google.",
+        403
+      );
+    }
+    return fail(
+      err.message || "Google refused the request.",
+      googleAuthFail ? 403 : 502,
+      googleAuthFail ? { needsReauth: true, missingScope: NEEDED[what] } : {}
+    );
   }
 }

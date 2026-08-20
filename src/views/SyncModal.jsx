@@ -1,21 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw, Plus, X, Calendar as CalendarIcon, Trash2, CheckCircle2 } from "lucide-react";
 import { useStore } from "../lib/store";
 import { parseSyncPayload, isICalendarFeed } from "../calendarSync";
 import { makeTask } from "../lib/model";
 import { formatShort, formatClock, relativeDays, tsFromDateInput } from "../lib/format";
 import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
-import { syncFromGoogle } from "../lib/googleSync";
-import { useAccount, useAuthToken } from "../lib/auth";
+import { syncFromGoogle, requestGoogleAccess, googleHasScope, GOOGLE_CALENDAR_SCOPE, shouldResumeGoogleCalendarSync, markGoogleCalendarResumeStarted, clearGoogleCalendarResume } from "../lib/googleSync";
+import { useAccount, useAuthToken, useClerkUser } from "../lib/auth";
 
 /**
- * Google does not expose a calendar API to a browser app without an OAuth backend, but
- * every Google Calendar publishes a private iCal address. Subscribing to that address
- * is a real connection: it refreshes on demand and survives reloads.
+ * Primary path is OAuth ("Sync my Google Calendar"). Secret iCal feeds are a fallback
+ * for calendars that are not on the signed-in Google account.
  */
 export default function SyncModal({ onClose }) {
   const { data, patch, add, updateSettings, currentUser, showToast } = useStore();
   const { enabled: authEnabled, account } = useAccount();
+  const { user, isLoaded: userLoaded } = useClerkUser();
   const getToken = useAuthToken();
   const [googleState, setGoogleState] = useState("idle");
   const [googleError, setGoogleError] = useState("");
@@ -47,7 +47,7 @@ export default function SyncModal({ onClose }) {
     return { added, updated };
   };
 
-  const syncFeed = async (feed) => {
+  const syncFeed = async (feed, { persist = true } = {}) => {
     setBusyFeed(feed.id);
     setError("");
     try {
@@ -62,25 +62,80 @@ export default function SyncModal({ onClose }) {
       }
       const parsed = parseSyncPayload(text);
       const { added, updated } = mergeMeetings(parsed.meetings);
-      updateSettings({
-        calendarFeeds: feeds.map((f) => (f.id === feed.id ? { ...f, lastSyncedAt: Date.now(), eventCount: parsed.meetings.length } : f)),
-      });
+      if (persist) {
+        updateSettings({
+          calendarFeeds: feeds.map((f) => (f.id === feed.id ? { ...f, lastSyncedAt: Date.now(), eventCount: parsed.meetings.length } : f)),
+        });
+      }
       showToast(`${feed.label}: ${added} new, ${updated} updated.`, "success");
+      setBusyFeed(null);
+      return { eventCount: parsed.meetings.length };
     } catch (err) {
       setError(err.message || "Could not sync that calendar.");
+      setBusyFeed(null);
+      return null;
     }
-    setBusyFeed(null);
   };
 
   const addFeed = async () => {
     const url = feedUrl.trim();
     if (!url) return;
     const feed = { id: `feed-${Date.now()}`, label: feedLabel.trim() || "Google Calendar", url, lastSyncedAt: null };
-    updateSettings({ calendarFeeds: [...feeds, feed] });
+    const synced = await syncFeed(feed, { persist: false });
+    if (!synced) return;
+    updateSettings({
+      calendarFeeds: [...feeds, { ...feed, lastSyncedAt: Date.now(), eventCount: synced.eventCount }],
+    });
     setFeedUrl("");
     setFeedLabel("");
-    await syncFeed(feed);
   };
+
+  const runGoogleSync = async ({ afterRedirect = false } = {}) => {
+    setGoogleState("running");
+    setGoogleError("");
+    try {
+      if (user && !googleHasScope(user, GOOGLE_CALENDAR_SCOPE)) {
+        if (afterRedirect) {
+          clearGoogleCalendarResume();
+          setGoogleError(
+            "Google still did not grant Calendar access. In Clerk, switch the Google connection to your own OAuth client, enable the Google Calendar API, add the calendar.readonly scope, then reconnect Google once."
+          );
+          setGoogleState("idle");
+          return;
+        }
+        const access = await requestGoogleAccess(user, [GOOGLE_CALENDAR_SCOPE]);
+        if (access.redirecting) return;
+      }
+      const result = await syncFromGoogle("calendar", { getToken });
+      clearGoogleCalendarResume();
+      const { added, updated } = mergeMeetings(result.meetings || []);
+      showToast(`Google Calendar: ${added} new, ${updated} updated.`, "success");
+      setGoogleState("idle");
+    } catch (err) {
+      if (!afterRedirect && user && (err.needsReauth || err.missingScope)) {
+        try {
+          const access = await requestGoogleAccess(user, [GOOGLE_CALENDAR_SCOPE], { force: true });
+          if (access.redirecting) return;
+        } catch (reauthErr) {
+          clearGoogleCalendarResume();
+          setGoogleError(reauthErr.message || err.message || "Sync failed.");
+          setGoogleState("idle");
+          return;
+        }
+      }
+      clearGoogleCalendarResume();
+      setGoogleError(err.message || "Sync failed.");
+      setGoogleState("idle");
+    }
+  };
+
+  useEffect(() => {
+    if (!userLoaded || !shouldResumeGoogleCalendarSync()) return;
+    markGoogleCalendarResumeStarted();
+    runGoogleSync({ afterRedirect: true });
+    // Intentionally once after returning from Google consent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLoaded, user && user.id]);
 
   const removeFeed = (id) => updateSettings({ calendarFeeds: feeds.filter((f) => f.id !== id) });
 
@@ -120,23 +175,12 @@ export default function SyncModal({ onClose }) {
       {authEnabled && (
         <Section title="YOUR GOOGLE CALENDAR">
           <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 12, lineHeight: 1.55 }}>
-            Pulls straight from the calendar of the account you signed in with
-            {account ? <> — <strong style={{ color: "var(--bone)" }}>{account.email}</strong></> : null}. No feed URL, no pasting.
+            Pulls every calendar on the account you signed in with
+            {account ? <> — <strong style={{ color: "var(--bone)" }}>{account.email}</strong></> : null},
+            including subscribed ones. Google will ask for Calendar access the first time.
           </div>
           <button className="md-btn md-btn-primary" disabled={googleState === "running"}
-            onClick={async () => {
-              setGoogleState("running");
-              setGoogleError("");
-              try {
-                const result = await syncFromGoogle("calendar", { getToken });
-                const { added, updated } = mergeMeetings(result.meetings || []);
-                showToast(`Google Calendar: ${added} new, ${updated} updated.`, "success");
-                setGoogleState("idle");
-              } catch (err) {
-                setGoogleError(err.message || "Sync failed.");
-                setGoogleState("idle");
-              }
-            }}>
+            onClick={() => runGoogleSync()}>
             <RefreshCw size={13} className={googleState === "running" ? "md-spin" : ""} />
             {googleState === "running" ? "Syncing…" : "Sync my Google Calendar"}
           </button>
@@ -149,8 +193,8 @@ export default function SyncModal({ onClose }) {
       <Section title="SUBSCRIBED CALENDARS">
         {feeds.length === 0 && (
           <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 12, lineHeight: 1.6 }}>
-            In Google Calendar open <strong style={{ color: "var(--bone)" }}>Settings → your calendar → Integrate calendar</strong> and copy the
-            <strong style={{ color: "var(--bone)" }}> Secret address in iCal format</strong>. Paste it below and Dailie keeps pulling from it.
+            Prefer <strong style={{ color: "var(--bone)" }}>Sync my Google Calendar</strong> above. A subscribed feed only works with the
+            <strong style={{ color: "var(--bone)" }}> Secret address in iCal format</strong> (Settings → the calendar → Integrate calendar), not a public or web URL.
           </div>
         )}
         {feeds.map((feed) => (

@@ -26,8 +26,9 @@ export default defineConfig({
       },
       release: { name: sentryRelease },
       errorHandler: (err) => {
+        // An invalid or expired SENTRY_AUTH_TOKEN must not fail production.
+        // Runtime error reporting still works from the DSN in the bundle.
         console.error("Sentry source map upload failed:", err);
-        throw err;
       },
     }),
   ],

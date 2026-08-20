@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
+import { GOOGLE_CALENDAR_RESUME_KEY } from "./lib/googleSync";
 import { SHARED_ENABLED, useSharedBoard } from "./lib/convexBoard";
 import SharedBoundary from "./lib/SharedBoundary";
 import { normalizeData, staleFollowUps } from "./lib/model";
@@ -271,7 +272,9 @@ function Board({ store }) {
   const [detailProject, setDetailProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
-  const [showSync, setShowSync] = useState(false);
+  const [showSync, setShowSync] = useState(() => {
+    try { return sessionStorage.getItem(GOOGLE_CALENDAR_RESUME_KEY) === "1"; } catch (e) { return false; }
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
