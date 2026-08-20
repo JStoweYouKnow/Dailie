@@ -59,7 +59,6 @@ const NAV = [
       { key: "calendar", label: "Calendar", icon: CalendarIcon },
       { key: "meetings", label: "Meetings", icon: Users },
       { key: "calls", label: "Calls", icon: Mic },
-      { key: "events", label: "Events", icon: Mic2 },
     ],
   },
   {
@@ -76,6 +75,7 @@ const NAV = [
   {
     group: "Business",
     items: [
+      { key: "events", label: "Events", icon: Mic2 },
       { key: "press", label: "Press & PR", icon: Megaphone },
       { key: "contracts", label: "NDAs & Contracts", icon: FileText },
       { key: "legal", label: "Legal", icon: Scale },

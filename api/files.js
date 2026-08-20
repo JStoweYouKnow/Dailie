@@ -1,9 +1,11 @@
-import { put, get, del, issueSignedToken, presignUrl } from "@vercel/blob";
+import { del } from "@vercel/blob";
+import { putOnStore, getFromStore, redirectToBlob } from "../lib/blobStore.js";
 
-// Attachments are private: NDAs, deal contracts and invoices must not be reachable
-// from the blob CDN by anyone holding the URL. This route is the only read path.
+// Reads go through this route so the rest of the app can keep using /api/files.
+// The connected store is public (it cannot be switched to private after creation),
+// so uploads must match that access mode — see lib/blobStore.js.
 const KINDS = new Set(["documents", "images", "recordings", "video"]);
-const PATH_RE = /^(documents|images|recordings|video)\/[A-Za-z0-9._-]+$/;
+const PATH_RE = /^(documents|images|recordings|video)\/[A-Za-z0-9._~%-]+$/;
 const MAX_BYTES = 25 * 1024 * 1024;
 
 function extensionFor(name, contentType) {
@@ -40,35 +42,15 @@ export async function POST(request) {
   const ext = extensionFor(url.searchParams.get("name"), contentType);
 
   try {
-    const result = await put(`${kind}/${crypto.randomUUID()}.${ext}`, body, { access: "private", contentType });
-    return Response.json({ path: result.pathname, size: body.byteLength, contentType });
+    const result = await putOnStore(`${kind}/${crypto.randomUUID()}.${ext}`, body, { contentType, addRandomSuffix: true });
+    return Response.json({ path: result.pathname, url: result.url || "", size: body.byteLength, contentType });
   } catch (err) {
     console.error("blob upload failed", err);
-    return Response.json({ error: "Could not store the file." }, { status: 502 });
+    const detail = err && err.message ? String(err.message) : "";
+    return Response.json({
+      error: detail && !/bloberror/i.test(detail) ? detail : "Could not store the file.",
+    }, { status: 502 });
   }
-}
-
-// A short-lived presigned URL, so the browser talks to blob storage directly.
-const SIGNED_URL_TTL_MS = 60 * 60 * 1000;
-
-/**
- * Redirecting beats streaming for anything you scrub through. Piping a call video
- * back through a function gives the player no byte-range support, so seeking to a
- * transcript timestamp silently fails; blob storage handles ranges natively, and a
- * 200 MB recording never has to pass through the function at all.
- */
-async function redirectToBlob(path) {
-  const validUntil = Date.now() + SIGNED_URL_TTL_MS;
-  const token = await issueSignedToken({ pathname: path, operations: ["get"], validUntil });
-  const { presignedUrl } = await presignUrl(token, { operation: "get", pathname: path, access: "private", validUntil });
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: presignedUrl,
-      // The redirect target is time-limited, so the redirect itself must not be cached.
-      "Cache-Control": "private, no-store",
-    },
-  });
 }
 
 export async function GET(request) {
@@ -86,7 +68,7 @@ export async function GET(request) {
 
   let result;
   try {
-    result = await get(path, { access: "private" });
+    result = await getFromStore(path);
   } catch (err) {
     console.error("blob read failed", err);
     return Response.json({ error: "Could not read the attachment." }, { status: 502 });

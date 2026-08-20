@@ -2,20 +2,30 @@ import { useMemo, useState } from "react";
 import { Plus, Megaphone, ExternalLink, Paperclip } from "lucide-react";
 import { useStore } from "../lib/store";
 import { PRESS_KINDS, PRESS_STATUSES, lookupColor } from "../lib/model";
+import { listAttachments, PRESS_FILE_ACCEPT } from "../lib/files";
 
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Section,
   InlineText, InlineSelect, InlineDate, ModalShell, Field, ConfirmButton,
-  FileAttachButton, AttachmentRow,
+  AttachmentList,
 } from "../ui/kit";
+
+function addAttachment(row, file) {
+  return { attachments: [...listAttachments(row), file] };
+}
+
+function removeAttachment(row, item) {
+  return { attachments: listAttachments(row).filter((a) => a.id !== item.id) };
+}
 
 function NewPressModal({ onClose, defaultKind }) {
   const { data, add, currentUser } = useStore();
   const [form, setForm] = useState({
     kind: defaultKind && defaultKind !== "all" ? defaultKind : "outlet",
-    title: "", outlet: "", journalist: "", email: "", url: "", status: "pitching", projectId: "",
+    title: "", outlet: "", journalist: "", email: "", url: "", status: "pitching",
+    projectId: "", notes: "",
   });
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = () => {
@@ -23,12 +33,12 @@ function NewPressModal({ onClose, defaultKind }) {
     add("press", {
       ...form,
       title: form.title.trim() || form.outlet.trim(),
+      notes: form.notes.trim(),
       projectId: form.projectId || null,
       ownerId: (currentUser && currentUser.id) || null,
-      notes: "",
       publishedAt: null,
       scheduledFor: null,
-      ...(file || {}),
+      attachments: files,
     });
     onClose();
   };
@@ -60,11 +70,18 @@ function NewPressModal({ onClose, defaultKind }) {
           {data.projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
         </select>
       </Field>
-      <Field label="ATTACHMENT" hint="Press kit, release copy, approved stills.">
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FileAttachButton kind="documents" label="Attach a file" accept=".pdf,.doc,.docx,.zip,.png,.jpg,.jpeg" onUploaded={setFile} />
-          {file && <AttachmentRow record={file} onRemove={() => setFile(null)} />}
-        </div>
+      <Field label="NOTES" hint="Pitch angle, embargo, who still needs to approve.">
+        <textarea className="md-textarea" rows={4} value={form.notes} onChange={set("notes")}
+          placeholder="What was said, what is next, embargo, talking points…" />
+      </Field>
+      <Field label="ATTACHMENTS" hint="Press kit, release copy, approved stills. PNG, JPG, PDF, Word, ZIP — more than one is fine.">
+        <AttachmentList
+          items={files}
+          accept={PRESS_FILE_ACCEPT}
+          label="Add files"
+          onAdd={(file) => setFiles((list) => [...list, file])}
+          onRemove={(item) => setFiles((list) => list.filter((f) => f.id !== item.id))}
+        />
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save</button>
     </ModalShell>
@@ -72,7 +89,7 @@ function NewPressModal({ onClose, defaultKind }) {
 }
 
 export default function PressView({ searchQuery }) {
-  const { data, update, remove, projectName } = useStore();
+  const { data, update, remove } = useStore();
   const [kindFilter, setKindFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
 
@@ -84,7 +101,8 @@ export default function PressView({ searchQuery }) {
       list = list.filter((r) =>
         (r.title || "").toLowerCase().includes(q) ||
         (r.outlet || "").toLowerCase().includes(q) ||
-        (r.journalist || "").toLowerCase().includes(q));
+        (r.journalist || "").toLowerCase().includes(q) ||
+        (r.notes || "").toLowerCase().includes(q));
     }
     return list.sort((a, b) => (b.publishedAt || b.scheduledFor || b.createdAt || 0) - (a.publishedAt || a.scheduledFor || a.createdAt || 0));
   }, [data.press, kindFilter, searchQuery]);
@@ -135,11 +153,18 @@ export default function PressView({ searchQuery }) {
       <InlineSelect value={r.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="—"
         onCommit={(v) => update("press", r.id, { projectId: v })} />
     ) },
-    { key: "file", label: "ATTACHMENT", stopClick: true, cellStyle: { minWidth: 180 }, render: (r) => (
-      r.fileName
-        ? <AttachmentRow record={r} onRemove={() => update("press", r.id, { fileName: "", filePath: "", fileUrl: "", fileSize: 0 })} />
-        : <FileAttachButton compact kind="documents" label="Attach" accept=".pdf,.doc,.docx,.zip,.png,.jpg,.jpeg"
-            onUploaded={(meta) => update("press", r.id, meta)} />
+    { key: "notes", label: "NOTES", cellStyle: { minWidth: 220, maxWidth: 360 }, stopClick: true, render: (r) => (
+      <InlineText value={r.notes} placeholder="Add note" onCommit={(v) => update("press", r.id, { notes: v })} />
+    ) },
+    { key: "file", label: "ATTACHMENTS", stopClick: true, cellStyle: { minWidth: 220, maxWidth: 320 }, render: (r) => (
+      <AttachmentList
+        record={r}
+        compact
+        accept={PRESS_FILE_ACCEPT}
+        label="Add file"
+        onAdd={(file) => update("press", r.id, (row) => addAttachment(row, file))}
+        onRemove={(item) => update("press", r.id, (row) => removeAttachment(row, item))}
+      />
     ) },
     { key: "del", label: "", stopClick: true, render: (r) => <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("press", r.id)} /> },
   ];
@@ -160,12 +185,22 @@ export default function PressView({ searchQuery }) {
       {kits.length > 0 && (
         <Section title="PRESS KIT">
           {kits.map((k) => (
-            <div key={k.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", border: "1px solid var(--rule)", borderRadius: 10, marginBottom: 8 }}>
-              <Paperclip size={14} color="var(--accent)" />
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{k.title}</span>
-              {k.fileName
-                ? <AttachmentRow record={k} onRemove={() => update("press", k.id, { fileName: "", filePath: "", fileUrl: "", fileSize: 0 })} />
-                : <FileAttachButton compact kind="documents" label="Upload kit" onUploaded={(meta) => update("press", k.id, meta)} />}
+            <div key={k.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 12px", border: "1px solid var(--rule)", borderRadius: 10, marginBottom: 8 }}>
+              <Paperclip size={14} color="var(--accent)" style={{ marginTop: 4, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{k.title}</span>
+                {k.notes ? <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 4 }}>{k.notes}</div> : null}
+                <div style={{ marginTop: 8 }}>
+                  <AttachmentList
+                    record={k}
+                    compact
+                    accept={PRESS_FILE_ACCEPT}
+                    label="Add to kit"
+                    onAdd={(file) => update("press", k.id, (row) => addAttachment(row, file))}
+                    onRemove={(item) => update("press", k.id, (row) => removeAttachment(row, item))}
+                  />
+                </div>
+              </div>
             </div>
           ))}
         </Section>

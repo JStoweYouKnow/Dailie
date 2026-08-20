@@ -176,6 +176,8 @@ body {
   font-family: var(--font-display);
   font-size: 13px;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   transition: border-color 0.2s var(--ease), outline 0.2s var(--ease);
 }
 

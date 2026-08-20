@@ -1,5 +1,5 @@
 import { transcribe, generateText, Output } from "ai";
-import { put } from "@vercel/blob";
+import { putOnStore } from "../lib/blobStore.js";
 import { z } from "zod";
 
 // Duration is set in vercel.json — the bare `maxDuration` export is App Router only.
@@ -158,8 +158,7 @@ export async function POST(request) {
   if (process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_OIDC_TOKEN) {
     try {
       const contentType = request.headers.get("content-type") || "audio/webm";
-      const result = await put(`recordings/${crypto.randomUUID()}.webm`, audio, {
-        access: "private",
+      const result = await putOnStore(`recordings/${crypto.randomUUID()}.webm`, audio, {
         contentType,
       });
       audioPath = result.pathname;

@@ -1,4 +1,5 @@
 import { handleUpload } from "@vercel/blob/client";
+import { clientUploadAccess } from "../lib/blobStore.js";
 
 /**
  * Issues short-lived client tokens so the browser uploads straight to blob storage.
@@ -13,8 +14,9 @@ const MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const CONTENT_TYPES = [
   "video/webm", "video/mp4",
   "audio/webm", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-m4a",
-  "image/png", "image/jpeg", "image/webp", "image/gif",
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/heic", "image/heif",
   "application/pdf",
+  "application/zip", "application/x-zip-compressed",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/octet-stream",
@@ -44,7 +46,7 @@ export async function POST(request) {
           throw new Error("That upload path is not allowed.");
         }
         return {
-          access: "private",
+          access: clientUploadAccess(),
           allowedContentTypes: CONTENT_TYPES,
           maximumSizeInBytes: MAX_BYTES,
           addRandomSuffix: true,

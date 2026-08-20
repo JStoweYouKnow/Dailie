@@ -3,7 +3,7 @@ import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, G
 import { initials, colorForName, dateInputValue, tsFromDateInput } from "../lib/format";
 import { looksLikeMarkdown } from "../lib/textFormats";
 import Markdown from "./Markdown";
-import { uploadFile, formatBytes, fileSrc } from "../lib/files";
+import { uploadFile, formatBytes, fileSrc, kindForFile, asAttachment, listAttachments, PRESS_FILE_ACCEPT } from "../lib/files";
 
 export function Stat({ label, value, accent, onClick }) {
   return (
@@ -94,9 +94,10 @@ export function ViewHeader({ count, label, children }) {
 export function Badge({ label, color, subtle, icon, style, solid }) {
   const hue = color || "var(--dim)";
   return (
-    <span className="md-mono" style={{
+    <span className="md-mono" title={typeof label === "string" ? label : undefined} style={{
       display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 600,
       padding: solid ? "3px 9px" : "2px 0", borderRadius: 100, whiteSpace: "nowrap",
+      maxWidth: "100%", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
       background: solid ? `${hue}22` : "transparent",
       color: subtle ? "var(--dim)" : hue,
       border: solid ? `1px solid ${hue}55` : "none",
@@ -106,7 +107,7 @@ export function Badge({ label, color, subtle, icon, style, solid }) {
       {!icon && !subtle && color && (
         <span style={{ width: 6, height: 6, borderRadius: 2, background: hue, flexShrink: 0 }} />
       )}
-      {label}
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
     </span>
   );
 }
@@ -223,18 +224,23 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, st
 }
 
 export function InlineSelect({ value, options, onCommit, placeholder = "—", color }) {
+  const selected = options.find((o) => o.key === value || String(o.key) === String(value));
+  const label = selected ? selected.label : placeholder;
   return (
     <select
       className="md-select"
       value={value == null ? "" : value}
       onChange={(e) => onCommit(e.target.value || null)}
       onClick={(e) => e.stopPropagation()}
-      // No border until you reach for it — a grid of outlined dropdowns is what made
-      // the tables feel like a form rather than a list.
+      title={typeof label === "string" ? label : undefined}
+      // Stay inside the cell: native selects size to the selected option, which is
+      // how long project names used to spill into the next field.
       style={{
-        padding: "4px 7px", fontSize: 12, width: "auto", minWidth: 84, cursor: "pointer",
+        padding: "4px 22px 4px 7px", fontSize: 12, display: "block",
+        width: "100%", maxWidth: "100%", minWidth: 0, cursor: "pointer",
         background: "transparent", border: "1px solid transparent", borderRadius: 6,
         color: color || "var(--bone)", fontWeight: 500,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
       }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--rule)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
@@ -515,7 +521,7 @@ export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAd
                 <div key={item.id} draggable
                   onDragStart={(e) => startDrag(e, item.id)}
                   onDragEnd={clearDrag}
-                  style={{ opacity: dragId === item.id ? 0.4 : 1, cursor: "grab" }}>
+                  style={{ opacity: dragId === item.id ? 0.4 : 1, cursor: "grab", minWidth: 0, overflow: "hidden" }}>
                   {renderCard(item)}
                 </div>
               ))}
@@ -559,23 +565,27 @@ export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAd
  * Attachments
  * ------------------------------------------------------------------ */
 
-export function FileAttachButton({ onUploaded, kind = "documents", label = "Attach file", accept, compact }) {
+export function FileAttachButton({ onUploaded, kind = "documents", label = "Attach file", accept, compact, multiple }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const handle = async (e) => {
-    const file = e.target.files && e.target.files[0];
+    const files = Array.from((e.target.files) || []);
     e.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
     setBusy(true);
     setError("");
-    try {
-      const meta = await uploadFile(file, kind);
-      onUploaded(meta);
-    } catch (err) {
-      setError(err.message || "Upload failed.");
+    const errors = [];
+    for (const file of files) {
+      try {
+        const meta = await uploadFile(file, kindForFile(file, kind));
+        onUploaded(meta);
+      } catch (err) {
+        errors.push(files.length > 1 ? `${file.name}: ${err.message || "Upload failed."}` : (err.message || "Upload failed."));
+      }
     }
+    if (errors.length) setError(errors.join(" "));
     setBusy(false);
   };
 
@@ -585,8 +595,8 @@ export function FileAttachButton({ onUploaded, kind = "documents", label = "Atta
         style={{ border: "1px solid var(--rule)", padding: compact ? "3px 8px" : undefined, fontSize: compact ? 11 : 13 }}>
         <Upload size={compact ? 11 : 13} /> {busy ? "Uploading…" : label}
       </button>
-      <input ref={inputRef} type="file" accept={accept} onChange={handle} style={{ display: "none" }} />
-      {error && <span style={{ fontSize: 11, color: "var(--red)", maxWidth: 260 }}>{error}</span>}
+      <input ref={inputRef} type="file" accept={accept} multiple={multiple} onChange={handle} style={{ display: "none" }} />
+      {error && <span style={{ fontSize: 11, color: "var(--red)", maxWidth: 280 }}>{error}</span>}
     </span>
   );
 }
@@ -595,13 +605,26 @@ export function AttachmentRow({ record, onRemove }) {
   const src = fileSrc(record);
   if (!record || !record.fileName) return null;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 10px", background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8 }}>
-      <Paperclip size={13} color="var(--accent)" />
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 10px", background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8, minWidth: 0 }}>
+      <Paperclip size={13} color="var(--accent)" style={{ flexShrink: 0 }} />
       <a href={src} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "none", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {record.fileName}
       </a>
-      {record.fileSize ? <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{formatBytes(record.fileSize)}</span> : null}
-      {onRemove && <button className="md-btn md-btn-ghost" style={{ padding: 3 }} onClick={onRemove}><Trash2 size={12} /></button>}
+      {record.fileSize ? <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)", flexShrink: 0 }}>{formatBytes(record.fileSize)}</span> : null}
+      {onRemove && <button className="md-btn md-btn-ghost" style={{ padding: 3, flexShrink: 0 }} onClick={onRemove}><Trash2 size={12} /></button>}
+    </div>
+  );
+}
+
+export function AttachmentList({ record, items, onAdd, onRemove, kind = "documents", accept = PRESS_FILE_ACCEPT, label = "Attach files", compact }) {
+  const list = items || listAttachments(record);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+      {list.map((item) => (
+        <AttachmentRow key={item.id || item.filePath || item.fileName} record={item} onRemove={onRemove ? () => onRemove(item) : undefined} />
+      ))}
+      <FileAttachButton compact={compact} multiple kind={kind} label={label} accept={accept}
+        onUploaded={(meta) => onAdd(asAttachment(meta))} />
     </div>
   );
 }

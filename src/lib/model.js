@@ -630,12 +630,27 @@ export function normalizeData(raw) {
       projectId: null, companyId: null, notes: "", url: "", cost: "",
       ...e, id: e.id || uid(), speakerIds: ensureArray(e.speakerIds),
     })),
-    press: ensureArray(input.press).map((r) => ({
-      kind: "outlet", status: "pitching", title: "", outlet: "", journalist: "",
-      email: "", url: "", projectId: null, ownerId: null, notes: "",
-      publishedAt: null, scheduledFor: null,
-      ...r, id: r.id || uid(),
-    })),
+    press: ensureArray(input.press).map((r) => {
+      const id = r.id || uid();
+      const attachments = ensureArray(r.attachments).filter((a) => a && a.fileName);
+      if (!attachments.length && r.fileName) {
+        attachments.push({
+          id: `${id}-file`,
+          fileName: r.fileName,
+          filePath: r.filePath || "",
+          fileUrl: r.fileUrl || "",
+          fileSize: r.fileSize || 0,
+          fileType: r.fileType || "",
+          uploadedAt: r.uploadedAt || r.createdAt || Date.now(),
+        });
+      }
+      return {
+        kind: "outlet", status: "pitching", title: "", outlet: "", journalist: "",
+        email: "", url: "", projectId: null, ownerId: null, notes: "",
+        publishedAt: null, scheduledFor: null, attachments: [],
+        ...r, id, attachments,
+      };
+    }),
     legal: ensureArray(input.legal).map((l) => ({
       kind: "attorney", name: "", firm: "", specialty: "", email: "", phone: "",
       companyId: null, projectId: null, rate: "", notes: "", preferred: false,

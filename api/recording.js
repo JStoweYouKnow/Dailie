@@ -1,7 +1,7 @@
-import { get, issueSignedToken, presignUrl } from "@vercel/blob";
+import { getFromStore, redirectToBlob } from "../lib/blobStore.js";
 
-// Recordings are stored privately, so they are not reachable from the blob CDN
-// directly. This route is the only read path.
+// Recordings are read through this route. The connected blob store is public, so
+// signed private URLs are not available — see lib/blobStore.js.
 const RECORDING_PATH = /^recordings\/[A-Za-z0-9._-]+$/;
 
 export async function GET(request) {
@@ -16,17 +16,14 @@ export async function GET(request) {
   // Same reasoning as /api/files: a presigned redirect gives the player byte ranges,
   // which is what makes scrubbing and transcript seeking work.
   try {
-    const validUntil = Date.now() + 60 * 60 * 1000;
-    const token = await issueSignedToken({ pathname: path, operations: ["get"], validUntil });
-    const { presignedUrl } = await presignUrl(token, { operation: "get", pathname: path, access: "private", validUntil });
-    return new Response(null, { status: 302, headers: { Location: presignedUrl, "Cache-Control": "private, no-store" } });
+    return await redirectToBlob(path);
   } catch (err) {
     console.error("presign failed, streaming instead", err);
   }
 
   let result;
   try {
-    result = await get(path, { access: "private" });
+    result = await getFromStore(path);
   } catch (err) {
     console.error("blob read failed", err);
     return Response.json({ error: "Could not read the recording." }, { status: 502 });

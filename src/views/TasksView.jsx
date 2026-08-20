@@ -11,18 +11,26 @@ import {
 function TaskCard({ task, onOpen, memberName, projectName, onToggle }) {
   const overdue = task.dueDate && task.dueDate < Date.now() && task.status !== "done";
   return (
-    <div className="md-card" style={{ padding: 12, marginBottom: 10, cursor: "pointer" }} onClick={onOpen} role="button" tabIndex={0}
+    <div className="md-card" style={{ padding: 12, marginBottom: 10, cursor: "pointer", overflow: "hidden" }} onClick={onOpen} role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-        <button className="md-btn md-btn-ghost" style={{ padding: 0, marginTop: 1 }}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", minWidth: 0 }}>
+        <button className="md-btn md-btn-ghost" style={{ padding: 0, marginTop: 1, flexShrink: 0 }}
           onClick={(e) => { e.stopPropagation(); onToggle(); }}>
           {task.status === "done" ? <CheckSquare size={15} color="var(--sage)" /> : <Square size={15} color="var(--dim)" />}
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: task.status === "done" ? "var(--dim)" : "var(--bone)", textDecoration: task.status === "done" ? "line-through" : "none", lineHeight: 1.4 }}>
+          <div
+            title={task.title}
+            style={{
+              fontSize: 13, fontWeight: 600, lineHeight: 1.45, wordBreak: "break-word",
+              color: task.status === "done" ? "var(--dim)" : "var(--bone)",
+              textDecoration: task.status === "done" ? "line-through" : "none",
+              display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+            }}
+          >
             {task.title}
           </div>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8, alignItems: "center", minWidth: 0 }}>
             {task.projectId && <Badge label={projectName(task.projectId)} subtle />}
             {task.priority === "HIGH" && <Badge label="HIGH" color="var(--red)" />}
             {task.dueDate && <Badge label={formatShort(task.dueDate)} color={overdue ? "var(--red)" : undefined} subtle={!overdue} />}
@@ -34,7 +42,9 @@ function TaskCard({ task, onOpen, memberName, projectName, onToggle }) {
             )}
           </div>
         </div>
-        <AvatarStack names={(task.assigneeIds || []).map(memberName)} size={22} max={2} />
+        <div style={{ flexShrink: 0 }}>
+          <AvatarStack names={(task.assigneeIds || []).map(memberName)} size={22} max={2} />
+        </div>
       </div>
     </div>
   );
@@ -56,31 +66,31 @@ function TaskDetail({ task, onClose }) {
     <div className="md-overlay" onClick={onClose}>
       <div className="md-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
         <div style={{ padding: 20 }}>
-          <InlineText value={task.title} style={{ fontSize: 17, fontWeight: 700 }} onCommit={(v) => v.trim() && update("tasks", task.id, { title: v.trim() })} />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, margin: "18px 0" }}>
-            <div>
+          <InlineText value={task.title} style={{ fontSize: 17, fontWeight: 700, whiteSpace: "normal", overflow: "visible" }} onCommit={(v) => v.trim() && update("tasks", task.id, { title: v.trim() })} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))", gap: 12, margin: "18px 0" }}>
+            <div style={{ minWidth: 0 }}>
               <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>STATUS</div>
               <InlineSelect value={task.status} options={TASK_STATUSES} color={lookupColor(TASK_STATUSES, task.status)}
                 onCommit={(v) => update("tasks", task.id, { status: v, completedAt: v === "done" ? Date.now() : null })} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>ASSIGNEES</div>
               <MemberPicker team={data.team} selectedIds={task.assigneeIds || []} onChange={(ids) => update("tasks", task.id, { assigneeIds: ids })} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>DUE</div>
               <InlineDate value={task.dueDate} onCommit={(v) => update("tasks", task.id, { dueDate: v })} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>PRIORITY</div>
               <InlineSelect value={task.priority} options={PRIORITIES.map((p) => ({ key: p, label: p }))} onCommit={(v) => update("tasks", task.id, { priority: v })} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>PROJECT</div>
               <InlineSelect value={task.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="None"
                 onCommit={(v) => update("tasks", task.id, { projectId: v })} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>PERSON</div>
               <InlineSelect value={task.personId} options={data.people.map((p) => ({ key: p.id, label: p.name }))} placeholder="None"
                 onCommit={(v) => update("tasks", task.id, { personId: v })} />
@@ -240,7 +250,7 @@ export default function TasksView({ searchQuery }) {
         onCommit={(v) => update("tasks", t.id, { status: v, completedAt: v === "done" ? Date.now() : null })} />
     ) },
     { key: "due", label: "DUE", stopClick: true, render: (t) => <InlineDate value={t.dueDate} onCommit={(v) => update("tasks", t.id, { dueDate: v })} /> },
-    { key: "project", label: "PROJECT", stopClick: true, render: (t) => (
+    { key: "project", label: "PROJECT", stopClick: true, cellStyle: { maxWidth: 220 }, render: (t) => (
       <InlineSelect value={t.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="—"
         onCommit={(v) => update("tasks", t.id, { projectId: v })} />
     ) },

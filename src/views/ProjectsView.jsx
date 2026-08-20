@@ -30,8 +30,8 @@ function ProjectCard({ project, onOpen, memberName, companyName }) {
         <div style={{ height: 92, background: `var(--panel-raised) url(${image}) center/cover no-repeat` }} />
       )}
       <div style={{ padding: 13 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--bone)", lineHeight: 1.3 }}>{project.title}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6, minWidth: 0 }}>
+          <div title={project.title} style={{ fontSize: 14, fontWeight: 700, color: "var(--bone)", lineHeight: 1.35, minWidth: 0, wordBreak: "break-word", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{project.title}</div>
           {project.priority === "HIGH" && <Badge label="HIGH" color="var(--red)" />}
         </div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 9 }}>
