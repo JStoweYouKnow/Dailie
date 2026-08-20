@@ -4,6 +4,7 @@ import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
   CONTRACT_STATUSES, INVOICE_STATUSES, lookupLabel, lookupColor, makeTask,
+  projectOwnerIds, withProjectOwners,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile } from "../lib/files";
@@ -129,7 +130,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
     add("tasks", makeTask({
       title: newTask.trim(),
       projectId: project.id,
-      assigneeIds: project.ownerId ? [project.ownerId] : [],
+      assigneeIds: projectOwnerIds(project),
     }, currentUser && currentUser.id));
     setNewTask("");
     flashSave("saved");
@@ -211,16 +212,22 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
           <InlineSelect value={project.stage} options={STAGES} color={stageInfo(project.stage).color}
             onCommit={(v) => patchProject({ stage: v }, `Moved to ${stageInfo(v).label}`)} />
         </Row>
-        <Row label="OWNER">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {project.ownerId && <Avatar name={memberName(project.ownerId)} size={24} />}
-            <InlineSelect value={project.ownerId} options={data.team.map((m) => ({ key: m.id, label: m.name }))} placeholder="Unassigned"
-              onCommit={(v) => patchProject({ ownerId: v }, `Owner changed to ${memberName(v) || "unassigned"}`)} />
-          </div>
+        <Row label="OWNERS">
+          <MemberPicker
+            team={data.team}
+            selectedIds={projectOwnerIds(project)}
+            label="Assign owners"
+            onChange={(ids) => {
+              const next = withProjectOwners(ids);
+              const names = next.ownerIds.map(memberName).filter(Boolean);
+              const teamIds = (project.teamIds || []).filter((id) => !next.ownerIds.includes(id));
+              patchProject({ ...next, teamIds }, names.length ? `Owners: ${names.join(", ")}` : "Owners cleared");
+            }}
+          />
         </Row>
         <Row label="TEAM MEMBERS">
           <MemberPicker team={data.team} selectedIds={project.teamIds || []} label="Add team members"
-            onChange={(ids) => patchProject({ teamIds: ids }, "Team updated")} />
+            onChange={(ids) => patchProject({ teamIds: ids.filter((id) => !projectOwnerIds(project).includes(id)) }, "Team updated")} />
         </Row>
         <Row label="COMPANY">
           <InlineSelect value={project.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="No company"

@@ -4,24 +4,25 @@ import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES,
   PAYMENT_STATUSES, lookupLabel, lookupColor,
+  projectOwnerIds, withProjectOwners, isOnProject,
 } from "../lib/model";
 import { formatShort, uid } from "../lib/format";
 import { imageSrc } from "../lib/files";
 import {
   ViewHeader, FilterChips, EmptyState, DataTable, KanbanBoard, Badge, Avatar, AvatarStack,
-  InlineText, InlineSelect,
+  InlineText, InlineSelect, MemberPicker,
 } from "../ui/kit";
 
 /** Owner + every assigned team member — the set the MY PROJECTS filter matches against. */
 export function isMine(project, userId) {
-  if (!userId) return false;
-  return project.ownerId === userId || (project.teamIds || []).includes(userId);
+  return isOnProject(project, userId);
 }
 
 function ProjectCard({ project, onOpen, memberName, companyName }) {
   const type = recordTypeInfo(project.recordType);
   const image = imageSrc(project);
-  const teamNames = (project.teamIds || []).map(memberName).filter(Boolean);
+  const ownerNames = projectOwnerIds(project).map(memberName).filter(Boolean);
+  const teamNames = (project.teamIds || []).map(memberName).filter((n) => n && !ownerNames.includes(n));
   return (
     <div className="md-card" onClick={onOpen} role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
@@ -50,7 +51,7 @@ function ProjectCard({ project, onOpen, memberName, companyName }) {
           </div>
         )}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <AvatarStack names={[memberName(project.ownerId), ...teamNames].filter(Boolean)} size={22} max={3} />
+          <AvatarStack names={[...ownerNames, ...teamNames]} size={22} max={4} />
           <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{formatShort(project.updatedAt)}</span>
         </div>
       </div>
@@ -162,7 +163,8 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         p.title.toLowerCase().includes(q) ||
         (p.description || "").toLowerCase().includes(q) ||
         (p.nextStep || "").toLowerCase().includes(q) ||
-        memberName(p.ownerId).toLowerCase().includes(q));
+        memberName(p.ownerId).toLowerCase().includes(q) ||
+        projectOwnerIds(p).some((id) => memberName(id).toLowerCase().includes(q)));
     }
     return list;
   }, [data.projects, typeFilter, mineOnly, searchQuery, currentUser, memberName]);
@@ -205,11 +207,27 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     { key: "stage", label: "PRODUCTION STAGE", stopClick: true, render: (p) => (
       <InlineSelect value={p.stage} options={STAGES} color={stageInfo(p.stage).color} onCommit={(v) => moveToStage(p.id, v)} />
     ) },
-    { key: "owner", label: "OWNER", stopClick: true, render: (p) => (
-      <InlineSelect value={p.ownerId} options={data.team.map((m) => ({ key: m.id, label: m.name }))} placeholder="Unassigned"
-        onCommit={(v) => updateProject(p.id, { ownerId: v }, `Owner changed to ${memberName(v) || "unassigned"}`)} />
+    { key: "owner", label: "OWNERS", stopClick: true, cellStyle: { minWidth: 160 }, render: (p) => (
+      <MemberPicker
+        team={data.team}
+        selectedIds={projectOwnerIds(p)}
+        label="Assign owners"
+        onChange={(ids) => {
+          const next = withProjectOwners(ids);
+          const names = next.ownerIds.map(memberName).filter(Boolean);
+          const teamIds = (p.teamIds || []).filter((id) => !next.ownerIds.includes(id));
+          updateProject(p.id, { ...next, teamIds }, names.length ? `Owners: ${names.join(", ")}` : "Owners cleared");
+        }}
+      />
     ) },
-    { key: "team", label: "TEAM", render: (p) => <AvatarStack names={(p.teamIds || []).map(memberName)} size={22} /> },
+    { key: "team", label: "TEAM", stopClick: true, cellStyle: { minWidth: 160 }, render: (p) => (
+      <MemberPicker
+        team={data.team}
+        selectedIds={p.teamIds || []}
+        label="Assign team"
+        onChange={(ids) => updateProject(p.id, { teamIds: ids.filter((id) => !projectOwnerIds(p).includes(id)) }, "Team updated")}
+      />
+    ) },
     { key: "budget", label: "BUDGET / VALUE", stopClick: true, render: (p) => (
       <InlineText value={p.budget} mono placeholder="Add value" style={{ color: "var(--accent)", fontWeight: 700 }}
         onCommit={(v) => updateProject(p.id, { budget: v })} />

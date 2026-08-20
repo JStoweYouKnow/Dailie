@@ -4,7 +4,7 @@ import {
   ArrowRight, Mail, Clock,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import { staleFollowUps, alertsFor, recordTypeInfo, lookupColor, PAYMENT_STATUSES, lookupLabel } from "../lib/model";
+import { staleFollowUps, alertsFor, recordTypeInfo, lookupColor, PAYMENT_STATUSES, lookupLabel, isOnProject } from "../lib/model";
 import { formatShort, formatClock, formatDay, relativeDays, daysSince, DAY } from "../lib/format";
 import { imageSrc } from "../lib/files";
 import { Section, EmptyState, Badge, Avatar, AvatarStack, Stat } from "../ui/kit";
@@ -158,7 +158,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
 
   const myProjects = useMemo(() => {
     const id = currentUser && currentUser.id;
-    return data.projects.filter((p) => p.ownerId === id || (p.teamIds || []).includes(id));
+    return data.projects.filter((p) => isOnProject(p, id));
   }, [data.projects, currentUser]);
 
   const stale = useMemo(() => staleFollowUps(data), [data]);
@@ -188,7 +188,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
             <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenTab("projects")}>All projects <ArrowRight size={12} /></button>
           }>
             {myProjects.length === 0 ? (
-              <EmptyState title="Nothing assigned to you" subtitle="Projects where you are the owner or a team member show up here." />
+              <EmptyState title="Nothing assigned to you" subtitle="Projects where you are an owner or a team member show up here." />
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 }}>
                 {myProjects.map((p) => {

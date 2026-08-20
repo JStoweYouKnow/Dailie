@@ -54,6 +54,29 @@ export function recordTypeInfo(key) {
   return RECORD_TYPES.find((t) => t.key === key) || RECORD_TYPES[0];
 }
 
+/** Every owner on a project. `ownerId` is kept as the first owner for older records. */
+export function projectOwnerIds(project) {
+  if (!project) return [];
+  const listed = Array.isArray(project.ownerIds) ? project.ownerIds.filter(Boolean) : [];
+  if (listed.length) return [...new Set(listed)];
+  return project.ownerId ? [project.ownerId] : [];
+}
+
+export function withProjectOwners(ownerIds) {
+  const ids = [...new Set((ownerIds || []).filter(Boolean))];
+  return { ownerIds: ids, ownerId: ids[0] || null };
+}
+
+export function isProjectOwner(project, userId) {
+  return !!userId && projectOwnerIds(project).includes(userId);
+}
+
+/** Owner or assigned team member — what "My Projects" matches. */
+export function isOnProject(project, userId) {
+  if (!userId || !project) return false;
+  return isProjectOwner(project, userId) || (project.teamIds || []).includes(userId);
+}
+
 /** Default deal pipelines. Columns are editable per type and stored in data.pipelines. */
 export const DEFAULT_PIPELINES = {
   service: [
@@ -271,7 +294,7 @@ export const SEED_DATA = {
     {
       id: "proj-1", title: "The Obsidian Echo", recordType: "original",
       description: "Sci-fi psychological thriller centered around deep sea sonic research.",
-      stage: "packaging", pipelineStage: "pitch", ownerId: "u-1", teamIds: ["u-3"],
+      stage: "packaging", pipelineStage: "pitch", ownerId: "u-1", ownerIds: ["u-1"], teamIds: ["u-3"],
       imageUrl: "", companyId: "co-1", budget: "$14.5M", priority: "HIGH", studio: "A24 / Matriarch",
       nextStep: "Finalize lead attachment deal memo with agent", paymentStatus: "unpaid",
       startDate: now + 40 * DAY, createdAt: now - 14 * DAY, updatedAt: now - 2 * 3600000,
@@ -284,7 +307,7 @@ export const SEED_DATA = {
     {
       id: "proj-2", title: "Wilderness Tide", recordType: "service",
       description: "Feature documentary exploring wildlife migration along Pacific coastlines.",
-      stage: "production", pipelineStage: "production", ownerId: "u-2", teamIds: ["u-1"],
+      stage: "production", pipelineStage: "production", ownerId: "u-2", ownerIds: ["u-2"], teamIds: ["u-1"],
       imageUrl: "", companyId: "co-2", budget: "$4.2M", priority: "MEDIUM", studio: "National Geographic",
       nextStep: "Commence principal photography unit B in Alaska", paymentStatus: "partial",
       startDate: now - 5 * DAY, createdAt: now - 30 * DAY, updatedAt: now - 1 * DAY,
@@ -297,7 +320,7 @@ export const SEED_DATA = {
     {
       id: "proj-3", title: "Neon Horizon", recordType: "original",
       description: "Limited 6-episode cyberpunk noir drama for streaming.",
-      stage: "development", pipelineStage: "development", ownerId: "u-3", teamIds: [],
+      stage: "development", pipelineStage: "development", ownerId: "u-3", ownerIds: ["u-3"], teamIds: [],
       imageUrl: "", companyId: "co-3", budget: "$28.0M", priority: "HIGH", studio: "Netflix / Matriarch",
       nextStep: "Schedule pitch meeting with studio executive", paymentStatus: "na",
       createdAt: now - 5 * DAY, updatedAt: now - 5 * DAY,
@@ -478,6 +501,10 @@ function migratePeople(raw, companies, team) {
 function migrateProjects(raw, team, companies) {
   return ensureArray(raw.projects).map((p) => {
     const ownerId = p.ownerId || teamMemberIdByName(team, p.owner);
+    const ownerIds = [...new Set([
+      ...ensureArray(p.ownerIds),
+      ownerId,
+    ].filter(Boolean))];
     const company =
       companies.find((c) => c.id === p.companyId) ||
       (p.studio ? companies.find((c) => p.studio.toLowerCase().includes(c.name.toLowerCase())) : null);
@@ -489,7 +516,8 @@ function migrateProjects(raw, team, companies) {
       ...p,
       id: p.id || uid(),
       recordType,
-      ownerId: ownerId || (team[0] ? team[0].id : null),
+      ownerIds,
+      ownerId: ownerIds[0] || (team[0] ? team[0].id : null),
       teamIds: ensureArray(p.teamIds),
       companyId: company ? company.id : null,
       pipelineStage: p.pipelineStage || pipeline[0].key,

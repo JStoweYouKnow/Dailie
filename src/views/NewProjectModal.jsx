@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { useStore } from "../lib/store";
-import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, stageInfo } from "../lib/model";
-import { ModalShell, Field, FileAttachButton, AttachmentRow } from "../ui/kit";
+import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, withProjectOwners } from "../lib/model";
+import { ModalShell, Field, FileAttachButton, AttachmentRow, MemberPicker } from "../ui/kit";
 
 export default function NewProjectModal({ onClose, initialTitle = "", initialDesc = "", onCreated }) {
-  const { data, add, currentUser, showToast } = useStore();
+  const { data, add, currentUser, showToast, memberName } = useStore();
   const [form, setForm] = useState({
     title: initialTitle,
     description: initialDesc,
     recordType: "service",
     stage: STAGES[0].key,
     pipelineStage: "",
-    ownerId: (currentUser && currentUser.id) || "",
+    ownerIds: currentUser && currentUser.id ? [currentUser.id] : [],
+    teamIds: [],
     companyId: "",
     budget: "",
     priority: "HIGH",
@@ -26,14 +27,16 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
   const submit = () => {
     if (!form.title.trim()) { setError("Give the project a title."); return; }
     const now = Date.now();
+    const owners = withProjectOwners(form.ownerIds);
+    const ownerNames = (owners.ownerIds || []).map(memberName).filter(Boolean);
     const project = add("projects", {
       title: form.title.trim(),
       description: form.description.trim(),
       recordType: form.recordType,
       stage: form.stage,
       pipelineStage: form.pipelineStage || (pipeline[0] || {}).key,
-      ownerId: form.ownerId || null,
-      teamIds: [],
+      ...owners,
+      teamIds: (form.teamIds || []).filter((id) => !(owners.ownerIds || []).includes(id)),
       companyId: form.companyId || null,
       budget: form.budget.trim(),
       priority: form.priority,
@@ -44,7 +47,13 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
       customFields: {},
       createdAt: now,
       updatedAt: now,
-      history: [{ id: `h-${now}`, date: now, note: `Added to the board — ${recordTypeInfo(form.recordType).label}` }],
+      history: [{
+        id: `h-${now}`,
+        date: now,
+        note: ownerNames.length
+          ? `Added to the board — ${recordTypeInfo(form.recordType).label}. Owners: ${ownerNames.join(", ")}`
+          : `Added to the board — ${recordTypeInfo(form.recordType).label}`,
+      }],
     });
     showToast(`"${project.title}" saved.`, "success");
     if (onCreated) onCreated(project);
@@ -72,20 +81,28 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
           </select>
         </Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="OWNER">
-          <select className="md-select" value={form.ownerId} onChange={set("ownerId")}>
-            <option value="">Unassigned</option>
-            {data.team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </Field>
-        <Field label="COMPANY">
-          <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-            <option value="">No company</option>
-            {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-      </div>
+      <Field label="OWNERS" hint="Who is responsible. Pick one person or several — you can pass ownership around later.">
+        <MemberPicker
+          team={data.team}
+          selectedIds={form.ownerIds}
+          label="Assign owners"
+          onChange={(ids) => setForm((f) => ({ ...f, ownerIds: ids }))}
+        />
+      </Field>
+      <Field label="TEAM MEMBERS" hint="Everyone else working the project. They can be made owners later.">
+        <MemberPicker
+          team={data.team}
+          selectedIds={form.teamIds}
+          label="Assign team"
+          onChange={(ids) => setForm((f) => ({ ...f, teamIds: ids }))}
+        />
+      </Field>
+      <Field label="COMPANY">
+        <select className="md-select" value={form.companyId} onChange={set("companyId")}>
+          <option value="">No company</option>
+          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </Field>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="BUDGET / VALUE"><input className="md-input" value={form.budget} onChange={set("budget")} placeholder="e.g. $12.5M" /></Field>
         <Field label="PRIORITY">
