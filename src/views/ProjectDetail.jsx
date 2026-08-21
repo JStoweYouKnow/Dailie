@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
@@ -7,7 +7,7 @@ import {
   projectOwnerIds, withProjectOwners,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
-import { imageSrc, uploadFile } from "../lib/files";
+import { imageSrc, uploadFile, deleteFile } from "../lib/files";
 import {
   ModalShell, Field, Section, Badge, InlineText, InlineSelect, MemberPicker, ConfirmButton, Avatar,
 } from "../ui/kit";
@@ -26,11 +26,35 @@ function ImageHeader({ project, onChange }) {
     setError("");
     try {
       const meta = await uploadFile(file, "images");
-      onChange({ imagePath: meta.filePath || "", imageUrl: meta.fileUrl || "" });
+      onChange({ imagePath: meta.filePath || "", imageUrl: meta.fileUrl || "", ...intoTrash() });
     } catch (err) {
       setError(err.message || "Upload failed.");
     }
     setBusy(false);
+  };
+
+  /**
+   * One undo slot, used by both clearing and replacing. The outgoing image moves into it
+   * rather than being destroyed; whatever was already sitting there is what finally gets
+   * dropped, which keeps the slot from growing without bound.
+   */
+  const intoTrash = () => {
+    if (!project.imagePath && !project.imageUrl) return {};
+    if (project.imageTrashPath) deleteFile({ filePath: project.imageTrashPath });
+    return { imageTrashPath: project.imagePath || "", imageTrashUrl: project.imageUrl || "" };
+  };
+
+  // Restoring is a swap, so it stays valid whether or not something is currently set.
+  const restore = () => onChange({
+    imagePath: project.imageTrashPath || "",
+    imageUrl: project.imageTrashUrl || "",
+    imageTrashPath: project.imagePath || "",
+    imageTrashUrl: project.imageUrl || "",
+  });
+
+  const purge = () => {
+    deleteFile({ filePath: project.imageTrashPath });
+    onChange({ imageTrashPath: "", imageTrashUrl: "" });
   };
 
   return (
@@ -48,11 +72,20 @@ function ImageHeader({ project, onChange }) {
           </label>
           {src && (
             <button className="md-btn md-btn-ghost" style={{ background: "rgba(10,10,11,.7)", border: "1px solid var(--rule-bright)", padding: 6 }}
-              onClick={() => onChange({ imagePath: "", imageUrl: "" })}><X size={13} /></button>
+              onClick={() => onChange({ imagePath: "", imageUrl: "", ...intoTrash() })}><X size={13} /></button>
           )}
         </div>
       </div>
       {error && <div style={{ fontSize: 11, color: "var(--red)", marginTop: 6 }}>{error}</div>}
+      {(project.imageTrashPath || project.imageTrashUrl) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 11, color: "var(--dim)" }}>
+          <span>Previous image kept.</span>
+          <button className="md-btn md-btn-ghost" style={{ padding: "3px 7px", fontSize: 11 }} onClick={restore}>
+            <RotateCcw size={11} /> {project.imagePath || project.imageUrl ? "Swap back" : "Restore"}
+          </button>
+          <ConfirmButton label="" confirmLabel="Delete for good?" onConfirm={purge} />
+        </div>
+      )}
     </div>
   );
 }

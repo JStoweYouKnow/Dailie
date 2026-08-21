@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { Plus, Megaphone, ExternalLink, Paperclip } from "lucide-react";
 import { useStore } from "../lib/store";
 import { PRESS_KINDS, PRESS_STATUSES, lookupColor } from "../lib/model";
-import { listAttachments, PRESS_FILE_ACCEPT } from "../lib/files";
+import {
+  listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment,
+  deleteFile, PRESS_FILE_ACCEPT,
+} from "../lib/files";
 
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Section,
@@ -10,12 +13,22 @@ import {
   AttachmentList,
 } from "../ui/kit";
 
+// These rewrite the whole array, so they work from `allAttachments` — using the visible
+// list would quietly drop anything sitting in the trash.
 function addAttachment(row, file) {
-  return { attachments: [...listAttachments(row), file] };
+  return { attachments: [...allAttachments(row), file] };
 }
 
 function removeAttachment(row, item) {
-  return { attachments: listAttachments(row).filter((a) => a.id !== item.id) };
+  return { attachments: trashAttachment(row, item) };
+}
+
+function undoRemove(row, item) {
+  return { attachments: restoreAttachment(row, item) };
+}
+
+function purge(row, item) {
+  return { attachments: purgeAttachment(row, item) };
 }
 
 function NewPressModal({ onClose, defaultKind }) {
@@ -80,7 +93,7 @@ function NewPressModal({ onClose, defaultKind }) {
           accept={PRESS_FILE_ACCEPT}
           label="Add files"
           onAdd={(file) => setFiles((list) => [...list, file])}
-          onRemove={(item) => setFiles((list) => list.filter((f) => f.id !== item.id))}
+          onRemove={(item) => { deleteFile(item); setFiles((list) => list.filter((f) => f.id !== item.id)); }}
         />
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save</button>
@@ -164,6 +177,8 @@ export default function PressView({ searchQuery }) {
         label="Add file"
         onAdd={(file) => update("press", r.id, (row) => addAttachment(row, file))}
         onRemove={(item) => update("press", r.id, (row) => removeAttachment(row, item))}
+        onRestore={(item) => update("press", r.id, (row) => undoRemove(row, item))}
+        onPurge={(item) => update("press", r.id, (row) => purge(row, item))}
       />
     ) },
     { key: "del", label: "", stopClick: true, render: (r) => <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("press", r.id)} /> },
@@ -198,6 +213,8 @@ export default function PressView({ searchQuery }) {
                     label="Add to kit"
                     onAdd={(file) => update("press", k.id, (row) => addAttachment(row, file))}
                     onRemove={(item) => update("press", k.id, (row) => removeAttachment(row, item))}
+                    onRestore={(item) => update("press", k.id, (row) => undoRemove(row, item))}
+                    onPurge={(item) => update("press", k.id, (row) => purge(row, item))}
                   />
                 </div>
               </div>

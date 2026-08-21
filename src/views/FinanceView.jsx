@@ -5,8 +5,9 @@ import { INVOICE_STATUSES, PAYMENT_STATUSES, lookupColor } from "../lib/model";
 import { formatMoney, parseMoney, formatShort, dateInputValue, tsFromDateInput } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, InlineText, InlineSelect, InlineDate,
-  ModalShell, Field, FileAttachButton, AttachmentRow, ConfirmButton,
+  ModalShell, Field, FileAttachButton, AttachmentRow, SingleAttachmentCell, ConfirmButton,
 } from "../ui/kit";
+import { deleteFile } from "../lib/files";
 
 function NewInvoiceModal({ onClose, defaultDirection }) {
   const { data, add } = useStore();
@@ -74,7 +75,7 @@ function NewInvoiceModal({ onClose, defaultDirection }) {
       <Field label="INVOICE DOCUMENT">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <FileAttachButton kind="documents" label="Upload invoice" accept=".pdf,.png,.jpg,.jpeg" onUploaded={setFile} />
-          {file && <AttachmentRow record={file} onRemove={() => setFile(null)} />}
+          {file && <AttachmentRow record={file} onRemove={() => { deleteFile(file); setFile(null); }} />}
         </div>
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save Invoice</button>
@@ -205,9 +206,8 @@ export default function FinanceView({ searchQuery }) {
       );
     } },
     { key: "file", label: "DOCUMENT", stopClick: true, cellStyle: { minWidth: 180 }, render: (i) => (
-      i.fileName
-        ? <AttachmentRow record={i} onRemove={() => update("invoices", i.id, { fileName: "", filePath: "", fileUrl: "", fileSize: 0 })} />
-        : <FileAttachButton compact kind="documents" label="Upload" accept=".pdf,.png,.jpg,.jpeg" onUploaded={(meta) => update("invoices", i.id, meta)} />
+      <SingleAttachmentCell record={i} accept=".pdf,.png,.jpg,.jpeg"
+        onChange={(changes) => update("invoices", i.id, changes)} />
     ) },
     { key: "del", label: "", stopClick: true, render: (i) => <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("invoices", i.id)} /> },
   ];

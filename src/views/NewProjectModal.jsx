@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../lib/store";
 import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, withProjectOwners } from "../lib/model";
 import { ModalShell, Field, FileAttachButton, AttachmentRow, MemberPicker } from "../ui/kit";
+import { deleteFile } from "../lib/files";
 
 export default function NewProjectModal({ onClose, initialTitle = "", initialDesc = "", onCreated }) {
   const { data, add, currentUser, showToast, memberName } = useStore();
@@ -115,7 +116,7 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
       <Field label="PROJECT IMAGE">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <FileAttachButton kind="images" label="Upload key art or still" accept="image/*" onUploaded={setImage} />
-          {image && <AttachmentRow record={image} onRemove={() => setImage(null)} />}
+          {image && <AttachmentRow record={image} onRemove={() => { deleteFile(image); setImage(null); }} />}
         </div>
       </Field>
       {error && <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 10 }}>{error}</div>}

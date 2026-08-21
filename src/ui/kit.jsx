@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, GripVertical } from "lucide-react";
+import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, GripVertical, RotateCcw } from "lucide-react";
 import { initials, colorForName, dateInputValue, tsFromDateInput } from "../lib/format";
 import { looksLikeMarkdown } from "../lib/textFormats";
 import Markdown from "./Markdown";
-import { uploadFile, formatBytes, fileSrc, kindForFile, asAttachment, listAttachments, PRESS_FILE_ACCEPT } from "../lib/files";
+import {
+  uploadFile, deleteFile, formatBytes, fileSrc, kindForFile, asAttachment,
+  listAttachments, trashedAttachments, PRESS_FILE_ACCEPT,
+} from "../lib/files";
 
 export function Stat({ label, value, accent, onClick }) {
   return (
@@ -601,23 +604,57 @@ export function FileAttachButton({ onUploaded, kind = "documents", label = "Atta
   );
 }
 
-export function AttachmentRow({ record, onRemove }) {
+/**
+ * `trashed` shows the row as removed-but-recoverable: the name stops being a live link,
+ * and the actions become restore and permanent delete. Removing never destroys a blob —
+ * only `onPurge` does, which is why it asks for confirmation.
+ */
+export function AttachmentRow({ record, onRemove, onRestore, onPurge, trashed }) {
   const src = fileSrc(record);
   if (!record || !record.fileName) return null;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 10px", background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8, minWidth: 0 }}>
-      <Paperclip size={13} color="var(--accent)" style={{ flexShrink: 0 }} />
-      <a href={src} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "none", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {record.fileName}
-      </a>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "6px 10px",
+      background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 8, minWidth: 0,
+      opacity: trashed ? 0.62 : 1,
+    }}>
+      <Paperclip size={13} color={trashed ? "var(--dim)" : "var(--accent)"} style={{ flexShrink: 0 }} />
+      {trashed ? (
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--dim)", textDecoration: "line-through" }}>
+          {record.fileName}
+        </span>
+      ) : (
+        <a href={src} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "none", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {record.fileName}
+        </a>
+      )}
       {record.fileSize ? <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)", flexShrink: 0 }}>{formatBytes(record.fileSize)}</span> : null}
-      {onRemove && <button className="md-btn md-btn-ghost" style={{ padding: 3, flexShrink: 0 }} onClick={onRemove}><Trash2 size={12} /></button>}
+      {onRestore && (
+        <button className="md-btn md-btn-ghost" style={{ padding: "3px 7px", fontSize: 11, flexShrink: 0 }}
+          onClick={onRestore} title="Put this back">
+          <RotateCcw size={11} /> Restore
+        </button>
+      )}
+      {onPurge && <ConfirmButton label="" confirmLabel="Delete for good?" onConfirm={onPurge} />}
+      {onRemove && !trashed && (
+        <button className="md-btn md-btn-ghost" style={{ padding: 3, flexShrink: 0 }} onClick={onRemove} title="Remove">
+          <Trash2 size={12} />
+        </button>
+      )}
     </div>
   );
 }
 
-export function AttachmentList({ record, items, onAdd, onRemove, kind = "documents", accept = PRESS_FILE_ACCEPT, label = "Attach files", compact }) {
+/**
+ * `onRestore`/`onPurge` turn removal into a trash: without them the list behaves as it
+ * always did and `onRemove` is final, which is what the unsaved modals want.
+ */
+export function AttachmentList({
+  record, items, onAdd, onRemove, onRestore, onPurge,
+  kind = "documents", accept = PRESS_FILE_ACCEPT, label = "Attach files", compact,
+}) {
   const list = items || listAttachments(record);
+  const trashed = onRestore || onPurge ? (record ? trashedAttachments(record) : []) : [];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
       {list.map((item) => (
@@ -625,6 +662,53 @@ export function AttachmentList({ record, items, onAdd, onRemove, kind = "documen
       ))}
       <FileAttachButton compact={compact} multiple kind={kind} label={label} accept={accept}
         onUploaded={(meta) => onAdd(asAttachment(meta))} />
+      {trashed.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }}>
+          <div className="md-mono" style={{ fontSize: 9.5, color: "var(--dim-2)", letterSpacing: ".12em" }}>
+            REMOVED — RESTORE OR DELETE FOR GOOD
+          </div>
+          {trashed.map((item) => (
+            <AttachmentRow key={item.id} record={item} trashed
+              onRestore={onRestore ? () => onRestore(item) : undefined}
+              onPurge={onPurge ? () => onPurge(item) : undefined} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Contracts and invoices hold a single document directly on the record rather than in an
+ * `attachments` array. `fileDeletedAt` trashes it in place: the record keeps pointing at
+ * the blob, so the removal is reversible and nothing is orphaned until it is purged.
+ */
+export function SingleAttachmentCell({ record, onChange, accept, kind = "documents", label = "Upload" }) {
+  const attach = (replacing) => (
+    <FileAttachButton compact kind={kind} label={label} accept={accept}
+      onUploaded={(meta) => {
+        // Taking the slot from a trashed document is what finally discards it.
+        if (replacing) deleteFile(record);
+        onChange({ ...meta, fileDeletedAt: null });
+      }} />
+  );
+  if (!record.fileName) return attach(false);
+
+  const trashed = !!record.fileDeletedAt;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+      <AttachmentRow
+        record={record}
+        trashed={trashed}
+        onRemove={trashed ? undefined : () => onChange({ fileDeletedAt: Date.now() })}
+        onRestore={trashed ? () => onChange({ fileDeletedAt: null }) : undefined}
+        onPurge={trashed ? () => {
+          deleteFile(record);
+          onChange({ fileName: "", filePath: "", fileUrl: "", fileSize: 0, fileType: "", fileDeletedAt: null });
+        } : undefined}
+      />
+      {/* Attaching over a trashed document takes the slot, so that blob goes with it. */}
+      {trashed && attach(true)}
     </div>
   );
 }

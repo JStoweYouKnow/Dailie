@@ -30,6 +30,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [audioPath, setAudioPath] = useState("");
+  const [audioNote, setAudioNote] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPath, setVideoPath] = useState("");
   const [videoNote, setVideoNote] = useState("");
@@ -91,6 +92,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
   const transcribeAudio = async (blob) => {
     setState("running");
     setError("");
+    let storedPath = "";
     try {
       const today = new Date().toISOString().slice(0, 10);
       const res = await fetch(`/api/transcribe?date=${today}`, {
@@ -110,13 +112,14 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
           try {
             const body = await res.json();
             if (body && body.error) message = body.error;
-            if (body && body.audioPath) setAudioPath(body.audioPath);
+            if (body && body.audioPath) { setAudioPath(body.audioPath); storedPath = body.audioPath; }
           } catch (err) { /* non-JSON body */ }
         }
         throw new Error(message);
       }
       const body = await res.json();
       setAudioPath(body.audioPath || "");
+      storedPath = body.audioPath || "";
       setSegments(body.segments || []);
       if (body.transcript) {
         setTranscript(body.transcript);
@@ -130,6 +133,27 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     } catch (err) {
       setState("error");
       setError(err.message || "Transcription failed.");
+    }
+    return storedPath;
+  };
+
+  /**
+   * /api/transcribe stores the audio as a side effect, so that is the only thing keeping
+   * a call's audio alive. When it fails — no endpoint under plain `vite dev`, a file over
+   * its 25 MB ceiling, no speech detected — the call used to be saved holding a blob:
+   * URL that is dead the moment the page reloads. Store it ourselves in that case.
+   */
+  const transcribeAndStore = async (blob, name) => {
+    if (await transcribeAudio(blob)) return;
+    try {
+      const file = blob instanceof File
+        ? blob
+        : new File([blob], name || `call-${Date.now()}.webm`, { type: blob.type || "audio/webm" });
+      const meta = await uploadFile(file, "recordings");
+      if (meta.filePath) setAudioPath(meta.filePath);
+      else setAudioNote("Audio is held for this session only — no blob store is configured, so it will not survive a reload.");
+    } catch (err) {
+      setAudioNote(err.message || "The audio could not be stored; it stays available until you reload.");
     }
   };
 
@@ -157,6 +181,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     setNextSteps([]);
     setSegments([]);
     setAudioPath("");
+    setAudioNote("");
     setVideoPath("");
     setVideoNote("");
 
@@ -216,7 +241,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     audioRecorder.onstop = () => {
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
       setAudioUrl(URL.createObjectURL(blob));
-      transcribeAudio(blob);
+      transcribeAndStore(blob);
     };
     audioRecorder.start();
     audioRecorderRef.current = audioRecorder;
@@ -258,8 +283,9 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     setSummary("");
     setNextSteps([]);
     setAudioPath("");
+    setAudioNote("");
     setTranscript("");
-    transcribeAudio(file);
+    transcribeAndStore(file);
   };
 
   const setStep = (id, field, value) => setNextSteps((s) => s.map((x) => (x.id === id ? { ...x, [field]: value } : x)));
@@ -480,6 +506,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
       {audioUrl && !videoUrl && (
         <Field label="AUDIO PLAYBACK">
           <audio controls src={audioUrl} style={{ width: "100%", height: 36 }} />
+          {audioNote && <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 6 }}>{audioNote}</div>}
         </Field>
       )}
 

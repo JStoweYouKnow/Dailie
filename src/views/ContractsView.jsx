@@ -5,8 +5,9 @@ import { CONTRACT_KINDS, CONTRACT_STATUSES, lookupLabel, lookupColor } from "../
 import { formatShort, dateInputValue, tsFromDateInput, daysSince } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, InlineText, InlineSelect, InlineDate,
-  ModalShell, Field, FileAttachButton, AttachmentRow, ConfirmButton,
+  ModalShell, Field, FileAttachButton, AttachmentRow, SingleAttachmentCell, ConfirmButton,
 } from "../ui/kit";
+import { deleteFile } from "../lib/files";
 
 function NewContractModal({ onClose, defaultKind }) {
   const { data, add, currentUser } = useStore();
@@ -74,7 +75,7 @@ function NewContractModal({ onClose, defaultKind }) {
       <Field label="DOCUMENT" hint="PDFs, Word files and scans are stored privately — only this app can read them back.">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <FileAttachButton kind="documents" label="Upload signed document" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onUploaded={setFile} />
-          {file && <AttachmentRow record={file} onRemove={() => setFile(null)} />}
+          {file && <AttachmentRow record={file} onRemove={() => { deleteFile(file); setFile(null); }} />}
         </div>
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save Agreement</button>
@@ -137,10 +138,8 @@ export default function ContractsView({ searchQuery }) {
       <InlineText value={c.value} mono style={{ color: "var(--accent)", fontWeight: 700 }} onCommit={(v) => update("contracts", c.id, { value: v })} />
     ) },
     { key: "file", label: "DOCUMENT", stopClick: true, cellStyle: { minWidth: 190 }, render: (c) => (
-      c.fileName
-        ? <AttachmentRow record={c} onRemove={() => update("contracts", c.id, { fileName: "", filePath: "", fileUrl: "", fileSize: 0 })} />
-        : <FileAttachButton compact kind="documents" label="Upload" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-            onUploaded={(meta) => update("contracts", c.id, meta)} />
+      <SingleAttachmentCell record={c} accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+        onChange={(changes) => update("contracts", c.id, changes)} />
     ) },
     { key: "del", label: "", stopClick: true, render: (c) => <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("contracts", c.id)} /> },
   ];

@@ -4,7 +4,19 @@
  * still works on a plain `vite dev`, and anything large fails loudly rather than
  * silently blowing the localStorage quota.
  */
-const INLINE_LIMIT = 280 * 1024;
+
+/**
+ * `asAttachment` refuses to keep a data URL longer than this, so that a stored record
+ * stays well inside Convex's 1 MB document limit.
+ */
+export const INLINE_URL_MAX = 250000;
+
+/**
+ * Largest file the inline fallback accepts. Base64 costs a third on top, so this has to
+ * leave room under INLINE_URL_MAX: at the old 280 KB a data URL came out around 380 KB,
+ * `asAttachment` dropped it, and the attachment was saved with neither a path nor a URL.
+ */
+const INLINE_LIMIT = 180 * 1024;
 
 /** Ceiling for the buffered route, which passes the whole body through a function. */
 const BUFFERED_LIMIT = 25 * 1024 * 1024;
@@ -36,15 +48,24 @@ export const PRESS_FILE_ACCEPT = [
 export function kindForFile(file, fallback = "documents") {
   const type = (file && file.type) || "";
   const name = (file && file.name) || "";
-  if (type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(name)) return "images";
-  if (type.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(name)) return "video";
-  if (type.startsWith("audio/") || /\.(mp3|wav|m4a|webm)$/i.test(name)) return "recordings";
+
+  // A declared MIME type settles it, and has to be checked before the extension:
+  // .webm is used for both audio and video, so matching on the name first filed every
+  // audio recording the browser produced under `video/`.
+  if (type.startsWith("image/")) return "images";
+  if (type.startsWith("audio/")) return "recordings";
+  if (type.startsWith("video/")) return "video";
+
+  // No usable type — fall back to the extension.
+  if (/\.(png|jpe?g|webp|gif|heic|heif)$/i.test(name)) return "images";
+  if (/\.(mp3|wav|m4a)$/i.test(name)) return "recordings";
+  if (/\.(mp4|mov|webm)$/i.test(name)) return "video";
   return fallback;
 }
 
 /** Shape stored on a record. Never keep a data URL big enough to blow Convex's 1 MB doc limit. */
 export function asAttachment(meta, id) {
-  const fileUrl = meta && meta.fileUrl && String(meta.fileUrl).length < 250000 ? meta.fileUrl : "";
+  const fileUrl = meta && meta.fileUrl && String(meta.fileUrl).length < INLINE_URL_MAX ? meta.fileUrl : "";
   return {
     id: id || (meta && meta.id) || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
     fileName: (meta && meta.fileName) || "file",
@@ -53,10 +74,14 @@ export function asAttachment(meta, id) {
     filePath: (meta && meta.filePath) || "",
     fileUrl,
     uploadedAt: (meta && meta.uploadedAt) || Date.now(),
+    // Set when the attachment is in the trash. The record still points at the blob, so
+    // nothing is orphaned and the removal stays reversible until it is purged.
+    deletedAt: Number(meta && meta.deletedAt) || null,
   };
 }
 
-export function listAttachments(record) {
+/** Everything on the record, trashed included. Use this when rewriting the array. */
+export function allAttachments(record) {
   if (!record) return [];
   const listed = Array.isArray(record.attachments)
     ? record.attachments.filter((a) => a && a.fileName)
@@ -64,6 +89,35 @@ export function listAttachments(record) {
   if (listed.length) return listed.map((a) => asAttachment(a));
   if (record.fileName) return [asAttachment(record, record.id ? `${record.id}-file` : "legacy-file")];
   return [];
+}
+
+/** What the user should actually see attached. */
+export function listAttachments(record) {
+  return allAttachments(record).filter((a) => !a.deletedAt);
+}
+
+/** Removed, still restorable. */
+export function trashedAttachments(record) {
+  return allAttachments(record).filter((a) => a.deletedAt);
+}
+
+/** Move one attachment to the trash, leaving the blob alone. */
+export function trashAttachment(record, item) {
+  return allAttachments(record).map((a) => (a.id === item.id ? { ...a, deletedAt: Date.now() } : a));
+}
+
+/** Take it back out again. */
+export function restoreAttachment(record, item) {
+  return allAttachments(record).map((a) => (a.id === item.id ? { ...a, deletedAt: null } : a));
+}
+
+/**
+ * The only thing that actually destroys a blob. Drops the entry as well, so the record
+ * never keeps a pointer to something that is gone.
+ */
+export function purgeAttachment(record, item) {
+  deleteFile(item);
+  return allAttachments(record).filter((a) => a.id !== item.id);
 }
 
 export function imageSrc(record) {
@@ -104,7 +158,11 @@ export async function uploadFile(file, kind = "documents", onProgress) {
   // Used when the store simply is not there. Small files still attach, inline.
   const inline = async (reason) => {
     if (file.size > INLINE_LIMIT) throw new Error(reason);
-    return { ...meta, fileUrl: await readAsDataUrl(file) };
+    const fileUrl = await readAsDataUrl(file);
+    // Belt and braces: a file just under the byte limit whose data URL still comes out
+    // too long would otherwise be stripped later and attach as a dead row.
+    if (String(fileUrl).length >= INLINE_URL_MAX) throw new Error(reason);
+    return { ...meta, fileUrl };
   };
   const noStore = `${file.name} is over ${Math.round(INLINE_LIMIT / 1024)} KB and no blob store is reachable. Set BLOB_READ_WRITE_TOKEN to attach files this size.`;
 
@@ -164,6 +222,23 @@ export async function uploadFile(file, kind = "documents", onProgress) {
   // Anything else is the store actively refusing the file. Say so rather than
   // silently storing something different from what the user asked for.
   throw new Error(body.error || `Upload failed (${res.status}).`);
+}
+
+/**
+ * Drops the stored blob behind an attachment. Best effort on purpose: clearing an
+ * attachment must not fail because the store was unreachable, but saying nothing at all
+ * would strand the blob in storage forever with no record left pointing at it.
+ *
+ * Inline data URLs live on the record itself, so there is nothing to delete for those.
+ */
+export async function deleteFile(record) {
+  const path = record && record.filePath;
+  if (!path) return;
+  try {
+    await fetch(`/api/files?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+  } catch (err) {
+    // The record is cleared either way; a stranded blob is not worth blocking the UI on.
+  }
 }
 
 export function formatBytes(bytes) {
