@@ -32,7 +32,7 @@ function NewEventModal({ onClose }) {
   return (
     <ModalShell title="New Event" subtitle="Something we're hosting, or speaking at" onClose={onClose}>
       <Field label="EVENT NAME"><input className="md-input" autoFocus value={form.name} onChange={set("name")} placeholder="e.g. SXSW — The Future of Virtual Production" /></Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="OUR ROLE">
           <select className="md-select" value={form.kind} onChange={set("kind")}>
             {EVENT_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
@@ -44,11 +44,11 @@ function NewEventModal({ onClose }) {
           </select>
         </Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="DATE"><input type="date" className="md-input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="VENUE"><input className="md-input" value={form.venue} onChange={set("venue")} placeholder="e.g. Austin Convention Center" /></Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="LOCATION"><input className="md-input" value={form.location} onChange={set("location")} placeholder="Austin, TX" /></Field>
         <Field label="LINK"><input className="md-input" value={form.url} onChange={set("url")} placeholder="https://" /></Field>
       </div>

@@ -72,7 +72,7 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
         </select>
       </Field>
       <Field label="LOGLINE / DESCRIPTION"><textarea className="md-textarea" rows={3} value={form.description} onChange={set("description")} placeholder="What is this project about?" /></Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="PIPELINE STAGE">
           <select className="md-select" value={form.pipelineStage || (pipeline[0] || {}).key || ""} onChange={set("pipelineStage")}>
             {pipeline.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -106,7 +106,7 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
           {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="BUDGET / VALUE"><input className="md-input" value={form.budget} onChange={set("budget")} placeholder="e.g. $12.5M" /></Field>
         <Field label="PRIORITY">
           <select className="md-select" value={form.priority} onChange={set("priority")}>

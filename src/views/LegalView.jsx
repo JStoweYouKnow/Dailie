@@ -30,7 +30,7 @@ function NewCounselModal({ onClose }) {
 
   return (
     <ModalShell title="New Legal Contact" subtitle="Attorneys, firms, in-house counsel and agents" onClose={onClose}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="NAME"><input className="md-input" autoFocus value={form.name} onChange={set("name")} placeholder="Full name" /></Field>
         <Field label="TYPE">
           <select className="md-select" value={form.kind} onChange={set("kind")}>
@@ -38,7 +38,7 @@ function NewCounselModal({ onClose }) {
           </select>
         </Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="FIRM"><input className="md-input" value={form.firm} onChange={set("firm")} placeholder="e.g. Loeb & Loeb" /></Field>
         <Field label="SPECIALTY">
           <select className="md-select" value={form.specialty} onChange={set("specialty")}>
@@ -46,11 +46,11 @@ function NewCounselModal({ onClose }) {
           </select>
         </Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="EMAIL"><input className="md-input" value={form.email} onChange={set("email")} placeholder="name@firm.com" /></Field>
         <Field label="PHONE"><input className="md-input" value={form.phone} onChange={set("phone")} placeholder="+1 …" /></Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="RATE"><input className="md-input" value={form.rate} onChange={set("rate")} placeholder="e.g. $650/hr" /></Field>
         <Field label="PROJECT">
           <select className="md-select" value={form.projectId} onChange={set("projectId")}>

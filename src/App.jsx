@@ -4,7 +4,7 @@ import {
   Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
   Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
   MoreHorizontal, ChevronLeft, ChevronRight, Plus, Upload as UploadIcon, X,
-  Mic2, Megaphone, Scale,
+  Mic2, Megaphone, Scale, Menu,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
@@ -89,9 +89,10 @@ const NAV = [
 
 const ALL_TABS = NAV.flatMap((g) => g.items);
 
-function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts }) {
+function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts, mobileOpen }) {
   return (
-    <nav className={"md-sidebar" + (collapsed ? " collapsed" : "")} aria-label="Sections">
+    <nav className={"md-sidebar" + (collapsed ? " collapsed" : "") + (mobileOpen ? " md-sidebar--open" : "")}
+      aria-label="Sections" aria-hidden={undefined}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 8px 20px" }}>
         <DailieBrandLogo size={26} />
         {!collapsed && (
@@ -123,7 +124,7 @@ function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts }) {
         </div>
       ))}
 
-      <button className="md-btn md-btn-ghost" onClick={onToggle}
+      <button className="md-btn md-btn-ghost md-collapse-btn" onClick={onToggle}
         style={{ marginTop: 6, width: "100%", justifyContent: collapsed ? "center" : "flex-start", fontSize: 12 }}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
         {collapsed ? <ChevronRight size={14} /> : <><ChevronLeft size={14} /> Collapse</>}
@@ -287,6 +288,7 @@ function Board({ store }) {
   const [dismissedCalls, setDismissedCalls] = useState([]);
   const [dismissedPublish, setDismissedPublish] = useState(false);
   const [publishingLocal, setPublishingLocal] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(() => {
     try { return localStorage.getItem("dailie-nav-collapsed-v1") === "1"; } catch (e) { return false; }
   });
@@ -452,6 +454,8 @@ function Board({ store }) {
   const openTab = (tab) => {
     setActiveTab(tab);
     setSearchQuery("");
+    // On a handheld the nav sits over the board, so picking a tab has to close it.
+    setNavOpen(false);
   };
 
   const stale = useMemo(() => staleFollowUps(data), [data]);
@@ -525,24 +529,32 @@ function Board({ store }) {
   return (
     <StoreProvider value={store}>
       <div className="md-shell">
+        {navOpen && <div className="md-nav-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />}
         <Sidebar
           activeTab={activeTab}
           onSelect={openTab}
           collapsed={navCollapsed}
           onToggle={() => setNavCollapsed((c) => !c)}
           counts={navCounts}
+          mobileOpen={navOpen}
         />
 
         <div className="md-main">
           <header style={{
             display: "flex", alignItems: "center", gap: 12, padding: "16px 28px", flexWrap: "wrap",
             borderBottom: "1px solid var(--rule)", position: "sticky", top: 0, background: "var(--ink)", zIndex: 20,
+            paddingTop: "max(16px, env(safe-area-inset-top))",
           }}>
+            <button className="md-btn md-btn-ghost md-nav-toggle" onClick={() => setNavOpen(true)}
+              aria-label="Open navigation" aria-expanded={navOpen} style={{ padding: 8, border: "1px solid var(--rule)" }}>
+              <Menu size={16} />
+            </button>
+
             <div style={{ minWidth: 0, marginRight: "auto" }}>
               <h1 className="md-display" style={{ fontSize: 19, letterSpacing: "-0.02em", lineHeight: 1.2 }}>{activeItem.label}</h1>
             </div>
 
-            <div style={{ position: "relative", width: 210 }}>
+            <div className="md-header-search" style={{ position: "relative", width: 210 }}>
               <Search size={14} color="var(--dim-2)" style={{ position: "absolute", left: 11, top: 10 }} />
               {/* Filters the current view. Cmd+K opens the palette for jumping records. */}
               <input className="md-input" style={{ paddingLeft: 32, fontSize: 12.5, background: "var(--panel)" }}

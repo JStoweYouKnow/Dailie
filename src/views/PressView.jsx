@@ -67,11 +67,11 @@ function NewPressModal({ onClose, defaultKind }) {
         </select>
       </Field>
       <Field label="TITLE"><input className="md-input" autoFocus value={form.title} onChange={set("title")} placeholder="Headline, or what this is" /></Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="OUTLET"><input className="md-input" value={form.outlet} onChange={set("outlet")} placeholder="e.g. Variety" /></Field>
         <Field label="JOURNALIST"><input className="md-input" value={form.journalist} onChange={set("journalist")} placeholder="Who we deal with" /></Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="EMAIL"><input className="md-input" value={form.email} onChange={set("email")} placeholder="name@outlet.com" /></Field>
         <Field label="STATUS">
           <select className="md-select" value={form.status} onChange={set("status")}>

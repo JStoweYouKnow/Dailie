@@ -96,9 +96,10 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Two arrows, the month and Today do not fit on one line on a small phone. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <button className="md-btn md-btn-ghost" onClick={() => move(-1)} style={{ padding: 7 }}><ChevronLeft size={16} /></button>
-          <div className="md-display" style={{ fontSize: 18, minWidth: 190, textAlign: "center" }}>
+          <div className="md-display" style={{ fontSize: 18, minWidth: "min(190px, 45vw)", textAlign: "center" }}>
             {cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
           </div>
           <button className="md-btn md-btn-ghost" onClick={() => move(1)} style={{ padding: 7 }}><ChevronRight size={16} /></button>
@@ -110,7 +111,10 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
         <FilterChips options={filterOptions} value={filter} onChange={setFilter} allLabel="Everything" />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: "var(--rule)", border: "1px solid var(--rule)", borderRadius: 12, overflow: "hidden" }}>
+      {/* Seven columns cannot shrink below a legible width, so on a phone the month
+          scrolls sideways rather than clipping what sits in the cells. */}
+      <div className="md-month-scroll">
+      <div className="md-month-grid" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: "var(--rule)", border: "1px solid var(--rule)", borderRadius: 12, overflow: "hidden" }}>
         {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => (
           <div key={d} className="md-mono" style={{ background: "var(--panel-raised)", padding: "9px 6px", fontSize: 10, color: "var(--dim)", textAlign: "center", letterSpacing: ".1em", fontWeight: 700 }}>{d}</div>
         ))}
@@ -144,6 +148,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
             </div>
           );
         })}
+      </div>
       </div>
 
       <Section title="NEXT UP" style={{ marginTop: 26 }}>

@@ -363,7 +363,7 @@ function NewTalentModal({ onClose, onCreated }) {
           {DISCIPLINES.map((d) => <option key={d} value={d} />)}
         </datalist>
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="STATUS">
           <select className="md-select" value={form.status} onChange={set("status")}>
             {TALENT_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -371,7 +371,7 @@ function NewTalentModal({ onClose, onCreated }) {
         </Field>
         <Field label="EMAIL"><input className="md-input" value={form.email} onChange={set("email")} placeholder="name@studio.com" /></Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="RATE"><input className="md-input" value={form.rateAmount} onChange={set("rateAmount")} placeholder="1450" /></Field>
         <Field label="PER">
           <select className="md-select" value={form.rateUnit} onChange={set("rateUnit")}>

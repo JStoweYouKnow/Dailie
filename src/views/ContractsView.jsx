@@ -51,7 +51,7 @@ function NewContractModal({ onClose, defaultKind }) {
         </select>
       </Field>
       <Field label="TITLE"><input className="md-input" autoFocus value={form.title} onChange={set("title")} placeholder="e.g. A24 — Mutual NDA" /></Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="COUNTERPARTY">
           <select className="md-select" value={form.companyId} onChange={set("companyId")}>
             <option value="">No company</option>
@@ -65,7 +65,7 @@ function NewContractModal({ onClose, defaultKind }) {
           </select>
         </Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="STATUS">
           <select className="md-select" value={form.status} onChange={set("status")}>
             {CONTRACT_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}

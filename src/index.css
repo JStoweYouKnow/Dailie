@@ -373,6 +373,7 @@ button:focus-visible,
 .md-shell {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--ink);
 }
 
@@ -384,6 +385,7 @@ button:focus-visible,
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
   background: var(--ink);
   transition: width 0.2s var(--ease);
@@ -485,4 +487,139 @@ button:focus-visible,
   .md-sidebar .md-nav-label {
     display: none;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Handheld
+ *
+ * Below this width a permanent sidebar costs more than it gives, so it
+ * becomes a drawer over the content and the board gets the full screen.
+ * ------------------------------------------------------------------ */
+.md-nav-toggle {
+  display: none;
+}
+
+.md-nav-scrim {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .md-nav-toggle {
+    display: inline-flex;
+  }
+
+  .md-sidebar {
+    position: fixed;
+    z-index: 70;
+    top: 0;
+    left: 0;
+    width: min(82vw, 280px);
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-left: max(10px, env(safe-area-inset-left));
+    transform: translateX(-102%);
+    transition: transform 0.22s var(--ease);
+    box-shadow: none;
+  }
+
+  /* The label and count are hidden by the 900px rule above; the drawer is wide
+     enough to show them again. */
+  .md-sidebar .md-nav-text,
+  .md-sidebar .md-nav-label {
+    display: revert;
+  }
+
+  .md-sidebar.md-sidebar--open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .md-nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 69;
+    background: rgba(5, 8, 6, 0.6);
+    backdrop-filter: blur(2px);
+    animation: md-fade-in 0.2s var(--ease);
+  }
+
+  .md-collapse-btn {
+    display: none;
+  }
+
+  /* A 210px box next to a title leaves nothing of either on a phone. */
+  .md-header-search {
+    width: 100% !important;
+    order: 10;
+  }
+
+  /* Two columns of form fields, or a board beside its rail, become 28px of one and
+     280px of the other on a phone. Stack them instead. The rule has to win against
+     the inline grid-template-columns these carry. */
+  .md-split {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .md-month-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .md-month-grid {
+    min-width: 620px;
+  }
+
+  .md-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .md-modal {
+    border-radius: 0;
+    min-height: 100%;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Anything under 16px makes iOS Safari zoom the page in when the field takes
+   focus, and it never zooms back out. Only the fields need the bump. */
+@media (max-width: 760px) {
+  /* Several fields set their own smaller size inline, and an inline style beats a
+     stylesheet rule, so this has to be forced. Below 16px iOS zooms and stays zoomed. */
+  .md-input,
+  .md-textarea,
+  .md-select,
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Fingers are not cursors: give the small icon buttons a real hit area without
+   changing how they look. */
+@media (pointer: coarse) {
+  .md-btn,
+  .md-nav-item,
+  .md-menu-item {
+    min-height: 44px;
+  }
+
+  .md-btn {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
+/* A single wide table should scroll inside its own box, never drag the page
+   sideways with it. */
+html,
+body {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+.md-scroll {
+  -webkit-overflow-scrolling: touch;
 }

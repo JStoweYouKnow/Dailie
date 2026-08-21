@@ -133,7 +133,7 @@ export function NewPersonModal({ onClose }) {
           {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="EMAIL"><input className="md-input" value={form.email} onChange={set("email")} placeholder="email@domain.com" /></Field>
         <Field label="PHONE"><input className="md-input" value={form.phone} onChange={set("phone")} placeholder="+1 (555) 000-0000" /></Field>
       </div>

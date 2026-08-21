@@ -140,7 +140,7 @@ export function NewMeetingModal({ onClose, initialTitle = "", initialNotes = "" 
   return (
     <ModalShell title="New Meeting Note" onClose={onClose}>
       <Field label="TITLE"><input className="md-input" autoFocus value={form.title} onChange={set("title")} placeholder="e.g. Slate pitch sync" /></Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="DATE"><input type="date" className="md-input" value={form.date} onChange={set("date")} /></Field>
         <Field label="PROJECT">
           <select className="md-select" value={form.projectId} onChange={set("projectId")}>

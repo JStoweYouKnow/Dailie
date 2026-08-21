@@ -185,7 +185,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
         <Stat label="PAPERWORK ALERTS" value={alerts.length} accent={alerts.length ? "var(--warn)" : undefined} onClick={() => onOpenTab("contracts")} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 26, alignItems: "start" }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 26, alignItems: "start" }}>
         <div style={{ minWidth: 0 }}>
           <Section title="TASKS BY PERSON" right={
             <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenTab("tasks")}>All tasks <ArrowRight size={12} /></button>

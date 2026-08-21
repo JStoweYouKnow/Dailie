@@ -403,7 +403,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="CALL TITLE"><input className="md-input" value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="PROJECT">
           <select className="md-select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>

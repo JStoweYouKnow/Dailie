@@ -47,11 +47,11 @@ function NewInvoiceModal({ onClose, defaultDirection }) {
           <option value="outgoing">Payable — a vendor invoiced us</option>
         </select>
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="INVOICE NUMBER"><input className="md-input" autoFocus value={form.number} onChange={set("number")} placeholder="MAT-2041" /></Field>
         <Field label="AMOUNT"><input className="md-input" value={form.amount} onChange={set("amount")} placeholder="850000" /></Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="COMPANY">
           <select className="md-select" value={form.companyId} onChange={set("companyId")}>
             <option value="">No company</option>
@@ -65,7 +65,7 @@ function NewInvoiceModal({ onClose, defaultDirection }) {
           </select>
         </Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="STATUS">
           <select className="md-select" value={form.status} onChange={set("status")}>
             {INVOICE_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -118,11 +118,11 @@ function NewPaymentModal({ onClose }) {
           {(vendors.length ? vendors : data.companies).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="AMOUNT"><input className="md-input" autoFocus value={form.amount} onChange={set("amount")} placeholder="60000" /></Field>
         <Field label="DUE DATE"><input type="date" className="md-input" value={form.dueAt} onChange={set("dueAt")} /></Field>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="PROJECT">
           <select className="md-select" value={form.projectId} onChange={set("projectId")}>
             <option value="">No project</option>
