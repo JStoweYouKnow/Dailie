@@ -1,4 +1,4 @@
-import { uid, parseEmailList, emailDomain } from "./format";
+import { uid, parseEmailList, emailDomain } from "./format.js";
 
 /**
  * Turns text copied out of Gmail into email records. Gmail has no export button that a

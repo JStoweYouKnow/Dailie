@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createDraftUploadTracker, flushDraftCleanups } from "./files";
+import { createDraftUploadTracker, flushDraftCleanups } from "./files.js";
 
 /**
  * Discard cleanup for new-item modals. Unmount deletes uncommitted uploads; `keep`

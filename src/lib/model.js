@@ -1,4 +1,4 @@
-import { uid, emailDomain, isFreeMailDomain, companyNameFromDomain, parseEmailList, tsFromDateInput, DAY } from "./format";
+import { uid, emailDomain, isFreeMailDomain, companyNameFromDomain, parseEmailList, tsFromDateInput, DAY } from "./format.js";
 
 export const SCHEMA_VERSION = 6;
 export const STORAGE_KEY = "dailie-data-v6";
@@ -397,6 +397,7 @@ export const SEED_DATA = {
     },
   ],
   logs: [],
+  notifications: [],
 };
 
 /* ------------------------------------------------------------------ *
@@ -707,7 +708,59 @@ export function normalizeData(raw) {
     invoices: ensureArray(input.invoices).map((i) => ({ status: "draft", direction: "incoming", currency: "USD", ...i, id: i.id || uid() })),
     payments: ensureArray(input.payments).map((p) => ({ status: "unpaid", currency: "USD", ...p, id: p.id || uid() })),
     logs: ensureArray(input.logs).filter((l) => l.id !== "log-1"),
+    notifications: ensureArray(input.notifications).map((n) => ({
+      kind: "assignment", role: "assignee", recordType: "task", recordId: null,
+      title: "", userId: null, actorId: null, readAt: null,
+      ...n, id: n.id || uid(), createdAt: Number(n.createdAt) || Date.now(),
+    })),
   };
+}
+
+/**
+ * Being named on a record is the event worth telling someone about, and it happens
+ * from a dozen different screens. Rather than remember to fire from each of them, the
+ * store diffs these fields on every write and this decides who hears about it.
+ */
+const ASSIGNMENT_FIELDS = {
+  tasks: [["assigneeIds", "assignee"]],
+  projects: [["ownerIds", "owner"], ["teamIds", "team"]],
+};
+
+/**
+ * Notices for people named on `after` who were not on `before`. The actor is left out:
+ * you do not need telling about something you just did yourself.
+ */
+export function assignmentNotices(collection, before, after, actorId) {
+  const fields = ASSIGNMENT_FIELDS[collection];
+  if (!fields || !after) return [];
+
+  const notices = [];
+  for (const [field, role] of fields) {
+    const had = new Set(ensureArray(before && before[field]));
+    for (const userId of ensureArray(after[field])) {
+      if (!userId || had.has(userId) || userId === actorId) continue;
+      notices.push({
+        kind: "assignment",
+        role,
+        userId,
+        actorId: actorId || null,
+        recordType: collection === "tasks" ? "task" : "project",
+        recordId: after.id || null,
+        title: after.title || after.name || "",
+        createdAt: Date.now(),
+        readAt: null,
+      });
+    }
+  }
+  return notices;
+}
+
+/** What one person has not yet seen, newest first. */
+export function unreadFor(data, userId) {
+  if (!userId) return [];
+  return ensureArray(data.notifications)
+    .filter((n) => n.userId === userId && !n.readAt)
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /* ------------------------------------------------------------------ *

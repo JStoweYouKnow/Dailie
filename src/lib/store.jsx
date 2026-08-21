@@ -1,6 +1,6 @@
 import { createContext, useContext, useCallback, useMemo, useState, useEffect } from "react";
 import { uid } from "./format";
-import { normalizeData, SEED_DATA, STORAGE_KEY, LEGACY_KEYS, stageInfo } from "./model";
+import { normalizeData, SEED_DATA, STORAGE_KEY, LEGACY_KEYS, stageInfo, assignmentNotices } from "./model";
 
 const StoreContext = createContext(null);
 
@@ -105,22 +105,41 @@ export function useBoardStore() {
     });
   }, []);
 
+  /** Folds any new assignment notices into the same write as the change itself. */
+  const withNotices = (current, notices, delta) => (
+    notices.length
+      ? {
+        ...delta,
+        notifications: [
+          ...notices.map((n) => ({ ...n, id: uid() })),
+          ...(current.notifications || []),
+        ],
+      }
+      : delta
+  );
+
   const add = useCallback((collection, record, { prepend = true } = {}) => {
     const item = { id: uid(), createdAt: Date.now(), ...record };
-    patch((current) => ({
-      [collection]: prepend ? [item, ...(current[collection] || [])] : [...(current[collection] || []), item],
-    }));
+    patch((current) => withNotices(
+      current,
+      assignmentNotices(collection, null, item, current.settings.currentUserId),
+      { [collection]: prepend ? [item, ...(current[collection] || [])] : [...(current[collection] || []), item] },
+    ));
     return item;
   }, [patch]);
 
   const update = useCallback((collection, id, changes) => {
-    patch((current) => ({
-      [collection]: (current[collection] || []).map((item) => {
+    patch((current) => {
+      let notices = [];
+      const list = (current[collection] || []).map((item) => {
         if (item.id !== id) return item;
         const delta = typeof changes === "function" ? changes(item) : changes;
-        return { ...item, ...delta };
-      }),
-    }));
+        const next = { ...item, ...delta };
+        notices = assignmentNotices(collection, item, next, current.settings.currentUserId);
+        return next;
+      });
+      return withNotices(current, notices, { [collection]: list });
+    });
   }, [patch]);
 
   const remove = useCallback((collection, id) => {
@@ -133,14 +152,18 @@ export function useBoardStore() {
 
   /** Project edits also write the activity log, so history stays truthful. */
   const updateProject = useCallback((id, changes, note) => {
-    patch((current) => ({
-      projects: current.projects.map((p) => {
+    patch((current) => {
+      let notices = [];
+      const projects = current.projects.map((p) => {
         if (p.id !== id) return p;
         const delta = typeof changes === "function" ? changes(p) : changes;
         const history = note ? [...(p.history || []), { id: uid(), date: Date.now(), note }] : p.history;
-        return { ...p, ...delta, updatedAt: Date.now(), history };
-      }),
-    }));
+        const next = { ...p, ...delta, updatedAt: Date.now(), history };
+        notices = assignmentNotices("projects", p, next, current.settings.currentUserId);
+        return next;
+      });
+      return withNotices(current, notices, { projects });
+    });
   }, [patch]);
 
   /**

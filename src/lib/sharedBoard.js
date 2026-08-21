@@ -2,13 +2,13 @@
  * Shape helpers for moving the board between the browser-local copy and the shared
  * one. Kept separate from the React layer so the mapping can be tested on its own.
  */
-import { normalizeData } from "./model";
+import { normalizeData } from "./model.js";
 
 /** Collections that live as rows in the shared board. */
 export const SHARED_COLLECTIONS = [
   "companies", "people", "projects", "tasks", "notes", "meetings",
   "calls", "emails", "contracts", "invoices", "payments", "talent",
-  "events", "press", "legal", "logs",
+  "events", "press", "legal", "logs", "notifications",
 ];
 
 /**

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Bell, X, Search, Command, Sparkles, SendHorizontal, AlertTriangle, CheckCircle2,
-  Mail, FileText, Receipt, Video, Info, Clock,
+  Mail, FileText, Receipt, Video, Info, Clock, UserPlus, Clapperboard, CheckSquare,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor } from "../lib/model";
+import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor, unreadFor } from "../lib/model";
 import { formatShort, formatClock, relativeDays, daysSince, formatMoney } from "../lib/format";
 import { ModalShell, Badge, Avatar, EmptyState, Section } from "../ui/kit";
 
@@ -45,7 +45,7 @@ export function Toast({ toast }) {
  * count is what tells you a relationship has been left too long.
  */
 export function NotificationCenter({ onOpenTab }) {
-  const { data, add, currentUser, showToast } = useStore();
+  const { data, add, update, currentUser, showToast, memberName } = useStore();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -55,7 +55,27 @@ export function NotificationCenter({ onOpenTab }) {
     () => data.tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate < Date.now()),
     [data.tasks]
   );
-  const total = stale.length + alerts.length + overdueTasks.length;
+  const mine = useMemo(
+    () => unreadFor(data, currentUser && currentUser.id),
+    [data.notifications, currentUser]
+  );
+  const total = stale.length + alerts.length + overdueTasks.length + mine.length;
+
+  const markRead = (n) => update("notifications", n.id, { readAt: Date.now() });
+
+  const openNotice = (n) => {
+    markRead(n);
+    onOpenTab(n.recordType === "project" ? "projects" : "tasks");
+    setOpen(false);
+  };
+
+  const wording = (n) => {
+    const who = memberName(n.actorId);
+    const what = n.recordType === "project"
+      ? (n.role === "owner" ? "made you an owner of" : "added you to")
+      : "assigned you";
+    return `${who || "Someone"} ${what}`;
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -103,6 +123,38 @@ export function NotificationCenter({ onOpenTab }) {
           {total === 0 && (
             <div style={{ fontSize: 13, color: "var(--dim)", padding: "20px 0", textAlign: "center" }}>
               Nothing needs chasing. Everything is current.
+            </div>
+          )}
+
+          {mine.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div className="md-mono" style={{ fontSize: 10, color: "var(--accent)", letterSpacing: ".12em", fontWeight: 700 }}>
+                  FOR YOU
+                </div>
+                <button className="md-btn md-btn-ghost" style={{ fontSize: 10, padding: "2px 6px" }}
+                  onClick={() => mine.forEach(markRead)}>Mark all read</button>
+              </div>
+              {mine.slice(0, 8).map((n) => (
+                <div key={n.id} role="button" tabIndex={0}
+                  onClick={() => openNotice(n)}
+                  onKeyDown={(e) => { if (e.key === "Enter") openNotice(n); }}
+                  style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: "1px solid var(--rule)", cursor: "pointer" }}>
+                  {n.recordType === "project"
+                    ? <Clapperboard size={13} color="var(--accent)" />
+                    : <CheckSquare size={13} color="var(--accent)" />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {wording(n)} <strong>{n.title || "(untitled)"}</strong>
+                    </div>
+                    <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{relativeDays(n.createdAt)}</div>
+                  </div>
+                  <button className="md-btn md-btn-ghost" style={{ fontSize: 10, padding: "2px 6px" }}
+                    onClick={(e) => { e.stopPropagation(); markRead(n); }} title="Mark read">
+                    <CheckCircle2 size={12} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 

@@ -3,7 +3,7 @@ import { ConvexReactClient, useQuery, useMutation, useConvexAuth } from "convex/
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { useAuth } from "@clerk/clerk-react";
 import { api } from "../../convex/_generated/api";
-import { normalizeData, SEED_DATA } from "./model";
+import { normalizeData, SEED_DATA, assignmentNotices } from "./model";
 import { AUTH_ENABLED } from "./auth";
 import { uid } from "./format";
 import { fromSharedBoard, toSharedPayload, toRecordsPayload, hasLocalContent, SHARED_COLLECTIONS } from "./sharedBoard";
@@ -232,12 +232,37 @@ export function useSharedBoard(account) {
     showToast("That did not save — see the message at the top of the page.", "error");
   });
 
+  /**
+   * Who the board thinks is doing the writing. Resolved the same way `currentUser` is,
+   * but needed here, above it, so a write can leave itself out of its own notices.
+   */
+  const resolveActorId = useCallback(() => {
+    const team = data.team || [];
+    if (account) {
+      const email = (account.email || "").toLowerCase();
+      const hit = team.find((m) => m.clerkId === account.id || (m.email || "").toLowerCase() === email);
+      if (hit) return hit.id;
+    }
+    const fallback = team.find((m) => m.id === data.settings.currentUserId) || team[0];
+    return fallback ? fallback.id : null;
+  }, [data.team, data.settings, account]);
+
+  /** Notices are ordinary records, written the same way as everything else. */
+  const emitNotices = useCallback((notices) => {
+    notices.forEach((n) => {
+      const item = { id: uid(), ...n };
+      stage("notifications", String(item.id), item);
+      settle(put({ collection: "notifications", docId: String(item.id), data: item })).catch(() => {});
+    });
+  }, [put]);
+
   const add = useCallback((collection, record, { prepend = true } = {}) => {
     const item = { id: uid(), createdAt: Date.now(), ...record };
     stage(collection, String(item.id), item);
     settle(put({ collection, docId: String(item.id), data: item })).catch(() => {});
+    emitNotices(assignmentNotices(collection, null, item, resolveActorId()));
     return item;
-  }, [put]);
+  }, [put, emitNotices, resolveActorId]);
 
   const update = useCallback((collection, id, changes) => {
     const current = (data[collection] || []).find((r) => r.id === id);
@@ -246,7 +271,8 @@ export function useSharedBoard(account) {
     const next = { ...current, ...delta };
     stage(collection, String(id), next);
     settle(put({ collection, docId: String(id), data: next })).catch(() => {});
-  }, [data, put]);
+    emitNotices(assignmentNotices(collection, current, next, resolveActorId()));
+  }, [data, put, emitNotices, resolveActorId]);
 
   const remove = useCallback((collection, id) => {
     stage(collection, String(id), null);
@@ -265,7 +291,8 @@ export function useSharedBoard(account) {
     const next = { ...current, ...delta, updatedAt: Date.now(), history };
     stage("projects", String(id), next);
     settle(put({ collection: "projects", docId: String(id), data: next })).catch(() => {});
-  }, [data.projects, put]);
+    emitNotices(assignmentNotices("projects", current, next, resolveActorId()));
+  }, [data.projects, put, emitNotices, resolveActorId]);
 
   /**
    * A whole collection in one mutation, or several when it is too big for one.
