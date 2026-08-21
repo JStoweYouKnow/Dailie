@@ -3,8 +3,22 @@
  * Numbers; PDF is a self-contained file so the same rows can be opened without the app.
  */
 
-import { formatFull, formatMoney } from "./format.js";
+import { formatFull, formatMoney, emailDomain } from "./format.js";
 import { ndaFor } from "./model.js";
+
+/** House addresses only — contractors on Gmail etc. can use the board, not take a copy. */
+export const EXPORT_DOMAINS = ["matriarch-studios.com", "thewizardofops.app"];
+
+export function canExportBoard(email) {
+  const domain = emailDomain(email);
+  if (!domain) return false;
+  return EXPORT_DOMAINS.some((allowed) => domain === allowed || domain.endsWith(`.${allowed}`));
+}
+
+export function exportEmailFromSession({ authEnabled, account, currentUser } = {}) {
+  if (authEnabled) return (account && account.email) || "";
+  return (currentUser && currentUser.email) || "";
+}
 
 export function exportableColumns(columns) {
   return (columns || []).filter((c) => c && c.label);
@@ -144,6 +158,7 @@ export function downloadBlob(filename, blob) {
 }
 
 export function downloadTableCsv(title, columns, rows, ctx) {
+  if (!canExportBoard(ctx && ctx.exportEmail)) return;
   const csv = tableToCsv(columns, rows, ctx);
   downloadBlob(exportFilename(title, "csv"), new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }
@@ -303,6 +318,7 @@ export function tableToPdf(title, columns, rows, ctx) {
 }
 
 export function downloadTablePdf(title, columns, rows, ctx) {
+  if (!canExportBoard(ctx && ctx.exportEmail)) return;
   const pdf = tableToPdf(title, columns, rows, ctx);
   downloadBlob(exportFilename(title, "pdf"), new Blob([pdf], { type: "application/pdf" }));
 }

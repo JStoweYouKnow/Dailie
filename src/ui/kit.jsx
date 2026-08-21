@@ -3,7 +3,8 @@ import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, G
 import { initials, colorForName, dateInputValue, tsFromDateInput } from "../lib/format";
 import { looksLikeMarkdown } from "../lib/textFormats";
 import { useStore } from "../lib/store";
-import { downloadTableCsv, downloadTablePdf } from "../lib/tableExport";
+import { useAccount } from "../lib/auth";
+import { canExportBoard, downloadTableCsv, downloadTablePdf, exportEmailFromSession } from "../lib/tableExport";
 import Markdown from "./Markdown";
 import {
   uploadFile, deleteFile, formatBytes, fileSrc, kindForFile, asAttachment,
@@ -93,9 +94,11 @@ export function ViewHeader({ count, label, children }) {
 
 /** CSV and PDF of the rows currently on screen — filtered lists included. */
 export function ExportMenu({ title, columns, rows }) {
-  const { data, companyName, projectName, memberName } = useStore();
+  const { data, companyName, projectName, memberName, currentUser } = useStore();
+  const { enabled: authEnabled, account } = useAccount();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const exportEmail = exportEmailFromSession({ authEnabled, account, currentUser });
 
   useEffect(() => {
     if (!open) return undefined;
@@ -107,8 +110,9 @@ export function ExportMenu({ title, columns, rows }) {
   }, [open]);
 
   if (!rows || !rows.length) return null;
+  if (!canExportBoard(exportEmail)) return null;
 
-  const ctx = { data, companyName, projectName, memberName };
+  const ctx = { data, companyName, projectName, memberName, exportEmail };
   const run = (kind) => {
     if (kind === "csv") downloadTableCsv(title, columns, rows, ctx);
     else downloadTablePdf(title, columns, rows, ctx);

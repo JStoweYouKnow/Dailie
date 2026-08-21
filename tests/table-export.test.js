@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cellText, escapeCsvField, tableToCsv, tableToPdf, exportableColumns, exportFilename } from "../src/lib/tableExport.js";
+import { cellText, escapeCsvField, tableToCsv, tableToPdf, exportableColumns, exportFilename, canExportBoard, exportEmailFromSession } from "../src/lib/tableExport.js";
 
 const columns = [
   { key: "title", label: "TASK" },
@@ -54,4 +54,31 @@ test("tableToPdf is a PDF with the table title", () => {
 test("exportFilename slugs the title", () => {
   const name = exportFilename("NDAs & Contracts", "csv");
   assert.match(name, /^dailie-ndas-contracts-\d{4}-\d{2}-\d{2}\.csv$/);
+});
+
+test("canExportBoard allows house domains only", () => {
+  assert.equal(canExportBoard("elena@matriarch-studios.com"), true);
+  assert.equal(canExportBoard("ops@thewizardofops.app"), true);
+  assert.equal(canExportBoard("help@mail.matriarch-studios.com"), true);
+  assert.equal(canExportBoard("guest@gmail.com"), false);
+  assert.equal(canExportBoard("d.sterling@a24films.com"), false);
+  assert.equal(canExportBoard(""), false);
+});
+
+test("exportEmailFromSession prefers the signed-in account when auth is on", () => {
+  assert.equal(exportEmailFromSession({
+    authEnabled: true,
+    account: { email: "guest@gmail.com" },
+    currentUser: { email: "elena@matriarch-studios.com" },
+  }), "guest@gmail.com");
+  assert.equal(exportEmailFromSession({
+    authEnabled: true,
+    account: null,
+    currentUser: { email: "elena@matriarch-studios.com" },
+  }), "");
+  assert.equal(exportEmailFromSession({
+    authEnabled: false,
+    account: null,
+    currentUser: { email: "elena@matriarch-studios.com" },
+  }), "elena@matriarch-studios.com");
 });
