@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Video, ExternalLink, EyeOff } from "lucide-react";
 import { useStore } from "../lib/store";
-import { RECORD_TYPES, recordTypeInfo } from "../lib/model";
+import { RECORD_TYPES, recordTypeInfo, EVENT_KINDS, lookupColor, lookupLabel } from "../lib/model";
 import { formatClock } from "../lib/format";
 import { FilterChips, Section, Badge } from "../ui/kit";
 import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
@@ -42,6 +42,15 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
       }));
     }
 
+    if (filter === "all" || filter === "events") {
+      (data.events || [])
+        .filter((e) => e.date && e.status !== "declined")
+        .forEach((e) => push(e.date, {
+          id: `e-${e.id}`, kind: "event", label: `${e.name} — ${lookupLabel(EVENT_KINDS, e.kind)}`,
+          color: lookupColor(EVENT_KINDS, e.kind), ts: e.date, event: e,
+        }));
+    }
+
     const typeFilters = RECORD_TYPES.map((t) => t.key);
     if (filter === "all" || typeFilters.includes(filter)) {
       data.projects
@@ -55,7 +64,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
 
     Object.values(map).forEach((list) => list.sort((a, b) => a.ts - b.ts));
     return map;
-  }, [data.meetings, data.settings, data.tasks, data.projects, filter]);
+  }, [data.meetings, data.settings, data.tasks, data.projects, data.events, filter]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -73,6 +82,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
   const filterOptions = [
     ...RECORD_TYPES.map((t) => ({ key: t.key, label: t.short, color: t.color })),
     { key: "meetings", label: "Meetings" },
+    { key: "events", label: "Events" },
     { key: "tasks", label: "Task Due Dates" },
   ];
 

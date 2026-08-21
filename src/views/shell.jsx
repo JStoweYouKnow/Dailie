@@ -196,7 +196,8 @@ export function CommandPalette({ onClose, onSelect }) {
   const results = useMemo(() => {
     const q = query.toLowerCase().trim();
     const out = [];
-    const push = (type, id, label, sub, item) => out.push({ type, id, label, sub, item });
+    const push = (type, id, label, sub, item, badge) => out.push({ type, id, label, sub, item, badge: badge || type });
+    const hit = (...fields) => q && fields.some((f) => String(f || "").toLowerCase().includes(q));
 
     data.projects.forEach((p) => { if (!q || p.title.toLowerCase().includes(q)) push("project", p.id, p.title, recordTypeInfo(p.recordType).short, p); });
     data.people.forEach((p) => { if (q && (p.name.toLowerCase().includes(q) || (p.email || "").includes(q))) push("people", p.id, p.name, p.organization || p.email, p); });
@@ -205,6 +206,16 @@ export function CommandPalette({ onClose, onSelect }) {
     (data.events || []).forEach((e) => { if (q && (e.name || "").toLowerCase().includes(q)) push("events", e.id, e.name, e.venue || "Event", e); });
     (data.press || []).forEach((r) => { if (q && ((r.title || "").toLowerCase().includes(q) || (r.outlet || "").toLowerCase().includes(q))) push("press", r.id, r.title, r.outlet || "Press", r); });
     (data.legal || []).forEach((l) => { if (q && ((l.name || "").toLowerCase().includes(q) || (l.firm || "").toLowerCase().includes(q))) push("legal", l.id, l.name, l.firm || "Legal", l); });
+
+    // These live on tabs whose key differs from the collection name, so the tab key is
+    // what goes in `type` and the badge is set separately.
+    data.meetings.forEach((m) => { if (hit(m.title)) push("meetings", m.id, m.title, "Meeting", m); });
+    (data.calls || []).forEach((c) => { if (hit(c.title)) push("calls", c.id, c.title, "Call", c); });
+    data.emails.forEach((e) => { if (hit(e.subject, e.from, e.fromName)) push("emails", e.id, e.subject || "(no subject)", e.from || "Email", e); });
+    data.contracts.forEach((c) => { if (hit(c.title)) push("contracts", c.id, c.title, companyName(c.companyId) || "Agreement", c); });
+    (data.invoices || []).forEach((i) => { if (hit(i.number, i.notes)) push("finance", i.id, i.number || "Invoice", companyName(i.companyId) || "Invoice", i, "invoice"); });
+    (data.talent || []).forEach((t) => { if (hit(t.name, t.discipline)) push("team", t.id, t.name, t.discipline || "Roster", t, "roster"); });
+    (data.notes || []).forEach((n) => { if (hit(n.title, n.body)) push("tasks", n.id, n.title || "Note", "Note", n, "note"); });
 
     const tabs = [
       ["home", "Home dashboard"], ["projects", "Projects"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
@@ -224,7 +235,7 @@ export function CommandPalette({ onClose, onSelect }) {
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: "1px solid var(--rule)" }}>
           <Search size={16} color="var(--dim)" />
           <input autoFocus className="md-input" style={{ border: "none", background: "transparent", padding: 0, fontSize: 15 }}
-            placeholder="Search projects, people, companies, tasks…" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search projects, people, tasks, meetings, mail, agreements…" value={query} onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
               if (e.key === "Enter" && results[0]) onSelect(results[0]);
@@ -243,7 +254,7 @@ export function CommandPalette({ onClose, onSelect }) {
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--bone)" }}>{r.label}</div>
                 {r.sub && <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{r.sub}</div>}
               </div>
-              <Badge label={r.type.toUpperCase()} subtle />
+              <Badge label={String(r.badge || r.type).toUpperCase()} subtle />
             </div>
           ))}
         </div>

@@ -184,7 +184,7 @@ function AvailabilityTimeline({ roster, onOpen }) {
 }
 
 function TalentDetail({ talent, onClose }) {
-  const { data, update, remove, patch, add, currentUser, memberName } = useStore();
+  const { data, update, remove, patch, add, currentUser, memberName, shared } = useStore();
   const nda = ndaFor(data, talent);
   const list = bookings(talent);
   const free = nextFreeDay(talent);
@@ -201,8 +201,24 @@ function TalentDetail({ talent, onClose }) {
     assignments: (t.assignments || []).filter((a) => a.id !== id),
   }));
 
+  /**
+   * On a shared board the team is the sign-in directory and cannot be written from the
+   * client, so anyone already in it is matched by email rather than invented.
+   */
+  const directoryMatch = useMemo(() => {
+    const email = (talent.email || "").trim().toLowerCase();
+    if (!email) return null;
+    return data.team.find((m) => (m.email || "").trim().toLowerCase() === email) || null;
+  }, [data.team, talent.email]);
+
   /** Signing someone is what makes them assignable on tasks and the Home board. */
   const makeAssignable = () => {
+    // `talent` is shared-writable, so linking to a directory member always sticks.
+    if (directoryMatch) {
+      update("talent", talent.id, { teamMemberId: directoryMatch.id });
+      return;
+    }
+    // A local board owns its own team list and can simply add the person.
     const member = { id: uid(), name: talent.name, email: talent.email || "", role: talent.discipline || "" };
     patch((current) => ({
       team: [...current.team, member],
@@ -259,8 +275,15 @@ function TalentDetail({ talent, onClose }) {
           <UserPlus size={15} color="var(--accent)" />
           <div style={{ flex: "1 1 220px", fontSize: 12, color: "var(--dim)" }}>
             {talent.name} is signed but cannot be assigned tasks yet.
+            {shared && !directoryMatch && (
+              <> They join the team automatically once they sign in{talent.email ? ` as ${talent.email}` : ""} — there is nothing to do here until then.</>
+            )}
           </div>
-          <button className="md-btn md-btn-primary" onClick={makeAssignable}>Make assignable</button>
+          {(!shared || directoryMatch) && (
+            <button className="md-btn md-btn-primary" onClick={makeAssignable}>
+              {directoryMatch ? `Link to ${directoryMatch.name}` : "Make assignable"}
+            </button>
+          )}
         </div>
       )}
       {talent.teamMemberId && (
