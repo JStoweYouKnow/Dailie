@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useStore } from "../lib/store";
 import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, withProjectOwners } from "../lib/model";
 import { ModalShell, Field, FileAttachButton, AttachmentRow, MemberPicker } from "../ui/kit";
-import { deleteFile } from "../lib/files";
+import { useDraftUploads } from "../lib/draftUploads";
 
 export default function NewProjectModal({ onClose, initialTitle = "", initialDesc = "", onCreated }) {
   const { data, add, currentUser, showToast, memberName } = useStore();
+  const drafts = useDraftUploads();
   const [form, setForm] = useState({
     title: initialTitle,
     description: initialDesc,
@@ -56,6 +57,7 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
           : `Added to the board — ${recordTypeInfo(form.recordType).label}`,
       }],
     });
+    drafts.markSaved();
     showToast(`"${project.title}" saved.`, "success");
     if (onCreated) onCreated(project);
     onClose();
@@ -115,8 +117,9 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
       <Field label="NEXT STEP"><input className="md-input" value={form.nextStep} onChange={set("nextStep")} placeholder="Immediate action item" /></Field>
       <Field label="PROJECT IMAGE">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FileAttachButton kind="images" label="Upload key art or still" accept="image/*" onUploaded={setImage} />
-          {image && <AttachmentRow record={image} onRemove={() => { deleteFile(image); setImage(null); }} />}
+          <FileAttachButton kind="images" label="Upload key art or still" accept="image/*"
+            onUploaded={(next) => { if (image) drafts.drop(image); if (drafts.keep(next)) setImage(next); }} />
+          {image && <AttachmentRow record={image} onRemove={() => { drafts.drop(image); setImage(null); }} />}
         </div>
       </Field>
       {error && <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 10 }}>{error}</div>}

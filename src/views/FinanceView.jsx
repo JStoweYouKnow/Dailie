@@ -7,10 +7,11 @@ import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, InlineText, InlineSelect, InlineDate,
   ModalShell, Field, FileAttachButton, AttachmentRow, SingleAttachmentCell, ConfirmButton,
 } from "../ui/kit";
-import { deleteFile } from "../lib/files";
+import { useDraftUploads } from "../lib/draftUploads";
 
 function NewInvoiceModal({ onClose, defaultDirection }) {
   const { data, add } = useStore();
+  const drafts = useDraftUploads();
   const [form, setForm] = useState({
     number: "", direction: defaultDirection || "incoming", companyId: "", projectId: "",
     amount: "", currency: "USD", status: "draft", dueAt: "", notes: "",
@@ -34,6 +35,7 @@ function NewInvoiceModal({ onClose, defaultDirection }) {
       notes: form.notes.trim(),
       ...(file || {}),
     });
+    drafts.markSaved();
     onClose();
   };
 
@@ -74,8 +76,9 @@ function NewInvoiceModal({ onClose, defaultDirection }) {
       <Field label="NOTES"><textarea className="md-textarea" rows={2} value={form.notes} onChange={set("notes")} /></Field>
       <Field label="INVOICE DOCUMENT">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FileAttachButton kind="documents" label="Upload invoice" accept=".pdf,.png,.jpg,.jpeg" onUploaded={setFile} />
-          {file && <AttachmentRow record={file} onRemove={() => { deleteFile(file); setFile(null); }} />}
+          <FileAttachButton kind="documents" label="Upload invoice" accept=".pdf,.png,.jpg,.jpeg"
+            onUploaded={(next) => { if (file) drafts.drop(file); if (drafts.keep(next)) setFile(next); }} />
+          {file && <AttachmentRow record={file} onRemove={() => { drafts.drop(file); setFile(null); }} />}
         </div>
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save Invoice</button>

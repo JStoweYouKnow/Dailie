@@ -7,10 +7,11 @@ import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, InlineText, InlineSelect, InlineDate,
   ModalShell, Field, FileAttachButton, AttachmentRow, SingleAttachmentCell, ConfirmButton,
 } from "../ui/kit";
-import { deleteFile } from "../lib/files";
+import { useDraftUploads } from "../lib/draftUploads";
 
 function NewContractModal({ onClose, defaultKind }) {
   const { data, add, currentUser } = useStore();
+  const drafts = useDraftUploads();
   const [form, setForm] = useState({
     kind: defaultKind || "nda",
     title: "",
@@ -38,6 +39,7 @@ function NewContractModal({ onClose, defaultKind }) {
       expiresAt: null,
       ...(file || {}),
     });
+    drafts.markSaved();
     onClose();
   };
 
@@ -74,8 +76,9 @@ function NewContractModal({ onClose, defaultKind }) {
       <Field label="NOTES"><textarea className="md-textarea" rows={2} value={form.notes} onChange={set("notes")} /></Field>
       <Field label="DOCUMENT" hint="PDFs, Word files and scans are stored privately — only this app can read them back.">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <FileAttachButton kind="documents" label="Upload signed document" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onUploaded={setFile} />
-          {file && <AttachmentRow record={file} onRemove={() => { deleteFile(file); setFile(null); }} />}
+          <FileAttachButton kind="documents" label="Upload signed document" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+            onUploaded={(next) => { if (file) drafts.drop(file); if (drafts.keep(next)) setFile(next); }} />
+          {file && <AttachmentRow record={file} onRemove={() => { drafts.drop(file); setFile(null); }} />}
         </div>
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save Agreement</button>

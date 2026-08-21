@@ -227,7 +227,7 @@ export function CommandPalette({ onClose, onSelect }) {
     tabs.forEach(([key, label]) => { if (!q || label.toLowerCase().includes(q)) push("tab", key, `Go to ${label}`, "Navigation", null); });
 
     return out.slice(0, 12);
-  }, [query, data]);
+  }, [query, data, companyName]);
 
   return (
     <div className="md-overlay" onClick={onClose} style={{ alignItems: "flex-start", paddingTop: "12vh" }}>

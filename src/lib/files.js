@@ -112,11 +112,15 @@ export function restoreAttachment(record, item) {
 }
 
 /**
- * The only thing that actually destroys a blob. Drops the entry as well, so the record
- * never keeps a pointer to something that is gone.
+ * Destroys the blob, then drops the entry. The row stays in trash if the store
+ * refuses the delete, so the file remains restorable and the purge can be retried.
  */
-export function purgeAttachment(record, item) {
-  deleteFile(item);
+export async function purgeAttachment(record, item) {
+  try {
+    await deleteFile(item);
+  } catch (err) {
+    return allAttachments(record);
+  }
   return allAttachments(record).filter((a) => a.id !== item.id);
 }
 
@@ -224,20 +228,121 @@ export async function uploadFile(file, kind = "documents", onProgress) {
   throw new Error(body.error || `Upload failed (${res.status}).`);
 }
 
+function sameDraftFile(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.id && b.id && a.id === b.id) return true;
+  if (a.filePath && b.filePath && a.filePath === b.filePath) return true;
+  return false;
+}
+
+const DRAFT_CLEANUP_KEY = "dailie-draft-file-cleanup-v1";
+
+function readDraftCleanupQueue() {
+  try {
+    if (typeof localStorage === "undefined") return [];
+    const raw = localStorage.getItem(DRAFT_CLEANUP_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((f) => f && f.filePath) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeDraftCleanupQueue(list) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(DRAFT_CLEANUP_KEY, JSON.stringify(list));
+  } catch (err) { /* private mode */ }
+}
+
+function rememberDraftCleanup(file) {
+  const path = file && file.filePath;
+  if (!path) return;
+  const queue = readDraftCleanupQueue();
+  if (queue.some((f) => f.filePath === path)) return;
+  writeDraftCleanupQueue([...queue, { filePath: path, id: file.id || null }]);
+}
+
+function forgetDraftCleanup(file) {
+  const path = file && file.filePath;
+  if (!path) return;
+  writeDraftCleanupQueue(readDraftCleanupQueue().filter((f) => f.filePath !== path));
+}
+
 /**
- * Drops the stored blob behind an attachment. Best effort on purpose: clearing an
- * attachment must not fail because the store was unreachable, but saying nothing at all
- * would strand the blob in storage forever with no record left pointing at it.
+ * Queue the blob first so a failed DELETE still has a retry record, then drop
+ * that record only after the store confirms the file is gone.
+ */
+function dropDraftBlob(file) {
+  rememberDraftCleanup(file);
+  return deleteFile(file).then(() => { forgetDraftCleanup(file); }).catch(() => {});
+}
+
+/** Retry blobs whose earlier draft-discard deletes did not succeed. */
+export function flushDraftCleanups() {
+  return Promise.all(readDraftCleanupQueue().map((file) => dropDraftBlob(file)));
+}
+
+/**
+ * Tracks files uploaded in a create modal before the record is saved. Discard deletes
+ * leftovers; a late `keep` after close still deletes, so a finishing upload cannot leak.
+ * `markSaved` must run before unmount when the files were written onto a stored record.
+ */
+export function createDraftUploadTracker(remove) {
+  const dropBlob = remove || dropDraftBlob;
+  if (!remove) flushDraftCleanups();
+  const pending = [];
+  let saved = false;
+  let closed = false;
+
+  return {
+    keep(file) {
+      if (!file) return false;
+      if (closed) {
+        dropBlob(file);
+        return false;
+      }
+      if (!pending.some((f) => sameDraftFile(f, file))) pending.push(file);
+      return true;
+    },
+    drop(file) {
+      if (!file) return;
+      for (let i = pending.length - 1; i >= 0; i--) {
+        if (sameDraftFile(pending[i], file)) pending.splice(i, 1);
+      }
+      dropBlob(file);
+    },
+    markSaved() {
+      saved = true;
+    },
+    discard() {
+      closed = true;
+      const leftover = pending.splice(0);
+      if (saved) return;
+      leftover.forEach(dropBlob);
+    },
+  };
+}
+
+/**
+ * Drops the stored blob behind an attachment. Inline data URLs live on the record
+ * itself, so there is nothing to delete for those.
  *
- * Inline data URLs live on the record itself, so there is nothing to delete for those.
+ * A non-2xx or failed fetch rejects so callers (purge) can leave the attachment in
+ * place and retry. Fire-and-forget callers should catch.
  */
 export async function deleteFile(record) {
   const path = record && record.filePath;
   if (!path) return;
-  try {
-    await fetch(`/api/files?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-  } catch (err) {
-    // The record is cleared either way; a stranded blob is not worth blocking the UI on.
+  const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+  if (!res.ok) {
+    let message = `Could not delete the file (${res.status}).`;
+    try {
+      const body = await res.json();
+      if (body && body.error) message = body.error;
+    } catch (err) { /* non-JSON body */ }
+    throw new Error(message);
   }
 }
 

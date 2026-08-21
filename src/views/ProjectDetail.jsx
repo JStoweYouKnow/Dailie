@@ -40,7 +40,7 @@ function ImageHeader({ project, onChange }) {
    */
   const intoTrash = () => {
     if (!project.imagePath && !project.imageUrl) return {};
-    if (project.imageTrashPath) deleteFile({ filePath: project.imageTrashPath });
+    if (project.imageTrashPath) deleteFile({ filePath: project.imageTrashPath }).catch(() => {});
     return { imageTrashPath: project.imagePath || "", imageTrashUrl: project.imageUrl || "" };
   };
 
@@ -52,9 +52,11 @@ function ImageHeader({ project, onChange }) {
     imageTrashUrl: project.imageUrl || "",
   });
 
-  const purge = () => {
-    deleteFile({ filePath: project.imageTrashPath });
-    onChange({ imageTrashPath: "", imageTrashUrl: "" });
+  const purge = async () => {
+    try {
+      await deleteFile({ filePath: project.imageTrashPath });
+      onChange({ imageTrashPath: "", imageTrashUrl: "" });
+    } catch (err) { /* stay in trash so the delete can be retried */ }
   };
 
   return (

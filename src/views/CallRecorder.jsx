@@ -31,6 +31,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
   const [audioUrl, setAudioUrl] = useState("");
   const [audioPath, setAudioPath] = useState("");
   const [audioNote, setAudioNote] = useState("");
+  const [audioUploading, setAudioUploading] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPath, setVideoPath] = useState("");
   const [videoNote, setVideoNote] = useState("");
@@ -144,8 +145,9 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
    * URL that is dead the moment the page reloads. Store it ourselves in that case.
    */
   const transcribeAndStore = async (blob, name) => {
-    if (await transcribeAudio(blob)) return;
+    setAudioUploading(true);
     try {
+      if (await transcribeAudio(blob)) return;
       const file = blob instanceof File
         ? blob
         : new File([blob], name || `call-${Date.now()}.webm`, { type: blob.type || "audio/webm" });
@@ -154,6 +156,8 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
       else setAudioNote("Audio is held for this session only — no blob store is configured, so it will not survive a reload.");
     } catch (err) {
       setAudioNote(err.message || "The audio could not be stored; it stays available until you reload.");
+    } finally {
+      setAudioUploading(false);
     }
   };
 
@@ -182,6 +186,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     setSegments([]);
     setAudioPath("");
     setAudioNote("");
+    setAudioUploading(false);
     setVideoPath("");
     setVideoNote("");
 
@@ -284,6 +289,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     setNextSteps([]);
     setAudioPath("");
     setAudioNote("");
+    setAudioUploading(false);
     setTranscript("");
     transcribeAndStore(file);
   };
@@ -373,7 +379,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     setParticipantDraft("");
   };
 
-  const canSave = !isRecording && state !== "running" && !!(summary.trim() || transcript.trim());
+  const canSave = !isRecording && state !== "running" && !audioUploading && !!(summary.trim() || transcript.trim());
 
   const modeStyle = (mode) => ({
     flex: 1, justifyContent: "center",
@@ -500,6 +506,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
             {videoPath && videoProgress == null && <Badge label="STORED" color="var(--sage)" />}
           </div>
           {videoNote && <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 6 }}>{videoNote}</div>}
+          {audioNote && <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 6 }}>{audioNote}</div>}
         </Field>
       )}
 

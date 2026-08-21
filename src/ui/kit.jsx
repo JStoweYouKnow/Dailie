@@ -688,7 +688,7 @@ export function SingleAttachmentCell({ record, onChange, accept, kind = "documen
     <FileAttachButton compact kind={kind} label={label} accept={accept}
       onUploaded={(meta) => {
         // Taking the slot from a trashed document is what finally discards it.
-        if (replacing) deleteFile(record);
+        if (replacing) deleteFile(record).catch(() => {});
         onChange({ ...meta, fileDeletedAt: null });
       }} />
   );
@@ -702,9 +702,11 @@ export function SingleAttachmentCell({ record, onChange, accept, kind = "documen
         trashed={trashed}
         onRemove={trashed ? undefined : () => onChange({ fileDeletedAt: Date.now() })}
         onRestore={trashed ? () => onChange({ fileDeletedAt: null }) : undefined}
-        onPurge={trashed ? () => {
-          deleteFile(record);
-          onChange({ fileName: "", filePath: "", fileUrl: "", fileSize: 0, fileType: "", fileDeletedAt: null });
+        onPurge={trashed ? async () => {
+          try {
+            await deleteFile(record);
+            onChange({ fileName: "", filePath: "", fileUrl: "", fileSize: 0, fileType: "", fileDeletedAt: null });
+          } catch (err) { /* stay trashed so the delete can be retried */ }
         } : undefined}
       />
       {/* Attaching over a trashed document takes the slot, so that blob goes with it. */}

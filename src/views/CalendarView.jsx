@@ -86,6 +86,13 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
     { key: "tasks", label: "Task Due Dates" },
   ];
 
+  const openEntry = (e) => {
+    if (e.project && onOpenProject) onOpenProject(e.project);
+    else if (e.kind === "meeting" && onOpenTab) onOpenTab("meetings");
+    else if (e.kind === "task" && onOpenTab) onOpenTab("tasks");
+    else if (e.kind === "event" && onOpenTab) onOpenTab("events");
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
@@ -119,12 +126,8 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
               </div>
               {events.slice(0, 4).map((e) => (
                 <div key={e.id} role="button" tabIndex={0}
-                  onClick={() => {
-                    if (e.project && onOpenProject) onOpenProject(e.project);
-                    else if (e.kind === "meeting" && onOpenTab) onOpenTab("meetings");
-                    else if (e.kind === "task" && onOpenTab) onOpenTab("tasks");
-                  }}
-                  onKeyDown={(ev) => { if (ev.key === "Enter" && e.project && onOpenProject) onOpenProject(e.project); }}
+                  onClick={() => openEntry(e)}
+                  onKeyDown={(ev) => { if (ev.key === "Enter") openEntry(e); }}
                   title={e.label}
                   style={{
                     fontSize: 10, padding: "3px 5px", marginBottom: 3, borderRadius: 4, cursor: "pointer",

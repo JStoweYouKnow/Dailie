@@ -206,19 +206,19 @@ function TalentDetail({ talent, onClose }) {
    * client, so anyone already in it is matched by email rather than invented.
    */
   const directoryMatch = useMemo(() => {
+    if (!shared) return null;
     const email = (talent.email || "").trim().toLowerCase();
     if (!email) return null;
     return data.team.find((m) => (m.email || "").trim().toLowerCase() === email) || null;
-  }, [data.team, talent.email]);
+  }, [shared, data.team, talent.email]);
 
   /** Signing someone is what makes them assignable on tasks and the Home board. */
   const makeAssignable = () => {
-    // `talent` is shared-writable, so linking to a directory member always sticks.
-    if (directoryMatch) {
+    if (shared) {
+      if (!directoryMatch) return;
       update("talent", talent.id, { teamMemberId: directoryMatch.id });
       return;
     }
-    // A local board owns its own team list and can simply add the person.
     const member = { id: uid(), name: talent.name, email: talent.email || "", role: talent.discipline || "" };
     patch((current) => ({
       team: [...current.team, member],

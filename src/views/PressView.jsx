@@ -4,8 +4,9 @@ import { useStore } from "../lib/store";
 import { PRESS_KINDS, PRESS_STATUSES, lookupColor } from "../lib/model";
 import {
   listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment,
-  deleteFile, PRESS_FILE_ACCEPT,
+  PRESS_FILE_ACCEPT,
 } from "../lib/files";
+import { useDraftUploads } from "../lib/draftUploads";
 
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Section,
@@ -28,11 +29,12 @@ function undoRemove(row, item) {
 }
 
 function purge(row, item) {
-  return { attachments: purgeAttachment(row, item) };
+  return purgeAttachment(row, item).then((attachments) => ({ attachments }));
 }
 
 function NewPressModal({ onClose, defaultKind }) {
   const { data, add, currentUser } = useStore();
+  const drafts = useDraftUploads();
   const [form, setForm] = useState({
     kind: defaultKind && defaultKind !== "all" ? defaultKind : "outlet",
     title: "", outlet: "", journalist: "", email: "", url: "", status: "pitching",
@@ -53,6 +55,7 @@ function NewPressModal({ onClose, defaultKind }) {
       scheduledFor: null,
       attachments: files,
     });
+    drafts.markSaved();
     onClose();
   };
 
@@ -92,8 +95,8 @@ function NewPressModal({ onClose, defaultKind }) {
           items={files}
           accept={PRESS_FILE_ACCEPT}
           label="Add files"
-          onAdd={(file) => setFiles((list) => [...list, file])}
-          onRemove={(item) => { deleteFile(item); setFiles((list) => list.filter((f) => f.id !== item.id)); }}
+          onAdd={(file) => { if (drafts.keep(file)) setFiles((list) => [...list, file]); }}
+          onRemove={(item) => { drafts.drop(item); setFiles((list) => list.filter((f) => f.id !== item.id)); }}
         />
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save</button>
@@ -178,7 +181,10 @@ export default function PressView({ searchQuery }) {
         onAdd={(file) => update("press", r.id, (row) => addAttachment(row, file))}
         onRemove={(item) => update("press", r.id, (row) => removeAttachment(row, item))}
         onRestore={(item) => update("press", r.id, (row) => undoRemove(row, item))}
-        onPurge={(item) => update("press", r.id, (row) => purge(row, item))}
+        onPurge={async (item) => {
+          const next = await purge(r, item);
+          update("press", r.id, next);
+        }}
       />
     ) },
     { key: "del", label: "", stopClick: true, render: (r) => <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("press", r.id)} /> },
@@ -214,7 +220,10 @@ export default function PressView({ searchQuery }) {
                     onAdd={(file) => update("press", k.id, (row) => addAttachment(row, file))}
                     onRemove={(item) => update("press", k.id, (row) => removeAttachment(row, item))}
                     onRestore={(item) => update("press", k.id, (row) => undoRemove(row, item))}
-                    onPurge={(item) => update("press", k.id, (row) => purge(row, item))}
+                    onPurge={async (item) => {
+                      const next = await purge(k, item);
+                      update("press", k.id, next);
+                    }}
                   />
                 </div>
               </div>
