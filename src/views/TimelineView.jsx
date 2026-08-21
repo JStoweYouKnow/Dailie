@@ -4,6 +4,7 @@ import { useStore } from "../lib/store";
 import { stageInfo, recordTypeInfo } from "../lib/model";
 import { formatDay, formatClock, uid } from "../lib/format";
 import { FilterChips, EmptyState } from "../ui/kit";
+import { visibleMeetings } from "../lib/calendarExclusions";
 
 function QuickLogBar({ onAdd, onRecord }) {
   const { currentUser } = useStore();
@@ -38,7 +39,7 @@ export default function TimelineView({ searchQuery, onRecord }) {
         title: p.title, subtitle: h.note, color: recordTypeInfo(p.recordType).color,
       }));
     });
-    data.meetings.forEach((m) => {
+    visibleMeetings(data.meetings, data.settings).forEach((m) => {
       const open = data.tasks.filter((t) => t.meetingId === m.id && t.status !== "done").length;
       list.push({
         id: `m-${m.id}`, ts: m.date, type: "meeting", kind: "MEETING", title: m.title,

@@ -11,6 +11,7 @@ import { imageSrc, uploadFile } from "../lib/files";
 import {
   ModalShell, Field, Section, Badge, InlineText, InlineSelect, MemberPicker, ConfirmButton, Avatar,
 } from "../ui/kit";
+import { visibleMeetings } from "../lib/calendarExclusions";
 
 function ImageHeader({ project, onChange }) {
   const [busy, setBusy] = useState(false);
@@ -118,7 +119,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const notes = data.notes.filter((n) => n.projectId === project.id);
   const contracts = data.contracts.filter((c) => c.projectId === project.id);
   const invoices = data.invoices.filter((i) => i.projectId === project.id);
-  const meetings = data.meetings.filter((m) => m.projectId === project.id);
+  const meetings = visibleMeetings(data.meetings, data.settings).filter((m) => m.projectId === project.id);
   const history = [...(project.history || [])].sort((a, b) => b.date - a.date);
   const booked = (data.talent || [])
     .map((t) => ({ talent: t, assignment: (t.assignments || []).find((a) => a.projectId === project.id) }))

@@ -90,7 +90,7 @@ export async function requestGoogleAccess(user, additionalScopes, { redirectUrl,
   return { alreadyGranted: true };
 }
 
-export async function syncFromGoogle(what, { account, getToken } = {}) {
+export async function syncFromGoogle(what, { account, getToken, excludedCalendarIds } = {}) {
   // Explicit bearer token — see useAuthToken for why the cookie is not enough.
   let token = "";
   if (typeof getToken === "function") {
@@ -105,7 +105,7 @@ export async function syncFromGoogle(what, { account, getToken } = {}) {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ what, account }),
+      body: JSON.stringify({ what, account, excludedCalendarIds }),
     });
   } catch (err) {
     throw new Error("Could not reach the sync endpoint. Run the app with `vercel dev` to serve /api locally.");

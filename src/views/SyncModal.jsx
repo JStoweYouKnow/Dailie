@@ -5,6 +5,7 @@ import { parseSyncPayload, isICalendarFeed } from "../calendarSync";
 import { makeTask } from "../lib/model";
 import { formatShort, formatClock, relativeDays, tsFromDateInput } from "../lib/format";
 import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
+import { mergeSyncedMeetings, excludedMeetingList, excludedCalendarIdSet, restoreExcludedMeeting, setCalendarExcluded } from "../lib/calendarExclusions";
 import { syncFromGoogle, requestGoogleAccess, googleHasScope, GOOGLE_CALENDAR_SCOPE, shouldResumeGoogleCalendarSync, markGoogleCalendarResumeStarted, clearGoogleCalendarResume } from "../lib/googleSync";
 import { useAccount, useAuthToken, useClerkUser } from "../lib/auth";
 
@@ -27,23 +28,14 @@ export default function SyncModal({ onClose }) {
   const [preview, setPreview] = useState(null);
 
   const feeds = data.settings.calendarFeeds || [];
+  const googleCalendars = data.settings.googleCalendars || [];
+  const excludedCalendars = excludedCalendarIdSet(data.settings);
+  const hiddenEvents = excludedMeetingList(data.settings);
 
   /** Merges by event id so a repeated pull updates rather than duplicates. */
   const mergeMeetings = (incoming) => {
-    const existing = new Map(data.meetings.map((m) => [m.id, m]));
-    let added = 0;
-    let updated = 0;
-    incoming.forEach((event) => {
-      const prior = existing.get(event.id);
-      if (prior) {
-        existing.set(event.id, { ...prior, title: event.title, date: event.date, attendees: event.attendees, meetingLink: event.meetingLink || prior.meetingLink, notes: prior.notes || event.notes });
-        updated += 1;
-      } else {
-        existing.set(event.id, { ...event, followUps: [], projectId: null });
-        added += 1;
-      }
-    });
-    patch({ meetings: [...existing.values()].sort((a, b) => b.date - a.date) });
+    const { meetings, added, updated } = mergeSyncedMeetings(data.meetings, incoming, data.settings);
+    patch({ meetings });
     return { added, updated };
   };
 
@@ -61,7 +53,12 @@ export default function SyncModal({ onClose }) {
         throw new Error("That URL did not return a calendar. Use the Secret address in iCal format, not the calendar's web page.");
       }
       const parsed = parseSyncPayload(text);
-      const { added, updated } = mergeMeetings(parsed.meetings);
+      const stamped = parsed.meetings.map((m) => ({
+        ...m,
+        calendarId: `feed:${feed.id}`,
+        calendarLabel: feed.label,
+      }));
+      const { added, updated } = mergeMeetings(stamped);
       if (persist) {
         updateSettings({
           calendarFeeds: feeds.map((f) => (f.id === feed.id ? { ...f, lastSyncedAt: Date.now(), eventCount: parsed.meetings.length } : f)),
@@ -106,7 +103,13 @@ export default function SyncModal({ onClose }) {
         const access = await requestGoogleAccess(user, [GOOGLE_CALENDAR_SCOPE]);
         if (access.redirecting) return;
       }
-      const result = await syncFromGoogle("calendar", { getToken });
+      const result = await syncFromGoogle("calendar", {
+        getToken,
+        excludedCalendarIds: data.settings.excludedCalendarIds || [],
+      });
+      if (result.calendars) {
+        updateSettings({ googleCalendars: result.calendars });
+      }
       clearGoogleCalendarResume();
       const { added, updated } = mergeMeetings(result.meetings || []);
       showToast(`Google Calendar: ${added} new, ${updated} updated.`, "success");
@@ -187,6 +190,59 @@ export default function SyncModal({ onClose }) {
           {googleError && (
             <div style={{ fontSize: 12, color: "var(--red)", marginTop: 10, lineHeight: 1.55 }}>{googleError}</div>
           )}
+          {googleCalendars.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em", marginBottom: 8, fontWeight: 700 }}>
+                CALENDARS TO SYNC
+              </div>
+              {googleCalendars.map((cal) => {
+                const on = !excludedCalendars.has(cal.id);
+                return (
+                  <label key={cal.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", fontSize: 13, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={(e) => setCalendarExcluded(cal.id, !e.target.checked, {
+                        meetings: data.meetings,
+                        settings: data.settings,
+                        patch,
+                        updateSettings,
+                      })}
+                    />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      {cal.summary}
+                      {cal.primary ? <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginLeft: 8 }}>PRIMARY</span> : null}
+                    </span>
+                  </label>
+                );
+              })}
+              <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 4, lineHeight: 1.5 }}>
+                Uncheck a calendar to drop its events and skip it on the next sync. Sync again after turning one back on.
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {hiddenEvents.length > 0 && (
+        <Section title={`HIDDEN FROM SYNC · ${hiddenEvents.length}`}>
+          <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10, lineHeight: 1.5 }}>
+            These events stay off the board and are skipped on the next pull. Restore one to bring it back next time you sync.
+          </div>
+          {hiddenEvents.map((entry) => (
+            <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--rule)" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.title}</div>
+                <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>
+                  {[entry.calendarLabel, entry.date ? formatShort(entry.date) : ""].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+              <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)", fontSize: 12 }}
+                onClick={() => restoreExcludedMeeting(entry.id, { settings: data.settings, updateSettings, showToast })}>
+                Restore
+              </button>
+            </div>
+          ))}
         </Section>
       )}
 

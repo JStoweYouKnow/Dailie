@@ -8,6 +8,7 @@ import { staleFollowUps, alertsFor, recordTypeInfo, lookupColor, PAYMENT_STATUSE
 import { formatShort, formatClock, formatDay, relativeDays, daysSince, DAY } from "../lib/format";
 import { imageSrc } from "../lib/files";
 import { Section, EmptyState, Badge, Avatar, AvatarStack, Stat } from "../ui/kit";
+import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
 
 function TaskLine({ task, onToggle, projectName, memberName }) {
   const overdue = task.dueDate && task.dueDate < Date.now() && task.status !== "done";
@@ -87,15 +88,15 @@ function TeamTaskColumns({ onOpenTab }) {
 }
 
 function MeetingsPanel({ onOpenTab, onRecord }) {
-  const { data } = useStore();
+  const { data, patch, updateSettings, showToast } = useStore();
 
   const upcoming = useMemo(() => {
     const from = Date.now() - 2 * 60 * 60 * 1000;
-    return data.meetings
+    return visibleMeetings(data.meetings, data.settings)
       .filter((m) => m.date >= from && m.date <= Date.now() + 14 * DAY)
       .sort((a, b) => a.date - b.date)
       .slice(0, 8);
-  }, [data.meetings]);
+  }, [data.meetings, data.settings]);
 
   if (!upcoming.length) {
     return (
@@ -141,6 +142,14 @@ function MeetingsPanel({ onOpenTab, onRecord }) {
                     <Video size={12} /> Record
                   </button>
                 </>
+              )}
+              {isSyncedMeeting(m) && (
+                <button className="md-btn md-btn-ghost" title="Hide from calendar sync" style={{ fontSize: 12 }}
+                  onClick={() => excludeMeetingFromSync(m, {
+                    meetings: data.meetings, settings: data.settings, patch, updateSettings, showToast,
+                  })}>
+                  Hide
+                </button>
               )}
             </div>
           </div>

@@ -275,6 +275,10 @@ export const SEED_DATA = {
     autoArmRecording: true,
     emailAccounts: [{ id: "acct-1", address: "elena@matriarch-studios.com", label: "Elena — Matriarch" }],
     calendarFeeds: [],
+    excludedMeetings: [],
+    excludedMeetingIds: [],
+    excludedCalendarIds: [],
+    googleCalendars: [],
   },
   pipelines: DEFAULT_PIPELINES,
   companies: [
@@ -618,9 +622,17 @@ export function normalizeData(raw) {
     autoArmRecording: true,
     emailAccounts: [],
     calendarFeeds: [],
+    excludedMeetings: [],
+    excludedMeetingIds: [],
+    excludedCalendarIds: [],
+    googleCalendars: [],
     ...(input.settings || {}),
   };
   if (!team.some((m) => m.id === settings.currentUserId)) settings.currentUserId = team[0] ? team[0].id : null;
+  settings.excludedMeetings = ensureArray(settings.excludedMeetings);
+  settings.excludedMeetingIds = ensureArray(settings.excludedMeetingIds);
+  settings.excludedCalendarIds = ensureArray(settings.excludedCalendarIds).filter(Boolean);
+  settings.googleCalendars = ensureArray(settings.googleCalendars);
 
   const pipelines = { ...DEFAULT_PIPELINES, ...(input.pipelines || {}) };
   RECORD_TYPES.forEach((t) => {

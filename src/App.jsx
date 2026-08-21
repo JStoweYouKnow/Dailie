@@ -14,6 +14,7 @@ import SharedBoundary from "./lib/SharedBoundary";
 import { normalizeData, staleFollowUps } from "./lib/model";
 import { parseDocumentFile } from "./documentParser";
 import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
+import { mergeSyncedMeetings, isIncomingExcluded } from "./lib/calendarExclusions";
 import { LoadingState, Stat, Avatar, ModalShell, Field } from "./ui/kit";
 import Markdown from "./ui/Markdown";
 import { IMPORT_FORMATS, pickFormat } from "./lib/textFormats";
@@ -363,10 +364,11 @@ function Board({ store }) {
     const alreadyRecorded = new Set(data.calls.map((c) => c.meetingId).filter(Boolean));
     return data.meetings.find((m) =>
       m.meetingLink &&
+      !isIncomingExcluded(m, data.settings) &&
       !alreadyRecorded.has(m.id) &&
       !dismissedCalls.includes(m.id) &&
       Math.abs(m.date - Date.now()) < 5 * 60 * 1000) || null;
-  }, [data.meetings, data.calls, data.settings.autoArmRecording, dismissedCalls]);
+  }, [data.meetings, data.calls, data.settings, dismissedCalls]);
 
   // Re-pull every subscribed Google Calendar on load so meetings are current.
   const syncedOnce = useRef(false);
@@ -386,13 +388,14 @@ function Board({ store }) {
           if (!isICalendarFeed(text)) continue;
           const parsed = parseSyncPayload(text);
           patch((current) => {
-            const map = new Map(current.meetings.map((m) => [m.id, m]));
-            parsed.meetings.forEach((event) => {
-              const prior = map.get(event.id);
-              if (prior) map.set(event.id, { ...prior, title: event.title, date: event.date, attendees: event.attendees, meetingLink: event.meetingLink || prior.meetingLink });
-              else { map.set(event.id, { ...event, followUps: [], projectId: null }); added += 1; }
-            });
-            return { meetings: [...map.values()].sort((a, b) => b.date - a.date) };
+            const stamped = parsed.meetings.map((event) => ({
+              ...event,
+              calendarId: event.calendarId || `feed:${feed.id}`,
+              calendarLabel: event.calendarLabel || feed.label,
+            }));
+            const { meetings, added: n } = mergeSyncedMeetings(current.meetings, stamped, current.settings);
+            added += n;
+            return { meetings };
           });
         } catch (err) { /* offline or the feed moved — the manual sync button reports it */ }
       }

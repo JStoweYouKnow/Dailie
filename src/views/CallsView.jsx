@@ -4,6 +4,7 @@ import { useStore } from "../lib/store";
 import { participantNames, speakersIn } from "../lib/model";
 import { formatShort, formatClock, formatDuration, parseEmailList } from "../lib/format";
 import { ViewHeader, EmptyState, Badge, Section, ModalShell, Field, Avatar } from "../ui/kit";
+import { visibleMeetings } from "../lib/calendarExclusions";
 import CallDetail, { mediaSrc } from "./CallDetail";
 
 /**
@@ -222,10 +223,10 @@ export default function CallsView({ searchQuery, onStartRecording }) {
 
   const upcoming = useMemo(() => {
     const soon = Date.now() + 60 * 60 * 1000;
-    return data.meetings
+    return visibleMeetings(data.meetings, data.settings)
       .filter((m) => m.meetingLink && m.date > Date.now() - 30 * 60 * 1000 && m.date < soon)
       .sort((a, b) => a.date - b.date);
-  }, [data.meetings]);
+  }, [data.meetings, data.settings]);
 
   return (
     <div>

@@ -1,14 +1,15 @@
 import { useMemo, useState } from "react";
-import { Plus, Users, ExternalLink, Video, CheckSquare, Square, X } from "lucide-react";
+import { Plus, Users, ExternalLink, Video, CheckSquare, Square, X, EyeOff } from "lucide-react";
 import { useStore } from "../lib/store";
 import { makeTask } from "../lib/model";
 import { formatShort, uid, tsFromDateInput } from "../lib/format";
+import { isSyncedMeeting, excludeMeetingFromSync, visibleMeetings } from "../lib/calendarExclusions";
 import {
   ViewHeader, EmptyState, ModalShell, Field, ConfirmButton, InlineText, InlineSelect, MemberPicker, Badge,
 } from "../ui/kit";
 
 function MeetingCard({ meeting, onRecord }) {
-  const { data, update, remove, add, currentUser, memberName } = useStore();
+  const { data, update, remove, add, patch, updateSettings, currentUser, showToast } = useStore();
   const [newTask, setNewTask] = useState("");
   const tasks = data.tasks.filter((t) => t.meetingId === meeting.id);
   const open = tasks.filter((t) => t.status !== "done").length;
@@ -41,6 +42,14 @@ function MeetingCard({ meeting, onRecord }) {
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <InlineSelect value={meeting.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="Link project"
             onCommit={(v) => update("meetings", meeting.id, { projectId: v })} />
+          {isSyncedMeeting(meeting) && (
+            <button className="md-btn md-btn-ghost" title="Hide from calendar sync"
+              onClick={() => excludeMeetingFromSync(meeting, {
+                meetings: data.meetings, settings: data.settings, patch, updateSettings, showToast,
+              })}>
+              <EyeOff size={13} /> Hide
+            </button>
+          )}
           <ConfirmButton label="" confirmLabel="Delete?" onConfirm={() => remove("meetings", meeting.id)} />
         </div>
       </div>
@@ -169,7 +178,7 @@ export default function MeetingsView({ searchQuery, onRecord, onOpenNew }) {
   const { data } = useStore();
 
   const meetings = useMemo(() => {
-    let list = [...data.meetings].sort((a, b) => b.date - a.date);
+    let list = visibleMeetings(data.meetings, data.settings).sort((a, b) => b.date - a.date);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter((m) =>
@@ -178,7 +187,7 @@ export default function MeetingsView({ searchQuery, onRecord, onOpenNew }) {
         (m.attendees || "").toLowerCase().includes(q));
     }
     return list;
-  }, [data.meetings, searchQuery]);
+  }, [data.meetings, data.settings, searchQuery]);
 
   return (
     <div>

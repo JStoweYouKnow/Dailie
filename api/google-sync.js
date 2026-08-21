@@ -189,6 +189,8 @@ function mapEvent(e, calendar) {
     meetingLink: meetingLink(e),
     followUps: [],
     projectId: null,
+    calendarId: (calendar && calendar.id) || "primary",
+    calendarLabel: (calendar && calendar.summary) || "",
   };
 }
 
@@ -215,12 +217,14 @@ async function eventsForCalendar(token, calendar, timeMin, timeMax) {
 }
 
 /** Calendar events, in the shape the Calendar and Meetings tabs already store. */
-async function syncCalendar(token) {
+async function syncCalendar(token, excludedCalendarIds) {
   const timeMin = new Date(Date.now() - 30 * 86400000).toISOString();
   const timeMax = new Date(Date.now() + 120 * 86400000).toISOString();
   const calendars = await listCalendars(token);
+  const skip = new Set(excludedCalendarIds || []);
   const pages = await Promise.all(
     calendars.map(async (calendar) => {
+      if (skip.has(calendar.id)) return [];
       try {
         return await eventsForCalendar(token, calendar, timeMin, timeMax);
       } catch (err) {
@@ -230,11 +234,19 @@ async function syncCalendar(token) {
     })
   );
   const seen = new Set();
-  return pages.flat().filter((m) => {
+  const meetings = pages.flat().filter((m) => {
     if (seen.has(m.id)) return false;
     seen.add(m.id);
     return true;
   });
+  return {
+    meetings,
+    calendars: calendars.map((c) => ({
+      id: c.id,
+      summary: c.summary || c.id,
+      primary: !!c.primary,
+    })),
+  };
 }
 
 export async function POST(request) {
@@ -302,8 +314,13 @@ export async function POST(request) {
       const emails = await syncGmail(token, body.account || "");
       return Response.json({ what, emails, count: emails.length });
     }
-    const meetings = await syncCalendar(token);
-    return Response.json({ what, meetings, count: meetings.length });
+    const pulled = await syncCalendar(token, Array.isArray(body.excludedCalendarIds) ? body.excludedCalendarIds : []);
+    return Response.json({
+      what,
+      meetings: pulled.meetings,
+      count: pulled.meetings.length,
+      calendars: pulled.calendars,
+    });
   } catch (err) {
     const googleAuthFail = err.status === 401 || err.status === 403;
     const apiDisabled = /has not been used in project|is disabled|accessNotConfigured/i.test(err.message || "");

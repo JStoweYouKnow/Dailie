@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Video, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Video, ExternalLink, EyeOff } from "lucide-react";
 import { useStore } from "../lib/store";
 import { RECORD_TYPES, recordTypeInfo } from "../lib/model";
 import { formatClock } from "../lib/format";
 import { FilterChips, Section, Badge } from "../ui/kit";
+import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
 
 function dateKey(ts) {
   const d = new Date(ts);
@@ -12,7 +13,7 @@ function dateKey(ts) {
 }
 
 export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
-  const { data } = useStore();
+  const { data, patch, updateSettings, showToast } = useStore();
   const [cursor, setCursor] = useState(new Date());
   const [filter, setFilter] = useState("all");
 
@@ -30,7 +31,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
     };
 
     if (filter === "all" || filter === "meetings") {
-      data.meetings.forEach((m) => push(m.date, {
+      visibleMeetings(data.meetings, data.settings).forEach((m) => push(m.date, {
         id: `m-${m.id}`, kind: "meeting", label: m.title, color: "var(--accent)", ts: m.date, meeting: m,
       }));
     }
@@ -54,7 +55,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
 
     Object.values(map).forEach((list) => list.sort((a, b) => a.ts - b.ts));
     return map;
-  }, [data.meetings, data.tasks, data.projects, filter]);
+  }, [data.meetings, data.settings, data.tasks, data.projects, filter]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -133,7 +134,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
       </div>
 
       <Section title="NEXT UP" style={{ marginTop: 26 }}>
-        {data.meetings
+        {visibleMeetings(data.meetings, data.settings)
           .filter((m) => m.date >= Date.now() - 60 * 60 * 1000)
           .sort((a, b) => a.date - b.date)
           .slice(0, 5)
@@ -153,9 +154,17 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
                   </button>
                 </>
               )}
+              {isSyncedMeeting(m) && (
+                <button className="md-btn md-btn-ghost" title="Hide from calendar sync" style={{ fontSize: 12 }}
+                  onClick={() => excludeMeetingFromSync(m, {
+                    meetings: data.meetings, settings: data.settings, patch, updateSettings, showToast,
+                  })}>
+                  <EyeOff size={12} /> Hide
+                </button>
+              )}
             </div>
           ))}
-        {data.meetings.filter((m) => m.date >= Date.now() - 60 * 60 * 1000).length === 0 && (
+        {visibleMeetings(data.meetings, data.settings).filter((m) => m.date >= Date.now() - 60 * 60 * 1000).length === 0 && (
           <div style={{ fontSize: 13, color: "var(--dim)" }}>Nothing scheduled. Connect a Google Calendar feed to pull meetings in.</div>
         )}
       </Section>
