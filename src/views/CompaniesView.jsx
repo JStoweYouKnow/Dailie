@@ -297,7 +297,7 @@ export default function CompaniesView({ searchQuery, onOpenTab, lockedType, titl
           subtitle="Sync your Gmail accounts, then hit Populate from Email — Dailie builds companies and the people behind them from your mail traffic."
         />
       ) : (
-        <DataTable columns={columns} rows={rows} onRowClick={setOpen} />
+        <DataTable columns={columns} rows={rows} onRowClick={setOpen} exportTitle={title || "Companies"} />
       )}
 
       {open && <CompanyDetail company={data.companies.find((c) => c.id === open.id) || open} onClose={() => setOpen(null)} onOpenTab={onOpenTab} />}

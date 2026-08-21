@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, GripVertical, RotateCcw } from "lucide-react";
+import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, GripVertical, RotateCcw, Download } from "lucide-react";
 import { initials, colorForName, dateInputValue, tsFromDateInput } from "../lib/format";
 import { looksLikeMarkdown } from "../lib/textFormats";
+import { useStore } from "../lib/store";
+import { downloadTableCsv, downloadTablePdf } from "../lib/tableExport";
 import Markdown from "./Markdown";
 import {
   uploadFile, deleteFile, formatBytes, fileSrc, kindForFile, asAttachment,
@@ -85,6 +87,54 @@ export function ViewHeader({ count, label, children }) {
         {count != null ? `${count} ` : ""}{label}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>{children}</div>
+    </div>
+  );
+}
+
+/** CSV and PDF of the rows currently on screen — filtered lists included. */
+export function ExportMenu({ title, columns, rows }) {
+  const { data, companyName, projectName, memberName } = useStore();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  if (!rows || !rows.length) return null;
+
+  const ctx = { data, companyName, projectName, memberName };
+  const run = (kind) => {
+    if (kind === "csv") downloadTableCsv(title, columns, rows, ctx);
+    else downloadTablePdf(title, columns, rows, ctx);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)" }} onClick={() => setOpen((v) => !v)}>
+        <Download size={13} /> Export
+        <ChevronDown size={11} />
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 20, minWidth: 180,
+          background: "var(--panel)", border: "1px solid var(--rule)", borderRadius: 10,
+          boxShadow: "0 12px 32px rgba(0,0,0,.28)", padding: 6,
+        }}>
+          <button className="md-btn md-btn-ghost" style={{ width: "100%", justifyContent: "flex-start", fontSize: 12 }} onClick={() => run("csv")}>
+            CSV spreadsheet
+          </button>
+          <button className="md-btn md-btn-ghost" style={{ width: "100%", justifyContent: "flex-start", fontSize: 12 }} onClick={() => run("pdf")}>
+            PDF for printing
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -333,7 +383,7 @@ export function MemberPicker({ team, selectedIds, onChange, label = "Assignees" 
  * Table
  * ------------------------------------------------------------------ */
 
-export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.id, onReorderColumns }) {
+export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.id, onReorderColumns, exportTitle, hideExport }) {
   const [dragKey, setDragKey] = useState(null);
   const [overKey, setOverKey] = useState(null);
 
@@ -362,7 +412,13 @@ export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.
   } : {});
 
   return (
-    <div className="md-scroll" style={{ overflowX: "auto", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)" }}>
+    <div>
+      {!hideExport && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <ExportMenu title={exportTitle || "Table"} columns={columns} rows={rows} />
+        </div>
+      )}
+      <div className="md-scroll" style={{ overflowX: "auto", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
         <thead>
           <tr style={{ background: "var(--panel-raised)", borderBottom: "1px solid var(--rule)" }}>
@@ -397,6 +453,7 @@ export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

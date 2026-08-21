@@ -169,7 +169,7 @@ export default function LegalView({ searchQuery }) {
           action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Scale size={14} /> New Contact</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} />
+        <DataTable columns={columns} rows={rows} exportTitle="Legal" />
       )}
 
       {showNew && <NewCounselModal onClose={() => setShowNew(false)} />}

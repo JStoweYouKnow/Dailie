@@ -10,7 +10,7 @@ import { formatShort, uid } from "../lib/format";
 import { imageSrc } from "../lib/files";
 import {
   ViewHeader, FilterChips, EmptyState, DataTable, KanbanBoard, Badge, Avatar, AvatarStack,
-  InlineText, InlineSelect, MemberPicker,
+  InlineText, InlineSelect, MemberPicker, ExportMenu,
 } from "../ui/kit";
 
 /** Owner + every assigned team member — the set the MY PROJECTS filter matches against. */
@@ -276,6 +276,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
           {modeButton("gallery", ImageIcon, "Gallery view")}
           {modeButton("table", TableIcon, "Table view")}
         </div>
+        <ExportMenu title="Projects" columns={columns} rows={projects} />
         <button className="md-btn md-btn-primary" onClick={onOpenNew}><Plus size={14} /> New Project</button>
       </ViewHeader>
 
@@ -289,7 +290,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
           subtitle={mineOnly ? "Projects where you are the owner or a team member land here." : "Change the type filter, clear your search, or add a project."}
         />
       ) : viewMode === "table" ? (
-        <DataTable columns={columns} rows={projects} onRowClick={onOpenDetail} onReorderColumns={reorderTableColumns} />
+        <DataTable columns={columns} rows={projects} onRowClick={onOpenDetail} onReorderColumns={reorderTableColumns} hideExport />
       ) : viewMode === "gallery" ? (
         <GalleryGrid projects={projects} onOpen={onOpenDetail} memberName={memberName} companyName={companyName} />
       ) : (

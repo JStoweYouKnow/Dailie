@@ -202,7 +202,7 @@ export default function PeopleView({ searchQuery, onOpenTab }) {
       {rows.length === 0 ? (
         <EmptyState title="No people yet" subtitle="Add someone, or sync a Gmail thread and Dailie will populate people automatically." />
       ) : (
-        <DataTable columns={columns} rows={rows} onRowClick={setOpen} />
+        <DataTable columns={columns} rows={rows} onRowClick={setOpen} exportTitle="People" />
       )}
 
       {open && <PersonDetail person={data.people.find((p) => p.id === open.id) || open} onClose={() => setOpen(null)} onOpenTab={onOpenTab} />}

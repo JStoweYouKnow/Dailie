@@ -244,7 +244,7 @@ export default function PressView({ searchQuery }) {
           action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Megaphone size={14} /> New Press Record</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} />
+        <DataTable columns={columns} rows={rows} exportTitle="Press" />
       )}
 
       {showNew && <NewPressModal onClose={() => setShowNew(false)} defaultKind={kindFilter} />}

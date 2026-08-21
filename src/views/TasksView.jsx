@@ -5,7 +5,7 @@ import { TASK_STATUSES, PRIORITIES, makeTask, lookupColor } from "../lib/model";
 import { formatShort, relativeDays, uid } from "../lib/format";
 import {
   ViewHeader, FilterChips, EmptyState, DataTable, KanbanBoard, Badge, Avatar, AvatarStack,
-  InlineText, InlineSelect, InlineDate, MemberPicker, ConfirmButton, Section,
+  InlineText, InlineSelect, InlineDate, MemberPicker, ConfirmButton, Section, ExportMenu,
 } from "../ui/kit";
 
 function TaskCard({ task, onOpen, memberName, projectName, onToggle }) {
@@ -165,7 +165,15 @@ function NotesPane({ searchQuery }) {
       {notes.length === 0 ? (
         <EmptyState title="No notes yet" subtitle="Notes are shared — anyone on the team can edit them and add collaborators." />
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <ExportMenu title="Notes" columns={[
+              { key: "title", label: "TITLE" },
+              { key: "notes", label: "BODY" },
+              { key: "updated", label: "UPDATED" },
+            ]} rows={notes} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
           {notes.map((n) => (
             <div key={n.id} className="md-card" style={{ padding: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
@@ -192,6 +200,7 @@ function NotesPane({ searchQuery }) {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
     </div>
@@ -286,6 +295,7 @@ export default function TasksView({ searchQuery }) {
                 <TableIcon size={14} color={viewMode === "table" ? "var(--accent)" : "var(--dim)"} />
               </button>
             </div>
+            <ExportMenu title="Tasks" columns={columns} rows={tasks} />
           </ViewHeader>
 
           <div className="md-card" style={{ padding: 14, display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
@@ -302,7 +312,7 @@ export default function TasksView({ searchQuery }) {
           {tasks.length === 0 ? (
             <EmptyState title="No tasks match" subtitle="Add a task above, or clear the filters. Call recordings and meetings add tasks here automatically." />
           ) : viewMode === "table" ? (
-            <DataTable columns={columns} rows={tasks} onRowClick={setOpenTask} />
+            <DataTable columns={columns} rows={tasks} onRowClick={setOpenTask} hideExport />
           ) : (
             <KanbanBoard
               columns={TASK_STATUSES}

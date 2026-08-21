@@ -156,7 +156,7 @@ export default function EventsView({ searchQuery }) {
           action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Mic2 size={14} /> New Event</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} />
+        <DataTable columns={columns} rows={rows} exportTitle="Events" />
       )}
 
       {showNew && <NewEventModal onClose={() => setShowNew(false)} />}

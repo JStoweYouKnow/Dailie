@@ -356,7 +356,7 @@ export default function EmailsView({ searchQuery, onOpenTab }) {
           action={<button className="md-btn md-btn-primary" onClick={() => setShowImport(true)}><Mail size={14} /> Sync Gmail</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} />
+        <DataTable columns={columns} rows={rows} exportTitle="Emails" />
       )}
 
       {showImport && <EmailImportModal onClose={() => setShowImport(false)} />}

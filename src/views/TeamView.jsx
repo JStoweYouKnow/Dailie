@@ -8,7 +8,7 @@ import {
 import { formatShort, formatFull, formatMoney, parseMoney, dateInputValue, tsFromDateInput, uid, DAY } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Avatar, InlineText, InlineSelect, InlineDate,
-  ModalShell, Field, Section, ConfirmButton,
+  ModalShell, Field, Section, ConfirmButton, ExportMenu,
 } from "../ui/kit";
 
 const WINDOWS = [
@@ -478,6 +478,7 @@ export default function TeamView({ searchQuery }) {
             <CalendarRange size={14} color={mode === "calendar" ? "var(--accent)" : "var(--dim)"} />
           </button>
         </div>
+        <ExportMenu title="Roster" columns={columns} rows={roster} />
         <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> Add Person</button>
       </ViewHeader>
 
@@ -518,7 +519,7 @@ export default function TeamView({ searchQuery }) {
       ) : mode === "calendar" ? (
         <AvailabilityTimeline roster={roster} onOpen={setOpen} />
       ) : (
-        <DataTable columns={columns} rows={roster} onRowClick={setOpen} />
+        <DataTable columns={columns} rows={roster} onRowClick={setOpen} hideExport />
       )}
 
       {open && <TalentDetail talent={(data.talent || []).find((t) => t.id === open.id) || open} onClose={() => setOpen(null)} />}

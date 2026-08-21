@@ -283,7 +283,7 @@ export default function FinanceView({ searchQuery }) {
             <EmptyState title="No invoices yet" subtitle="Track what clients owe you and what vendors have billed, with the documents attached."
               action={<button className="md-btn md-btn-primary" onClick={() => setShowInvoice(true)}><Receipt size={14} /> New Invoice</button>} />
           ) : (
-            <DataTable columns={invoiceColumns} rows={invoices} />
+            <DataTable columns={invoiceColumns} rows={invoices} exportTitle="Invoices" />
           )}
         </div>
       ) : (
@@ -295,7 +295,7 @@ export default function FinanceView({ searchQuery }) {
             <EmptyState title="No vendor payments tracked" subtitle="Log what you owe each vendor, when it is due, and mark it paid when it clears."
               action={<button className="md-btn md-btn-primary" onClick={() => setShowPayment(true)}><Banknote size={14} /> New Payment</button>} />
           ) : (
-            <DataTable columns={paymentColumns} rows={payments} />
+            <DataTable columns={paymentColumns} rows={payments} exportTitle="Vendor Payments" />
           )}
         </div>
       )}

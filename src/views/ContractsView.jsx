@@ -174,7 +174,7 @@ export default function ContractsView({ searchQuery }) {
           action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> New Agreement</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} />
+        <DataTable columns={columns} rows={rows} exportTitle="Agreements" />
       )}
 
       {showNew && <NewContractModal onClose={() => setShowNew(false)} defaultKind={kindFilter === "all" ? "nda" : kindFilter} />}
