@@ -2,13 +2,14 @@ import { useMemo, useState } from "react";
 import { Plus, Table as TableIcon, CalendarRange, ShieldCheck, ShieldAlert, X, UserPlus, ExternalLink } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
-  TALENT_STATUSES, RATE_UNITS, DISCIPLINES, recordTypeInfo, lookupColor, lookupLabel,
+  TALENT_STATUSES, RATE_UNITS, recordTypeInfo, lookupColor, lookupLabel,
   makeTalent, makeAssignment, bookings, isBusyOn, nextFreeDay, utilisation, ndaFor, loadOn,
+  talentDisciplines, withTalentDisciplines, rosterDisciplines,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, parseMoney, dateInputValue, tsFromDateInput, uid, DAY } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Avatar, InlineText, InlineSelect, InlineDate,
-  ModalShell, Field, Section, ConfirmButton, ExportMenu,
+  ModalShell, Field, Section, ConfirmButton, ExportMenu, TagPicker,
 } from "../ui/kit";
 
 const WINDOWS = [
@@ -23,18 +24,8 @@ function rateLabel(t) {
 }
 
 function NdaCell({ talent }) {
-  const { data, add, update, currentUser } = useStore();
+  const { data, add, update, remove, currentUser } = useStore();
   const nda = ndaFor(data, talent);
-
-  if (nda) {
-    return (
-      <Badge
-        label={nda.status === "signed" ? "SIGNED" : lookupLabel([{ key: "sent", label: "SENT" }, { key: "open", label: "UNSIGNED" }, { key: "draft", label: "DRAFT" }, { key: "expired", label: "EXPIRED" }], nda.status).toUpperCase()}
-        color={nda.status === "signed" ? "var(--sage)" : "var(--red)"}
-        icon={nda.status === "signed" ? <ShieldCheck size={10} /> : <ShieldAlert size={10} />}
-      />
-    );
-  }
 
   // Creating it here writes a real record into the NDA tracker rather than a loose flag.
   const create = (status) => {
@@ -52,6 +43,31 @@ function NdaCell({ talent }) {
     });
     update("talent", talent.id, { ndaContractId: contract.id });
   };
+
+  const clear = () => {
+    update("talent", talent.id, { ndaContractId: null });
+    if (nda) remove("contracts", nda.id);
+  };
+
+  if (nda) {
+    return (
+      <button
+        type="button"
+        className="md-btn md-btn-ghost"
+        title="Click to clear this NDA"
+        onClick={(e) => { e.stopPropagation(); clear(); }}
+        style={{ padding: "2px 4px", border: "1px dashed transparent" }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--rule)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
+      >
+        <Badge
+          label={nda.status === "signed" ? "SIGNED" : lookupLabel([{ key: "sent", label: "SENT" }, { key: "open", label: "UNSIGNED" }, { key: "draft", label: "DRAFT" }, { key: "expired", label: "EXPIRED" }], nda.status).toUpperCase()}
+          color={nda.status === "signed" ? "var(--sage)" : "var(--red)"}
+          icon={nda.status === "signed" ? <ShieldCheck size={10} /> : <ShieldAlert size={10} />}
+        />
+      </button>
+    );
+  }
 
   return (
     <div style={{ display: "flex", gap: 4 }}>
@@ -219,7 +235,7 @@ function TalentDetail({ talent, onClose }) {
       update("talent", talent.id, { teamMemberId: directoryMatch.id });
       return;
     }
-    const member = { id: uid(), name: talent.name, email: talent.email || "", role: talent.discipline || "" };
+    const member = { id: uid(), name: talent.name, email: talent.email || "", role: talentDisciplines(talent)[0] || "" };
     patch((current) => ({
       team: [...current.team, member],
       talent: current.talent.map((t) => (t.id === talent.id ? { ...t, teamMemberId: member.id } : t)),
@@ -227,12 +243,19 @@ function TalentDetail({ talent, onClose }) {
   };
 
   return (
-    <ModalShell wide title={talent.name || "New roster entry"} subtitle={[talent.discipline, lookupLabel(TALENT_STATUSES, talent.status)].filter(Boolean).join(" · ")} onClose={onClose}>
+    <ModalShell wide title={talent.name || "New roster entry"} subtitle={[talentDisciplines(talent).join(" · "), lookupLabel(TALENT_STATUSES, talent.status)].filter(Boolean).join(" · ")} onClose={onClose}>
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 20 }}>
         <Avatar name={talent.name} size={54} />
         <div style={{ flex: 1 }}>
           <InlineText value={talent.name} style={{ fontSize: 18, fontWeight: 700 }} onCommit={(v) => v.trim() && setField({ name: v.trim() })} />
-          <InlineText value={talent.discipline} placeholder="Add a discipline" style={{ color: "var(--dim)" }} onCommit={(v) => setField({ discipline: v })} />
+          <div style={{ marginTop: 6 }}>
+            <TagPicker
+              values={talentDisciplines(talent)}
+              options={rosterDisciplines(data.talent)}
+              placeholder="Add a discipline"
+              onChange={(list) => setField(withTalentDisciplines(list))}
+            />
+          </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 4 }}>AVAILABILITY</div>
@@ -335,15 +358,15 @@ function TalentDetail({ talent, onClose }) {
 }
 
 function NewTalentModal({ onClose, onCreated }) {
-  const { add, currentUser } = useStore();
-  const [form, setForm] = useState({ name: "", discipline: "", status: "prospect", email: "", rateAmount: "", rateUnit: "day" });
+  const { data, add, currentUser } = useStore();
+  const [form, setForm] = useState({ name: "", disciplines: [], status: "prospect", email: "", rateAmount: "", rateUnit: "day" });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = () => {
     if (!form.name.trim()) return;
     const created = add("talent", makeTalent({
       name: form.name.trim(),
-      discipline: form.discipline.trim(),
+      ...withTalentDisciplines(form.disciplines),
       status: form.status,
       email: form.email.trim().toLowerCase(),
       rateAmount: form.rateAmount.trim(),
@@ -357,11 +380,13 @@ function NewTalentModal({ onClose, onCreated }) {
   return (
     <ModalShell title="Add to Roster" subtitle="Someone you have hired, or want to" onClose={onClose}>
       <Field label="NAME"><input className="md-input" autoFocus value={form.name} onChange={set("name")} placeholder="e.g. Ines Okafor" /></Field>
-      <Field label="DISCIPLINE">
-        <input className="md-input" list="dailie-disciplines" value={form.discipline} onChange={set("discipline")} placeholder="e.g. Director of Photography" />
-        <datalist id="dailie-disciplines">
-          {DISCIPLINES.map((d) => <option key={d} value={d} />)}
-        </datalist>
+      <Field label="DISCIPLINE" hint="Pick every craft they cover, or type one that is not on the list.">
+        <TagPicker
+          values={form.disciplines}
+          options={rosterDisciplines(data.talent)}
+          placeholder="Director, Editor…"
+          onChange={(list) => setForm((f) => ({ ...f, disciplines: list }))}
+        />
       </Field>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="STATUS">
@@ -400,6 +425,7 @@ export default function TeamView({ searchQuery }) {
       const q = searchQuery.toLowerCase();
       list = list.filter((t) =>
         t.name.toLowerCase().includes(q) ||
+        talentDisciplines(t).some((d) => d.toLowerCase().includes(q)) ||
         (t.discipline || "").toLowerCase().includes(q) ||
         (t.notes || "").toLowerCase().includes(q) ||
         (t.tags || []).join(" ").toLowerCase().includes(q));
@@ -417,8 +443,13 @@ export default function TeamView({ searchQuery }) {
         </div>
       </div>
     ) },
-    { key: "discipline", label: "DISCIPLINE", stopClick: true, render: (t) => (
-      <InlineText value={t.discipline} placeholder="Add" onCommit={(v) => update("talent", t.id, { discipline: v })} />
+    { key: "discipline", label: "DISCIPLINE", stopClick: true, cellStyle: { minWidth: 220 }, render: (t) => (
+      <TagPicker
+        values={talentDisciplines(t)}
+        options={rosterDisciplines(data.talent)}
+        placeholder="Add"
+        onChange={(list) => update("talent", t.id, withTalentDisciplines(list))}
+      />
     ) },
     { key: "status", label: "SIGNED?", stopClick: true, render: (t) => (
       <InlineSelect value={t.status} options={TALENT_STATUSES} color={lookupColor(TALENT_STATUSES, t.status)}

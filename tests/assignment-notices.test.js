@@ -87,3 +87,25 @@ test("normalize fills defaults and survives a round trip", () => {
   assert.ok(n.createdAt > 0);
   assert.deepEqual(normalizeData(data).notifications.map((x) => x.id), [n.id]);
 });
+
+test("normalize fills company and project contact fields", () => {
+  const data = normalizeData({
+    companies: [{ id: "co-1", name: "A24" }],
+    projects: [{ id: "proj-1", title: "Echo", companyId: "co-1" }],
+  });
+  const company = data.companies.find((c) => c.id === "co-1");
+  const project = data.projects.find((p) => p.id === "proj-1");
+  assert.equal(company.contactName, "");
+  assert.equal(company.contactEmail, "");
+  assert.equal(company.contactPhone, "");
+  assert.equal(project.contactName, "");
+  assert.equal(project.contactEmail, "");
+  assert.equal(project.contactPhone, "");
+
+  const kept = normalizeData({
+    companies: [{ id: "co-1", name: "A24", contactName: "David", contactEmail: "d@a24films.com", contactPhone: "555" }],
+    projects: [{ id: "proj-1", title: "Echo", contactName: "Lee", contactEmail: "lee@studio.com", contactPhone: "111" }],
+  });
+  assert.equal(kept.companies.find((c) => c.id === "co-1").contactEmail, "d@a24films.com");
+  assert.equal(kept.projects.find((p) => p.id === "proj-1").contactName, "Lee");
+});

@@ -251,9 +251,9 @@ export function CommandPalette({ onClose, onSelect }) {
     const push = (type, id, label, sub, item, badge) => out.push({ type, id, label, sub, item, badge: badge || type });
     const hit = (...fields) => q && fields.some((f) => String(f || "").toLowerCase().includes(q));
 
-    data.projects.forEach((p) => { if (!q || p.title.toLowerCase().includes(q)) push("project", p.id, p.title, recordTypeInfo(p.recordType).short, p); });
+    data.projects.forEach((p) => { if (!q || hit(p.title, p.contactName, p.contactEmail, p.contactPhone)) push("project", p.id, p.title, recordTypeInfo(p.recordType).short, p); });
     data.people.forEach((p) => { if (q && (p.name.toLowerCase().includes(q) || (p.email || "").includes(q))) push("people", p.id, p.name, p.organization || p.email, p); });
-    data.companies.forEach((c) => { if (q && c.name.toLowerCase().includes(q)) push("companies", c.id, c.name, c.domain, c); });
+    data.companies.forEach((c) => { if (q && hit(c.name, c.domain, c.contactName, c.contactEmail, c.contactPhone)) push("companies", c.id, c.name, c.contactName || c.domain, c); });
     data.tasks.forEach((t) => { if (q && t.title.toLowerCase().includes(q)) push("tasks", t.id, t.title, "Task", t); });
     (data.events || []).forEach((e) => { if (q && (e.name || "").toLowerCase().includes(q)) push("events", e.id, e.name, e.venue || "Event", e); });
     (data.press || []).forEach((r) => { if (q && ((r.title || "").toLowerCase().includes(q) || (r.outlet || "").toLowerCase().includes(q))) push("press", r.id, r.title, r.outlet || "Press", r); });
@@ -266,7 +266,7 @@ export function CommandPalette({ onClose, onSelect }) {
     data.emails.forEach((e) => { if (hit(e.subject, e.from, e.fromName)) push("emails", e.id, e.subject || "(no subject)", e.from || "Email", e); });
     data.contracts.forEach((c) => { if (hit(c.title)) push("contracts", c.id, c.title, companyName(c.companyId) || "Agreement", c); });
     (data.invoices || []).forEach((i) => { if (hit(i.number, i.notes)) push("finance", i.id, i.number || "Invoice", companyName(i.companyId) || "Invoice", i, "invoice"); });
-    (data.talent || []).forEach((t) => { if (hit(t.name, t.discipline)) push("team", t.id, t.name, t.discipline || "Roster", t, "roster"); });
+    (data.talent || []).forEach((t) => { if (hit(t.name, t.discipline, ...(t.disciplines || []))) push("team", t.id, t.name, t.discipline || "Roster", t, "roster"); });
     (data.notes || []).forEach((n) => { if (hit(n.title, n.body)) push("tasks", n.id, n.title || "Note", "Note", n, "note"); });
 
     const tabs = [

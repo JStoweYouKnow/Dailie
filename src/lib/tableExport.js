@@ -110,6 +110,10 @@ export function cellText(column, row, ctx = {}) {
   if (key === "priority") return clean(row.priority);
   if (key === "notes") return clean(row.notes || row.body);
   if (key === "email") return clean(row.email || row.from);
+  if (key === "contactName") return clean(row.contactName);
+  if (key === "contactEmail") return clean(row.contactEmail);
+  if (key === "contactPhone") return clean(row.contactPhone);
+  if (key === "discipline") return clean(row.discipline || (row.disciplines || []).join(", "));
   if (key === "number") return clean(row.number);
 
   const direct = row[key];

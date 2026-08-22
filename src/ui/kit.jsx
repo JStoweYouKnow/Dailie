@@ -383,6 +383,135 @@ export function MemberPicker({ team, selectedIds, onChange, label = "Assignees" 
   );
 }
 
+/** Multi-select chips with type-to-add, used for roster disciplines and similar lists. */
+export function TagPicker({ values = [], options = [], onChange, placeholder = "Add", allowCreate = true }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+
+  const selected = values.map((v) => String(v || "").trim()).filter(Boolean);
+  const typed = query.trim();
+  const typedKey = typed.toLowerCase();
+  const matches = options.filter((o) => !typedKey || o.toLowerCase().includes(typedKey));
+  const alreadyHasTyped = typed && selected.some((s) => s.toLowerCase() === typedKey);
+  const presetHasTyped = typed && options.some((o) => o.toLowerCase() === typedKey);
+  const canCreate = allowCreate && typed && !alreadyHasTyped && !presetHasTyped;
+
+  const add = (label) => {
+    const clean = String(label || "").trim();
+    if (!clean || selected.some((s) => s.toLowerCase() === clean.toLowerCase())) return;
+    onChange([...selected, clean]);
+    setQuery("");
+  };
+  const remove = (label) => onChange(selected.filter((s) => s !== label));
+  const toggle = (label) => {
+    if (selected.some((s) => s.toLowerCase() === label.toLowerCase())) remove(label);
+    else add(label);
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative", minWidth: 160 }} onClick={(e) => e.stopPropagation()}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => { setOpen(true); requestAnimationFrame(() => inputRef.current && inputRef.current.focus()); }}
+        onKeyDown={(e) => { if (e.key === "Enter") { setOpen(true); requestAnimationFrame(() => inputRef.current && inputRef.current.focus()); } }}
+        style={{
+          display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", minHeight: 34,
+          padding: "4px 8px", border: "1px solid var(--rule)", borderRadius: 8,
+          background: "var(--panel-raised)", cursor: "text",
+        }}
+      >
+        {selected.map((label) => (
+          <span key={label} className="md-mono" style={{
+            display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600,
+            padding: "2px 7px", borderRadius: 100, background: "var(--panel-hover)", color: "var(--bone)",
+            border: "1px solid var(--rule)",
+          }}>
+            {label}
+            <button
+              type="button"
+              className="md-btn md-btn-ghost"
+              aria-label={`Remove ${label}`}
+              style={{ padding: 0, width: 14, height: 14, minWidth: 14, border: "none" }}
+              onClick={(e) => { e.stopPropagation(); remove(label); }}
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          className="md-input"
+          value={query}
+          placeholder={selected.length ? "" : placeholder}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (canCreate) add(typed);
+              else if (matches[0] && !selected.some((s) => s.toLowerCase() === matches[0].toLowerCase())) add(matches[0]);
+              else if (presetHasTyped) add(typed);
+            } else if (e.key === "Backspace" && !query && selected.length) {
+              remove(selected[selected.length - 1]);
+            }
+          }}
+          style={{
+            flex: 1, minWidth: 80, border: "none", background: "transparent", padding: "2px 0",
+            fontSize: 12, boxShadow: "none",
+          }}
+        />
+      </div>
+      {open && (matches.length > 0 || canCreate) && (
+        <div style={{
+          position: "absolute", zIndex: 40, top: "calc(100% + 4px)", left: 0, right: 0, minWidth: 210,
+          background: "var(--panel-raised)", border: "1px solid var(--rule-bright)", borderRadius: 10,
+          boxShadow: "var(--shadow-lg)", padding: 6, maxHeight: 260, overflowY: "auto",
+        }}>
+          {matches.map((label) => {
+            const on = selected.some((s) => s.toLowerCase() === label.toLowerCase());
+            return (
+              <div key={label} role="button" tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); toggle(label); }}
+                onKeyDown={(e) => { if (e.key === "Enter") toggle(label); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--panel-hover)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                <span style={{ flex: 1, color: "var(--bone)" }}>{label}</span>
+                {on && <Check size={14} color="var(--accent)" />}
+              </div>
+            );
+          })}
+          {canCreate && (
+            <div role="button" tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); add(typed); }}
+              onKeyDown={(e) => { if (e.key === "Enter") add(typed); }}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 6, cursor: "pointer", fontSize: 13, color: "var(--accent)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--panel-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+              <Plus size={13} /> Add “{typed}”
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * Table
  * ------------------------------------------------------------------ */

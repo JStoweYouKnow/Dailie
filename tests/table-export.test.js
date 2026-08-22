@@ -39,6 +39,13 @@ test("cellText resolves company and assignee names from context", () => {
   assert.equal(cellText({ key: "project", label: "PROJECT" }, { projectId: "p1" }, ctx), "Feature");
 });
 
+test("cellText exports company and project contact fields", () => {
+  const row = { contactName: "David Sterling", contactEmail: "d.sterling@a24films.com", contactPhone: "+1 (212) 555-0130" };
+  assert.equal(cellText({ key: "contactName", label: "CONTACT" }, row), "David Sterling");
+  assert.equal(cellText({ key: "contactEmail", label: "EMAIL" }, row), "d.sterling@a24films.com");
+  assert.equal(cellText({ key: "contactPhone", label: "PHONE" }, row), "+1 (212) 555-0130");
+});
+
 test("cellText prefers column.exportValue", () => {
   assert.equal(cellText({ key: "title", label: "TASK", exportValue: () => "override" }, { title: "raw" }), "override");
 });

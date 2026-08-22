@@ -166,6 +166,48 @@ export const DISCIPLINES = [
   "Animator", "Illustrator", "Gaffer", "1st AD", "Casting Director",
 ];
 
+function uniqueLabels(list) {
+  const seen = new Set();
+  const out = [];
+  ensureArray(list).forEach((item) => {
+    const label = String(item || "").trim();
+    if (!label) return;
+    const key = label.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(label);
+  });
+  return out;
+}
+
+/** Presets plus every custom discipline already on the roster. */
+export function rosterDisciplines(talent) {
+  const extras = [];
+  const seen = new Set(DISCIPLINES.map((d) => d.toLowerCase()));
+  ensureArray(talent).forEach((t) => {
+    talentDisciplines(t).forEach((label) => {
+      const key = label.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      extras.push(label);
+    });
+  });
+  extras.sort((a, b) => a.localeCompare(b));
+  return [...DISCIPLINES, ...extras];
+}
+
+/** One or many crafts on a roster record. Older boards stored a single string. */
+export function talentDisciplines(talent) {
+  const fromArray = uniqueLabels(talent && talent.disciplines);
+  if (fromArray.length) return fromArray;
+  return uniqueLabels(String((talent && talent.discipline) || "").split(","));
+}
+
+export function withTalentDisciplines(list) {
+  const disciplines = uniqueLabels(list);
+  return { disciplines, discipline: disciplines.join(", ") };
+}
+
 /** Events we host or speak at. */
 export const EVENT_KINDS = [
   { key: "hosting", label: "We're Hosting", color: HUE.clay },
@@ -282,11 +324,11 @@ export const SEED_DATA = {
   },
   pipelines: DEFAULT_PIPELINES,
   companies: [
-    { id: "co-1", name: "A24", domain: "a24films.com", type: "studio", relationship: "in-talks", ownerId: "u-1", website: "https://a24films.com", notes: "Distribution partner on The Obsidian Echo.", tags: ["distribution"], createdAt: now - 40 * DAY },
-    { id: "co-2", name: "National Geographic", domain: "natgeo.com", type: "client", relationship: "contracted", ownerId: "u-2", website: "https://nationalgeographic.com", notes: "Commissioning Wilderness Tide.", tags: ["doc"], createdAt: now - 60 * DAY },
-    { id: "co-3", name: "Netflix", domain: "netflix.com", type: "platform", relationship: "exploring", ownerId: "u-3", website: "https://netflix.com", notes: "Neon Horizon pitch in progress.", tags: [], createdAt: now - 20 * DAY },
-    { id: "co-4", name: "Runway", domain: "runwayml.com", type: "ai-tool", relationship: "active", ownerId: "u-3", website: "https://runwayml.com", notes: "Enterprise seats for previz. Renewal in Q4.", tags: ["previz"], createdAt: now - 90 * DAY },
-    { id: "co-5", name: "Harbour Post", domain: "harbourpost.com", type: "vendor", relationship: "contracted", ownerId: "u-2", website: "", notes: "Colour and finishing house.", tags: ["post"], createdAt: now - 120 * DAY },
+    { id: "co-1", name: "A24", domain: "a24films.com", type: "studio", relationship: "in-talks", ownerId: "u-1", website: "https://a24films.com", notes: "Distribution partner on The Obsidian Echo.", tags: ["distribution"], contactName: "David Sterling", contactEmail: "d.sterling@a24films.com", contactPhone: "+1 (212) 555-0130", createdAt: now - 40 * DAY },
+    { id: "co-2", name: "National Geographic", domain: "natgeo.com", type: "client", relationship: "contracted", ownerId: "u-2", website: "https://nationalgeographic.com", notes: "Commissioning Wilderness Tide.", tags: ["doc"], contactName: "Licensing Desk", contactEmail: "licensing@natgeo.com", contactPhone: "+1 (202) 555-0160", createdAt: now - 60 * DAY },
+    { id: "co-3", name: "Netflix", domain: "netflix.com", type: "platform", relationship: "exploring", ownerId: "u-3", website: "https://netflix.com", notes: "Neon Horizon pitch in progress.", tags: [], contactName: "", contactEmail: "", contactPhone: "", createdAt: now - 20 * DAY },
+    { id: "co-4", name: "Runway", domain: "runwayml.com", type: "ai-tool", relationship: "active", ownerId: "u-3", website: "https://runwayml.com", notes: "Enterprise seats for previz. Renewal in Q4.", tags: ["previz"], contactName: "", contactEmail: "", contactPhone: "", createdAt: now - 90 * DAY },
+    { id: "co-5", name: "Harbour Post", domain: "harbourpost.com", type: "vendor", relationship: "contracted", ownerId: "u-2", website: "", notes: "Colour and finishing house.", tags: ["post"], contactName: "", contactEmail: "", contactPhone: "", createdAt: now - 120 * DAY },
   ],
   people: [
     { id: "c-1", name: "Elena Rostova", role: "Executive Producer", companyId: null, organization: "Matriarch Studios", email: "elena@matriarch-studios.com", phone: "+1 (310) 555-0192", projectIds: ["proj-1"], status: "Active", ownerId: "u-1" },
@@ -300,6 +342,7 @@ export const SEED_DATA = {
       description: "Sci-fi psychological thriller centered around deep sea sonic research.",
       stage: "packaging", pipelineStage: "pitch", ownerId: "u-1", ownerIds: ["u-1"], teamIds: ["u-3"],
       imageUrl: "", companyId: "co-1", budget: "$14.5M", priority: "HIGH", studio: "A24 / Matriarch",
+      contactName: "David Sterling", contactEmail: "d.sterling@a24films.com", contactPhone: "+1 (212) 555-0130",
       nextStep: "Finalize lead attachment deal memo with agent", paymentStatus: "unpaid",
       startDate: now + 40 * DAY, createdAt: now - 14 * DAY, updatedAt: now - 2 * 3600000,
       history: [
@@ -313,6 +356,7 @@ export const SEED_DATA = {
       description: "Feature documentary exploring wildlife migration along Pacific coastlines.",
       stage: "production", pipelineStage: "production", ownerId: "u-2", ownerIds: ["u-2"], teamIds: ["u-1"],
       imageUrl: "", companyId: "co-2", budget: "$4.2M", priority: "MEDIUM", studio: "National Geographic",
+      contactName: "Licensing Desk", contactEmail: "licensing@natgeo.com", contactPhone: "+1 (202) 555-0160",
       nextStep: "Commence principal photography unit B in Alaska", paymentStatus: "partial",
       startDate: now - 5 * DAY, createdAt: now - 30 * DAY, updatedAt: now - 1 * DAY,
       history: [
@@ -437,7 +481,9 @@ function buildTeam(raw) {
 
 function migrateCompanies(raw, team) {
   const companies = ensureArray(raw.companies).map((c) => ({
-    tags: [], notes: "", website: "", relationship: "new", type: "prospect", ...c,
+    tags: [], notes: "", website: "", relationship: "new", type: "prospect",
+    contactName: "", contactEmail: "", contactPhone: "",
+    ...c,
     id: c.id || uid(),
     createdAt: c.createdAt || Date.now(),
   }));
@@ -459,6 +505,9 @@ function migrateCompanies(raw, team) {
       website: domain ? `https://${domain}` : "",
       notes: "",
       tags: [],
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
       createdAt: Date.now(),
     };
     companies.push(company);
@@ -518,6 +567,7 @@ function migrateProjects(raw, team, companies) {
     return {
       description: "", budget: "", priority: "MEDIUM", studio: "", nextStep: "", imageUrl: "",
       paymentStatus: "na", tags: [],
+      contactName: "", contactEmail: "", contactPhone: "",
       ...p,
       id: p.id || uid(),
       recordType,
@@ -697,13 +747,16 @@ export function normalizeData(raw) {
       companyId: null, projectId: null, rate: "", notes: "", preferred: false,
       ...l, id: l.id || uid(),
     })),
-    talent: ensureArray(input.talent).map((t) => ({
-      ...makeTalent({}),
-      ...t,
-      id: t.id || uid(),
-      assignments: ensureArray(t.assignments).map((a) => ({ ...makeAssignment({}), ...a, id: a.id || uid() })),
-      tags: ensureArray(t.tags),
-    })),
+    talent: ensureArray(input.talent).map((t) => {
+      const merged = {
+        ...makeTalent({}),
+        ...t,
+        id: t.id || uid(),
+        assignments: ensureArray(t.assignments).map((a) => ({ ...makeAssignment({}), ...a, id: a.id || uid() })),
+        tags: ensureArray(t.tags),
+      };
+      return { ...merged, ...withTalentDisciplines(talentDisciplines(merged)) };
+    }),
     contracts: ensureArray(input.contracts).map((c) => ({ status: "draft", kind: "other", talentId: null, ...c, id: c.id || uid() })),
     invoices: ensureArray(input.invoices).map((i) => ({ status: "draft", direction: "incoming", currency: "USD", ...i, id: i.id || uid() })),
     payments: ensureArray(input.payments).map((p) => ({ status: "unpaid", currency: "USD", ...p, id: p.id || uid() })),
@@ -880,6 +933,9 @@ export function deriveDirectoryFromEmails(data) {
           website: `https://${domain}`,
           notes: "Created automatically from email traffic.",
           tags: [],
+          contactName: "",
+          contactEmail: "",
+          contactPhone: "",
           createdAt: Date.now(),
         };
         domainIndex.set(domain, company);
@@ -933,10 +989,11 @@ export function deriveDirectoryFromEmails(data) {
  * ------------------------------------------------------------------ */
 
 export function makeTalent(fields) {
-  return {
+  const merged = {
     id: uid(),
     name: "",
     discipline: "",
+    disciplines: [],
     status: "prospect",
     email: "",
     phone: "",
@@ -955,6 +1012,7 @@ export function makeTalent(fields) {
     createdAt: Date.now(),
     ...fields,
   };
+  return { ...merged, ...withTalentDisciplines(talentDisciplines(merged)) };
 }
 
 export function makeAssignment(fields) {

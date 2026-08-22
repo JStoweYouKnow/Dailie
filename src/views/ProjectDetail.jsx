@@ -4,7 +4,7 @@ import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
   CONTRACT_STATUSES, INVOICE_STATUSES, lookupLabel, lookupColor, makeTask,
-  projectOwnerIds, withProjectOwners,
+  projectOwnerIds, withProjectOwners, talentDisciplines,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile, deleteFile } from "../lib/files";
@@ -269,6 +269,17 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
           <InlineSelect value={project.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="No company"
             onCommit={(v) => patchProject({ companyId: v })} />
         </Row>
+        <Row label="CONTACT PERSON">
+          <InlineText value={project.contactName} placeholder="Who we call" onCommit={(v) => patchProject({ contactName: v.trim() })} />
+        </Row>
+        <Row label="CONTACT EMAIL">
+          <InlineText value={project.contactEmail} mono placeholder="name@company.com" style={{ color: "var(--accent)" }}
+            onCommit={(v) => patchProject({ contactEmail: v.trim().toLowerCase() })} />
+        </Row>
+        <Row label="PHONE">
+          <InlineText value={project.contactPhone} mono placeholder="+1 (555) 000-0000"
+            onCommit={(v) => patchProject({ contactPhone: v.trim() })} />
+        </Row>
         <Row label="BUDGET / VALUE">
           <InlineText value={project.budget} mono placeholder="e.g. $12.5M" style={{ color: "var(--accent)", fontWeight: 700 }} onCommit={(v) => patchProject({ budget: v })} />
         </Row>
@@ -384,7 +395,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{talent.name}</div>
                 <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>
-                  {assignment.role || talent.discipline || "Crew"}
+                  {assignment.role || talentDisciplines(talent).join(" · ") || talent.discipline || "Crew"}
                   {assignment.startDate ? ` · ${formatShort(assignment.startDate)} → ${formatShort(assignment.endDate || assignment.startDate)}` : ""}
                 </div>
               </div>

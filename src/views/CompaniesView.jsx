@@ -54,6 +54,17 @@ function CompanyDetail({ company, onClose, onOpenTab }) {
         <Field label="EMAIL DOMAIN">
           <InlineText value={company.domain} mono placeholder="acme.com" onCommit={(v) => update("companies", company.id, { domain: v.trim().toLowerCase() })} />
         </Field>
+        <Field label="CONTACT PERSON">
+          <InlineText value={company.contactName} placeholder="Who we call" onCommit={(v) => update("companies", company.id, { contactName: v.trim() })} />
+        </Field>
+        <Field label="CONTACT EMAIL">
+          <InlineText value={company.contactEmail} mono placeholder="name@company.com" style={{ color: "var(--accent)" }}
+            onCommit={(v) => update("companies", company.id, { contactEmail: v.trim().toLowerCase() })} />
+        </Field>
+        <Field label="PHONE">
+          <InlineText value={company.contactPhone} mono placeholder="+1 (555) 000-0000"
+            onCommit={(v) => update("companies", company.id, { contactPhone: v.trim() })} />
+        </Field>
         <Field label="LAST CONTACT">
           <div style={{ fontSize: 13, color: lastContact && daysSince(lastContact) > (data.settings.followUpDays || 14) ? "var(--red)" : "var(--bone)" }}>
             {relativeDays(lastContact)}
@@ -146,7 +157,7 @@ function CompanyDetail({ company, onClose, onOpenTab }) {
 
 function NewCompanyModal({ onClose, defaultType }) {
   const { add, currentUser } = useStore();
-  const [form, setForm] = useState({ name: "", domain: "", type: defaultType || "prospect", website: "", notes: "" });
+  const [form, setForm] = useState({ name: "", domain: "", type: defaultType || "prospect", website: "", notes: "", contactName: "", contactEmail: "", contactPhone: "" });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = () => {
@@ -161,6 +172,9 @@ function NewCompanyModal({ onClose, defaultType }) {
       website: form.website.trim() || (domain ? `https://${domain}` : ""),
       notes: form.notes.trim(),
       tags: [],
+      contactName: form.contactName.trim(),
+      contactEmail: form.contactEmail.trim().toLowerCase(),
+      contactPhone: form.contactPhone.trim(),
     });
     onClose();
   };
@@ -176,6 +190,11 @@ function NewCompanyModal({ onClose, defaultType }) {
           {COMPANY_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
         </select>
       </Field>
+      <Field label="CONTACT PERSON"><input className="md-input" value={form.contactName} onChange={set("contactName")} placeholder="Who we call" /></Field>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="CONTACT EMAIL"><input className="md-input" value={form.contactEmail} onChange={set("contactEmail")} placeholder="name@company.com" /></Field>
+        <Field label="PHONE"><input className="md-input" value={form.contactPhone} onChange={set("contactPhone")} placeholder="+1 (555) 000-0000" /></Field>
+      </div>
       <Field label="RELATIONSHIP NOTES"><textarea className="md-textarea" rows={3} value={form.notes} onChange={set("notes")} placeholder="Where are we with them?" /></Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save Company</button>
     </ModalShell>
@@ -211,7 +230,13 @@ export default function CompaniesView({ searchQuery, onOpenTab, lockedType, titl
     if (effective !== "all") list = list.filter((c) => c.type === effective);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      list = list.filter((c) => c.name.toLowerCase().includes(q) || (c.domain || "").toLowerCase().includes(q) || (c.notes || "").toLowerCase().includes(q));
+      list = list.filter((c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.domain || "").toLowerCase().includes(q) ||
+        (c.notes || "").toLowerCase().includes(q) ||
+        (c.contactName || "").toLowerCase().includes(q) ||
+        (c.contactEmail || "").toLowerCase().includes(q) ||
+        (c.contactPhone || "").toLowerCase().includes(q));
     }
     return list.sort((a, b) => (b.lastContactAt || 0) - (a.lastContactAt || 0));
   }, [data.companies, data.people, data.projects, data.emails, typeFilter, lockedType, searchQuery]);
@@ -253,6 +278,17 @@ export default function CompaniesView({ searchQuery, onOpenTab, lockedType, titl
     ) },
     { key: "relationship", label: "RELATIONSHIP", stopClick: true, render: (c) => (
       <InlineSelect value={c.relationship || "new"} options={RELATIONSHIP_STAGES} onCommit={(v) => update("companies", c.id, { relationship: v })} />
+    ) },
+    { key: "contactName", label: "CONTACT", stopClick: true, render: (c) => (
+      <InlineText value={c.contactName} placeholder="Who we call" onCommit={(v) => update("companies", c.id, { contactName: v.trim() })} />
+    ) },
+    { key: "contactEmail", label: "EMAIL", stopClick: true, render: (c) => (
+      <InlineText value={c.contactEmail} mono placeholder="name@company.com" style={{ color: "var(--accent)", fontSize: 12 }}
+        onCommit={(v) => update("companies", c.id, { contactEmail: v.trim().toLowerCase() })} />
+    ) },
+    { key: "contactPhone", label: "PHONE", stopClick: true, render: (c) => (
+      <InlineText value={c.contactPhone} mono placeholder="Add phone" style={{ fontSize: 12, color: "var(--dim)" }}
+        onCommit={(v) => update("companies", c.id, { contactPhone: v.trim() })} />
     ) },
     { key: "people", label: "PEOPLE", render: (c) => (
       <span className="md-mono" style={{ fontSize: 12, color: "var(--dim)", display: "inline-flex", alignItems: "center", gap: 5 }}>

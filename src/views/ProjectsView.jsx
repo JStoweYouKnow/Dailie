@@ -164,7 +164,10 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         (p.description || "").toLowerCase().includes(q) ||
         (p.nextStep || "").toLowerCase().includes(q) ||
         memberName(p.ownerId).toLowerCase().includes(q) ||
-        projectOwnerIds(p).some((id) => memberName(id).toLowerCase().includes(q)));
+        projectOwnerIds(p).some((id) => memberName(id).toLowerCase().includes(q)) ||
+        (p.contactName || "").toLowerCase().includes(q) ||
+        (p.contactEmail || "").toLowerCase().includes(q) ||
+        (p.contactPhone || "").toLowerCase().includes(q));
     }
     return list;
   }, [data.projects, typeFilter, mineOnly, searchQuery, currentUser, memberName]);
@@ -227,6 +230,17 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         label="Assign team"
         onChange={(ids) => updateProject(p.id, { teamIds: ids.filter((id) => !projectOwnerIds(p).includes(id)) }, "Team updated")}
       />
+    ) },
+    { key: "contactName", label: "CONTACT", stopClick: true, render: (p) => (
+      <InlineText value={p.contactName} placeholder="Who we call" onCommit={(v) => updateProject(p.id, { contactName: v.trim() })} />
+    ) },
+    { key: "contactEmail", label: "EMAIL", stopClick: true, render: (p) => (
+      <InlineText value={p.contactEmail} mono placeholder="name@company.com" style={{ color: "var(--accent)", fontSize: 12 }}
+        onCommit={(v) => updateProject(p.id, { contactEmail: v.trim().toLowerCase() })} />
+    ) },
+    { key: "contactPhone", label: "PHONE", stopClick: true, render: (p) => (
+      <InlineText value={p.contactPhone} mono placeholder="Add phone" style={{ fontSize: 12, color: "var(--dim)" }}
+        onCommit={(v) => updateProject(p.id, { contactPhone: v.trim() })} />
     ) },
     { key: "budget", label: "BUDGET / VALUE", stopClick: true, render: (p) => (
       <InlineText value={p.budget} mono placeholder="Add value" style={{ color: "var(--accent)", fontWeight: 700 }}

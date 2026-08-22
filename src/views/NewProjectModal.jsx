@@ -16,6 +16,9 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
     ownerIds: currentUser && currentUser.id ? [currentUser.id] : [],
     teamIds: [],
     companyId: "",
+    contactName: "",
+    contactEmail: "",
+    contactPhone: "",
     budget: "",
     priority: "HIGH",
     nextStep: "",
@@ -40,6 +43,9 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
       ...owners,
       teamIds: (form.teamIds || []).filter((id) => !(owners.ownerIds || []).includes(id)),
       companyId: form.companyId || null,
+      contactName: form.contactName.trim(),
+      contactEmail: form.contactEmail.trim().toLowerCase(),
+      contactPhone: form.contactPhone.trim(),
       budget: form.budget.trim(),
       priority: form.priority,
       nextStep: form.nextStep.trim(),
@@ -101,11 +107,26 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
         />
       </Field>
       <Field label="COMPANY">
-        <select className="md-select" value={form.companyId} onChange={set("companyId")}>
+        <select className="md-select" value={form.companyId} onChange={(e) => {
+          const companyId = e.target.value;
+          const company = data.companies.find((c) => c.id === companyId);
+          setForm((f) => ({
+            ...f,
+            companyId,
+            contactName: f.contactName || (company && company.contactName) || "",
+            contactEmail: f.contactEmail || (company && company.contactEmail) || "",
+            contactPhone: f.contactPhone || (company && company.contactPhone) || "",
+          }));
+        }}>
           <option value="">No company</option>
           {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
+      <Field label="CONTACT PERSON"><input className="md-input" value={form.contactName} onChange={set("contactName")} placeholder="Who we call" /></Field>
+      <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="CONTACT EMAIL"><input className="md-input" value={form.contactEmail} onChange={set("contactEmail")} placeholder="name@company.com" /></Field>
+        <Field label="PHONE"><input className="md-input" value={form.contactPhone} onChange={set("contactPhone")} placeholder="+1 (555) 000-0000" /></Field>
+      </div>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="BUDGET / VALUE"><input className="md-input" value={form.budget} onChange={set("budget")} placeholder="e.g. $12.5M" /></Field>
         <Field label="PRIORITY">
