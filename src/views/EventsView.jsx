@@ -3,6 +3,7 @@ import { Plus, Mic2, MapPin, ExternalLink } from "lucide-react";
 import { useStore } from "../lib/store";
 import { EVENT_KINDS, EVENT_STATUSES, lookupColor } from "../lib/model";
 import { tsFromDateInput, DAY } from "../lib/format";
+import { safeHref } from "../lib/safeUrl";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Avatar, AvatarStack,
   InlineText, InlineSelect, InlineDate, ModalShell, Field, ConfirmButton, MemberPicker,
@@ -86,8 +87,8 @@ export default function EventsView({ searchQuery }) {
     { key: "name", label: "EVENT", cellStyle: { minWidth: 230 }, stopClick: true, render: (e) => (
       <div>
         <InlineText value={e.name} style={{ fontWeight: 700 }} onCommit={(v) => update("events", e.id, { name: v })} />
-        {e.url && (
-          <a href={e.url} target="_blank" rel="noreferrer" className="md-mono"
+        {safeHref(e.url) && (
+          <a href={safeHref(e.url)} target="_blank" rel="noreferrer" className="md-mono"
             style={{ fontSize: 10, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
             link <ExternalLink size={9} />
           </a>

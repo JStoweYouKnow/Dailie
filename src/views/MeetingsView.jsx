@@ -4,6 +4,7 @@ import { useStore } from "../lib/store";
 import { makeTask } from "../lib/model";
 import { formatShort, uid, tsFromDateInput } from "../lib/format";
 import { isSyncedMeeting, excludeMeetingFromSync, visibleMeetings } from "../lib/calendarExclusions";
+import { safeHref } from "../lib/safeUrl";
 import {
   ViewHeader, EmptyState, ModalShell, Field, ConfirmButton, InlineText, InlineSelect, MemberPicker, Badge,
 } from "../ui/kit";
@@ -54,9 +55,9 @@ function MeetingCard({ meeting, onRecord }) {
         </div>
       </div>
 
-      {meeting.meetingLink && (
+      {safeHref(meeting.meetingLink) && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <a className="md-btn md-btn-ghost" href={meeting.meetingLink} target="_blank" rel="noreferrer"
+          <a className="md-btn md-btn-ghost" href={safeHref(meeting.meetingLink)} target="_blank" rel="noreferrer"
             style={{ textDecoration: "none", color: "var(--accent)", borderColor: "var(--accent)", border: "1px solid var(--accent)" }}>
             <ExternalLink size={13} /> {/zoom\.us/i.test(meeting.meetingLink) ? "Join Zoom" : "Join Google Meet"}
           </a>

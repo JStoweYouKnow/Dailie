@@ -4,6 +4,8 @@ import { useStore } from "../lib/store";
 import { makeTask, makeParticipant, normalizeParticipants } from "../lib/model";
 import { uid, formatDuration, tsFromDateInput, dateInputValue } from "../lib/format";
 import { uploadFile } from "../lib/files";
+import { apiFetch } from "../lib/sessionToken";
+import { safeHref } from "../lib/safeUrl";
 import { ModalShell, Field, Avatar, Badge } from "../ui/kit";
 
 /**
@@ -96,7 +98,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
     let storedPath = "";
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const res = await fetch(`/api/transcribe?date=${today}`, {
+      const res = await apiFetch(`/api/transcribe?date=${today}`, {
         method: "POST",
         headers: {
           "Content-Type": blob.type || "audio/webm",
@@ -390,13 +392,13 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
 
   return (
     <ModalShell wide title="Record Call" subtitle="Video, transcript, summary and next steps" onClose={onClose}>
-      {meeting && meeting.meetingLink && (
+      {meeting && safeHref(meeting.meetingLink) && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 12px", background: "var(--panel-raised)", border: "1px solid var(--accent)", borderRadius: 8, marginBottom: 16 }}>
           <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 3 }}>CAPTURING</div>
             <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{meeting.title}</div>
           </div>
-          <a className="md-btn md-btn-ghost" href={meeting.meetingLink} target="_blank" rel="noreferrer"
+          <a className="md-btn md-btn-ghost" href={safeHref(meeting.meetingLink)} target="_blank" rel="noreferrer"
             style={{ textDecoration: "none", color: "var(--accent)", borderColor: "var(--accent)" }}>
             <ExternalLink size={13} /> Open Meeting Tab
           </a>

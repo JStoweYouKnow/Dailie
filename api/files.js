@@ -1,5 +1,8 @@
 import { del } from "@vercel/blob";
 import { putOnStore, getFromStore, redirectToBlob } from "../lib/blobStore.js";
+import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
+import { isAllowedContentType, normalizeContentType } from "../lib/allowedUploads.js";
 
 // Reads go through this route so the rest of the app can keep using /api/files.
 // The connected store is public (it cannot be switched to private after creation),
@@ -16,6 +19,11 @@ function extensionFor(name, contentType) {
 }
 
 export async function POST(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+  const limited = rateLimit({ key: `files:${gate.auth.userId}`, limit: 80, windowMs: 60 * 60 * 1000 });
+  if (limited.error) return limited.error;
+
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
     // The client falls back to an inline data URL for small files when it sees this.
     return Response.json({ error: "No blob store is configured. Set BLOB_READ_WRITE_TOKEN to store attachments." }, { status: 501 });
@@ -38,7 +46,10 @@ export async function POST(request) {
     return Response.json({ error: `File is ${Math.round(body.byteLength / (1024 * 1024))} MB. The limit is 25 MB.` }, { status: 413 });
   }
 
-  const contentType = request.headers.get("content-type") || "application/octet-stream";
+  const contentType = normalizeContentType(request.headers.get("content-type")) || "application/octet-stream";
+  if (!isAllowedContentType(contentType)) {
+    return Response.json({ error: "That file type is not allowed." }, { status: 415 });
+  }
   const ext = extensionFor(url.searchParams.get("name"), contentType);
 
   try {
@@ -54,6 +65,9 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+
   const path = new URL(request.url).searchParams.get("path") || "";
 
   // Only ever fetch keys this app wrote — otherwise the route is an open proxy.
@@ -75,16 +89,21 @@ export async function GET(request) {
   }
   if (!result) return Response.json({ error: "Attachment not found." }, { status: 404 });
 
+  const inline = /^(images|recordings|video)\//.test(path);
   return new Response(result.stream, {
     headers: {
       "Content-Type": result.blob.contentType || "application/octet-stream",
       "Content-Length": String(result.blob.size),
       "Cache-Control": "private, max-age=3600",
+      "Content-Disposition": inline ? "inline" : "attachment",
     },
   });
 }
 
 export async function DELETE(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+
   const path = new URL(request.url).searchParams.get("path") || "";
   if (!PATH_RE.test(path)) return Response.json({ error: "Invalid attachment path." }, { status: 400 });
   try {

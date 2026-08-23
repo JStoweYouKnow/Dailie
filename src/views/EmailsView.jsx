@@ -5,6 +5,7 @@ import { staleFollowUps, deriveDirectoryFromEmails, makeTask } from "../lib/mode
 import { parseEmailPaste, dedupeEmails } from "../lib/emailImport";
 import { syncFromGoogle } from "../lib/googleSync";
 import { useAccount, useAuthToken } from "../lib/auth";
+import { isHouseEmail } from "../lib/houseAccess";
 import { formatShort, relativeDays, daysSince, parseEmailList } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, InlineText, InlineSelect,
@@ -23,6 +24,7 @@ export function EmailImportModal({ onClose }) {
   const [preview, setPreview] = useState(null);
 
   const accounts = data.settings.emailAccounts || [];
+  const canManageMailboxes = !authEnabled || isHouseEmail(signedIn && signedIn.email);
 
   const addAccount = () => {
     const address = newAccount.trim().toLowerCase();
@@ -106,11 +108,17 @@ export function EmailImportModal({ onClose }) {
               onClick={() => setAccount(a.address)} onKeyDown={(e) => { if (e.key === "Enter") setAccount(a.address); }}>{a.address}</div>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input className="md-input" placeholder="Add another Gmail account…" value={newAccount}
-            onChange={(e) => setNewAccount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addAccount(); }} />
-          <button className="md-btn" onClick={addAccount}><Plus size={13} /> Add</button>
-        </div>
+        {canManageMailboxes ? (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="md-input" placeholder="Add another Gmail account…" value={newAccount}
+              onChange={(e) => setNewAccount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addAccount(); }} />
+            <button className="md-btn" onClick={addAccount}><Plus size={13} /> Add</button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            Only a studio account can add a mailbox for scheduled sync.
+          </div>
+        )}
       </Field>
 
       <Field label="PASTE EMAIL">

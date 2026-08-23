@@ -1,11 +1,25 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  isHouseEmail,
+  lockSharedSettings,
+  memberBindPlan,
+  PUBLIC_WORKSPACE_KEYS,
+  redactSettingsForViewer,
+} from "../src/lib/houseAccess.js";
+import { isSharedCollection } from "../src/lib/sharedBoard.js";
 
 /** Writes stay gated. Reads return null when there is no session so the client can wait. */
 async function requireIdentity(ctx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not signed in.");
   return identity;
+}
+
+function assertSharedCollection(collection: string) {
+  if (!isSharedCollection(collection)) {
+    throw new Error("Unknown collection.");
+  }
 }
 
 const boardReturn = v.object({
@@ -64,7 +78,9 @@ export const get = query({
           lastSeenAt: m.lastSeenAt,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      settings: settings ? settings.value : null,
+      settings: settings
+        ? redactSettingsForViewer(settings.value, { isHouse: isHouseEmail(identity.email) })
+        : null,
       pipelines: pipelines ? pipelines.value : null,
     };
   },
@@ -75,6 +91,7 @@ export const put = mutation({
   args: { collection: v.string(), docId: v.string(), data: v.any() },
   handler: async (ctx, { collection, docId, data }) => {
     const identity = await requireIdentity(ctx);
+    assertSharedCollection(collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_doc", (q) => q.eq("collection", collection).eq("docId", docId))
@@ -90,6 +107,7 @@ export const remove = mutation({
   args: { collection: v.string(), docId: v.string() },
   handler: async (ctx, { collection, docId }) => {
     await requireIdentity(ctx);
+    assertSharedCollection(collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_doc", (q) => q.eq("collection", collection).eq("docId", docId))
@@ -103,6 +121,7 @@ export const putMany = mutation({
   args: { collection: v.string(), records: v.array(v.any()), prune: v.optional(v.boolean()) },
   handler: async (ctx, { collection, records, prune }) => {
     const identity = await requireIdentity(ctx);
+    assertSharedCollection(collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_collection", (q) => q.eq("collection", collection))
@@ -129,7 +148,7 @@ export const putMany = mutation({
     // Anything left was removed in this edit — unless this is one chunk of a larger
     // write, where the records not in this chunk are still perfectly alive.
     let deleted = 0;
-    if (prune !== false) {
+    if (prune !== false && isHouseEmail(identity.email)) {
       for (const orphan of byId.values()) { await ctx.db.delete(orphan._id); deleted += 1; }
     }
     return { written, deleted, unchanged: records.length - written };
@@ -140,7 +159,9 @@ export const putMany = mutation({
 export const pruneCollection = mutation({
   args: { collection: v.string(), keepIds: v.array(v.string()) },
   handler: async (ctx, { collection, keepIds }) => {
-    await requireIdentity(ctx);
+    const identity = await requireIdentity(ctx);
+    assertSharedCollection(collection);
+    if (!isHouseEmail(identity.email)) return { deleted: 0 };
     const keep = new Set(keepIds);
     const existing = await ctx.db
       .query("records")
@@ -159,20 +180,30 @@ export const pruneCollection = mutation({
 export const setWorkspace = mutation({
   args: { key: v.string(), value: v.any() },
   handler: async (ctx, { key, value }) => {
-    await requireIdentity(ctx);
+    const identity = await requireIdentity(ctx);
+    if (!PUBLIC_WORKSPACE_KEYS.includes(key)) {
+      throw new Error("Unknown workspace key.");
+    }
     const existing = await ctx.db
       .query("workspace")
       .withIndex("by_key", (q) => q.eq("key", key))
       .unique();
-    if (existing) await ctx.db.patch(existing._id, { value, updatedAt: Date.now() });
-    else await ctx.db.insert("workspace", { key, value, updatedAt: Date.now() });
+    const prior = existing && existing.value && typeof existing.value === "object" ? existing.value : {};
+    const next = key === "settings"
+      ? lockSharedSettings(value, {
+          isHouse: isHouseEmail(identity.email),
+          prior,
+        })
+      : value;
+    if (existing) await ctx.db.patch(existing._id, { value: next, updatedAt: Date.now() });
+    else await ctx.db.insert("workspace", { key, value: next, updatedAt: Date.now() });
   },
 });
 
 /**
- * Called on every sign-in. Re-binds by email as well as Clerk id so that moving
- * between Clerk instances, or a rebuilt account, lands on the same row rather than
- * creating a second one.
+ * Called on every sign-in. Matches the session's Clerk id first. A verified
+ * email may attach to a row that has no clerkId yet; it must not take over a
+ * row that already belongs to someone else.
  */
 export const touchMember = mutation({
   args: { name: v.string(), email: v.string(), imageUrl: v.optional(v.string()) },
@@ -180,38 +211,49 @@ export const touchMember = mutation({
     const identity = await requireIdentity(ctx);
     const clerkId = identity.subject;
     const now = Date.now();
-    const cleanEmail = (email || "").trim().toLowerCase();
+    const identityEmail = String(identity.email || "").trim().toLowerCase();
+    const claimed = String(email || "").trim().toLowerCase();
+    if (claimed && identityEmail && claimed !== identityEmail) {
+      throw new Error("Email does not match your signed-in account.");
+    }
+    const emailVerified = identity.emailVerified === true;
 
     const byClerk = await ctx.db
       .query("members")
       .withIndex("by_clerk", (q) => q.eq("clerkId", clerkId))
       .unique();
 
-    const existing =
-      byClerk ||
-      (cleanEmail
-        ? await ctx.db
-            .query("members")
-            .withIndex("by_email", (q) => q.eq("email", cleanEmail))
-            .unique()
-        : null);
+    const byEmail = !byClerk && identityEmail && emailVerified
+      ? await ctx.db
+          .query("members")
+          .withIndex("by_email", (q) => q.eq("email", identityEmail))
+          .unique()
+      : null;
 
-    if (existing) {
-      await ctx.db.patch(existing._id, {
+    const plan = memberBindPlan({
+      clerkId,
+      identityEmail,
+      emailVerified,
+      byClerk,
+      byEmail,
+    });
+
+    if (plan.action === "update" && plan.target) {
+      await ctx.db.patch(plan.target._id, {
         clerkId,
-        name: name || existing.name,
-        email: cleanEmail || existing.email,
-        imageUrl: imageUrl || existing.imageUrl,
+        name: name || plan.target.name,
+        email: plan.claimEmail ? identityEmail || plan.target.email : plan.target.email,
+        imageUrl: imageUrl || plan.target.imageUrl,
         status: "active",
         lastSeenAt: now,
       });
-      return existing.clerkId || clerkId;
+      return plan.target.clerkId || clerkId;
     }
 
     await ctx.db.insert("members", {
       clerkId,
-      name: name || cleanEmail.split("@")[0] || "New member",
-      email: cleanEmail,
+      name: name || (plan.claimEmail && identityEmail ? identityEmail.split("@")[0] : "") || "New member",
+      email: plan.claimEmail ? identityEmail : "",
       role: "",
       imageUrl: imageUrl || "",
       status: "active",
@@ -239,7 +281,7 @@ export const merge = mutation({
     let skipped = 0;
 
     for (const [collection, records] of Object.entries(collections || {})) {
-      if (!Array.isArray(records)) continue;
+      if (!isSharedCollection(collection) || !Array.isArray(records)) continue;
 
       const existing = await ctx.db
         .query("records")
@@ -282,7 +324,7 @@ export const seed = mutation({
     const now = Date.now();
     let count = 0;
     for (const [collection, records] of Object.entries(collections || {})) {
-      if (!Array.isArray(records)) continue;
+      if (!isSharedCollection(collection) || !Array.isArray(records)) continue;
       for (const record of records) {
         if (!record || !record.id) continue;
         await ctx.db.insert("records", {
@@ -295,7 +337,13 @@ export const seed = mutation({
         count += 1;
       }
     }
-    if (settings) await ctx.db.insert("workspace", { key: "settings", value: settings, updatedAt: now });
+    if (settings) {
+      const seeded = lockSharedSettings(settings, {
+        isHouse: isHouseEmail(identity.email),
+        prior: isHouseEmail(identity.email) ? settings : {},
+      });
+      await ctx.db.insert("workspace", { key: "settings", value: seeded, updatedAt: now });
+    }
     if (pipelines) await ctx.db.insert("workspace", { key: "pipelines", value: pipelines, updatedAt: now });
     return { seeded: true, count };
   },

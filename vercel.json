@@ -5,6 +5,21 @@
       "maxDuration": 300
     }
   },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "Permissions-Policy", "value": "camera=(), geolocation=(), payment=(), usb=(), microphone=(self), display-capture=(self)" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.thewizardofops.app https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://img.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://*.blob.vercel-storage.com; media-src 'self' blob: https://*.blob.vercel-storage.com; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://api.clerk.com https://clerk-telemetry.com https://clerk.thewizardofops.app https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://*.blob.vercel-storage.com; frame-src https://*.clerk.accounts.dev https://*.clerk.com https://clerk.thewizardofops.app https://accounts.google.com https://challenges.cloudflare.com; worker-src 'self' blob:"
+        }
+      ]
+    }
+  ],
   "redirects": [
     {
       "source": "/:section(members|playlists|projects|review|schedule|settings|tasks|usage|sign-in|sign-up)",

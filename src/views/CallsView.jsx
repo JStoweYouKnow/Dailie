@@ -6,6 +6,8 @@ import { formatShort, formatClock, formatDuration, parseEmailList } from "../lib
 import { ViewHeader, EmptyState, Badge, Section, ModalShell, Field, Avatar } from "../ui/kit";
 import { visibleMeetings } from "../lib/calendarExclusions";
 import CallDetail, { mediaSrc } from "./CallDetail";
+import { apiFetch } from "../lib/sessionToken";
+import { safeHref } from "../lib/safeUrl";
 
 /**
  * Drafts the follow-up email from the call's summary and next steps, shows it for
@@ -32,7 +34,7 @@ export function FollowUpEmailModal({ call, onClose }) {
     setState("drafting");
     setError("");
     try {
-      const res = await fetch("/api/draft-email", {
+      const res = await apiFetch("/api/draft-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -92,7 +94,7 @@ export function FollowUpEmailModal({ call, onClose }) {
     setState("sending");
     setError("");
     try {
-      const res = await fetch("/api/send-email", {
+      const res = await apiFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: recipients, subject, body, replyTo: currentUser && currentUser.email }),
@@ -249,7 +251,9 @@ export default function CallsView({ searchQuery, onStartRecording }) {
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{m.title}</div>
                 <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)" }}>{formatClock(m.date)} · {/zoom\.us/i.test(m.meetingLink) ? "Zoom" : "Google Meet"}</div>
               </div>
-              <a className="md-btn md-btn-ghost" href={m.meetingLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none", border: "1px solid var(--rule)" }}>Join</a>
+              {safeHref(m.meetingLink) && (
+                <a className="md-btn md-btn-ghost" href={safeHref(m.meetingLink)} target="_blank" rel="noreferrer" style={{ textDecoration: "none", border: "1px solid var(--rule)" }}>Join</a>
+              )}
               <button className="md-btn md-btn-primary" style={{ background: "var(--red)", borderColor: "var(--red)", color: "#fff" }} onClick={() => onStartRecording(m)}>
                 <Video size={13} /> Record
               </button>

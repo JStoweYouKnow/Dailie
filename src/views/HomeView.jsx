@@ -9,6 +9,7 @@ import { formatShort, formatClock, formatDay, relativeDays, daysSince, DAY } fro
 import { imageSrc } from "../lib/files";
 import { Section, EmptyState, Badge, Avatar, AvatarStack, Stat } from "../ui/kit";
 import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
+import { safeHref } from "../lib/safeUrl";
 
 function TaskLine({ task, onToggle, projectName, memberName }) {
   const overdue = task.dueDate && task.dueDate < Date.now() && task.status !== "done";
@@ -132,9 +133,9 @@ function MeetingsPanel({ onOpenTab, onRecord }) {
                   <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.attendees}</div>
                 )}
               </div>
-              {m.meetingLink && (
+              {safeHref(m.meetingLink) && (
                 <>
-                  <a className="md-btn md-btn-ghost" href={m.meetingLink} target="_blank" rel="noreferrer"
+                  <a className="md-btn md-btn-ghost" href={safeHref(m.meetingLink)} target="_blank" rel="noreferrer"
                     style={{ textDecoration: "none", border: "1px solid var(--rule)", fontSize: 12 }}>
                     <ExternalLink size={12} /> Join
                   </a>

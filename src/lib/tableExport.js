@@ -3,16 +3,15 @@
  * Numbers; PDF is a self-contained file so the same rows can be opened without the app.
  */
 
-import { formatFull, formatMoney, emailDomain } from "./format.js";
+import { formatFull, formatMoney } from "./format.js";
+import { HOUSE_DOMAINS, isHouseEmail } from "./houseAccess.js";
 import { ndaFor } from "./model.js";
 
 /** House addresses only — contractors on Gmail etc. can use the board, not take a copy. */
-export const EXPORT_DOMAINS = ["matriarch-studios.com", "thewizardofops.app"];
+export const EXPORT_DOMAINS = HOUSE_DOMAINS;
 
 export function canExportBoard(email) {
-  const domain = emailDomain(email);
-  if (!domain) return false;
-  return EXPORT_DOMAINS.some((allowed) => domain === allowed || domain.endsWith(`.${allowed}`));
+  return isHouseEmail(email);
 }
 
 export function exportEmailFromSession({ authEnabled, account, currentUser } = {}) {
@@ -132,7 +131,9 @@ export function tableMatrix(columns, rows, ctx) {
 }
 
 export function escapeCsvField(value) {
-  const text = value == null ? "" : String(value);
+  let text = value == null ? "" : String(value);
+  // Leading = + - @ (or tab/CR) becomes a live formula in Excel / Numbers.
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
 }

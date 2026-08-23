@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { safeHref } from "../lib/safeUrl";
 
 /**
  * A small Markdown renderer for imported and typed notes.
@@ -47,7 +48,7 @@ function renderInline(text, keyPrefix) {
     if (link) {
       const href = link[2];
       // Only ever follow links the browser can safely open.
-      const safe = /^(https?:|mailto:)/i.test(href) ? href : null;
+      const safe = safeHref(href) || null;
       out.push(safe
         ? <a key={key} href={safe} target="_blank" rel="noreferrer noopener" style={{ color: "var(--accent)" }}>{unescape(link[1])}</a>
         : <span key={key}>{unescape(link[1])}</span>);

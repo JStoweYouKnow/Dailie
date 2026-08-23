@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2, UserCheck, LogOut, ShieldCheck, Upload, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { useAccount, useSignOut } from "../lib/auth";
+import { isHouseEmail } from "../lib/houseAccess";
 import { uid } from "../lib/format";
 import { ModalShell, Field, Section, Avatar, InlineText, ConfirmButton, Badge } from "../ui/kit";
 
@@ -15,6 +16,7 @@ export default function SettingsModal({ onClose }) {
   const [account, setAccount] = useState("");
 
   const accounts = data.settings.emailAccounts || [];
+  const canManageMailboxes = !authEnabled || isHouseEmail(signedIn && signedIn.email);
 
   const addMember = () => {
     if (!name.trim()) return;
@@ -143,15 +145,23 @@ export default function SettingsModal({ onClose }) {
         {accounts.map((a) => (
           <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--rule)" }}>
             <span className="md-mono" style={{ flex: 1, fontSize: 12 }}>{a.address}</span>
-            <ConfirmButton label="" confirmLabel="Remove?" icon={<Trash2 size={13} />}
-              onConfirm={() => updateSettings({ emailAccounts: accounts.filter((x) => x.id !== a.id) })} />
+            {canManageMailboxes && (
+              <ConfirmButton label="" confirmLabel="Remove?" icon={<Trash2 size={13} />}
+                onConfirm={() => updateSettings({ emailAccounts: accounts.filter((x) => x.id !== a.id) })} />
+            )}
           </div>
         ))}
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input className="md-input" placeholder="you@company.com" value={account} onChange={(e) => setAccount(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addAccount(); }} />
-          <button className="md-btn" onClick={addAccount}><Plus size={13} /> Add</button>
-        </div>
+        {canManageMailboxes ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <input className="md-input" placeholder="you@company.com" value={account} onChange={(e) => setAccount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addAccount(); }} />
+            <button className="md-btn" onClick={addAccount}><Plus size={13} /> Add</button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 10 }}>
+            Only a studio account can add or remove synced mailboxes.
+          </div>
+        )}
       </Section>
 
       <Section title="FOLLOW-UP ALERTS">

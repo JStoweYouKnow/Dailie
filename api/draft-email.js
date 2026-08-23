@@ -1,5 +1,7 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
 
 const MODEL = process.env.SUMMARY_MODEL || "anthropic/claude-sonnet-5";
 
@@ -34,6 +36,11 @@ Rules:
 }
 
 export async function POST(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+  const limited = rateLimit({ key: `draft-email:${gate.auth.userId}`, limit: 40, windowMs: 60 * 60 * 1000 });
+  if (limited.error) return limited.error;
+
   if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
     return Response.json({ error: "Drafting is not configured. Set AI_GATEWAY_API_KEY in the project environment." }, { status: 501 });
   }

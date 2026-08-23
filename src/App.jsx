@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
+import { apiFetch } from "./lib/sessionToken";
+import { canExportBoard, exportEmailFromSession } from "./lib/tableExport";
 import { GOOGLE_CALENDAR_RESUME_KEY } from "./lib/googleSync";
 import { SHARED_ENABLED, useSharedBoard } from "./lib/convexBoard";
 import SharedBoundary from "./lib/SharedBoundary";
@@ -382,8 +384,9 @@ function Board({ store }) {
     (async () => {
       let added = 0;
       for (const feed of feeds) {
+        if (!feed.url) continue;
         try {
-          const res = await fetch(`/api/calendar?url=${encodeURIComponent(feed.url)}`);
+          const res = await apiFetch(`/api/calendar?url=${encodeURIComponent(feed.url)}`);
           if (!res.ok) continue;
           const text = await res.text();
           // Never import from a response that is not actually a calendar.
@@ -411,7 +414,14 @@ function Board({ store }) {
     setTimeout(() => setRefreshing(false), 400);
   };
 
+  const exportEmail = exportEmailFromSession({ authEnabled, account, currentUser });
+  const canBackup = canExportBoard(exportEmail);
+
   const exportBoard = () => {
+    if (!canExportBoard(exportEmailFromSession({ authEnabled, account, currentUser }))) {
+      showToast("Only a studio account can export a backup.", "error");
+      return;
+    }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -516,7 +526,7 @@ function Board({ store }) {
     { label: "Meeting scheduler", icon: Sparkles, onClick: () => setShowScheduler(true) },
     { divider: true },
     { label: "Import a document", icon: Upload, onClick: () => fileInputRef.current && fileInputRef.current.click() },
-    { label: "Export a backup", icon: Download, onClick: exportBoard },
+    ...(canBackup ? [{ label: "Export a backup", icon: Download, onClick: exportBoard }] : []),
     { divider: true },
     { label: theme === "dark" ? "Light mode" : "Dark mode", icon: theme === "dark" ? Sun : Moon, onClick: () => setTheme((t) => (t === "dark" ? "light" : "dark")) },
     { label: "Reload from storage", icon: RefreshCw, onClick: refresh },

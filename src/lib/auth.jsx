@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { ClerkProvider, SignedIn, SignedOut, SignIn, useUser, useClerk, useAuth } from "@clerk/clerk-react";
+import { bindSessionToken } from "./sessionToken";
 
 /**
  * Dailie and Interface share one Clerk session.
@@ -59,10 +61,20 @@ const appearance = {
   },
 };
 
+function TokenBinder() {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    bindSessionToken(() => getToken());
+    return () => bindSessionToken(null);
+  }, [getToken]);
+  return null;
+}
+
 export function AuthProvider({ children }) {
   if (!AUTH_ENABLED) return children;
   return (
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} appearance={appearance} afterSignOutUrl="/">
+      <TokenBinder />
       {children}
     </ClerkProvider>
   );
@@ -108,8 +120,25 @@ function SignInScreen() {
   );
 }
 
+function MissingAuthScreen() {
+  return (
+    <div style={{
+      minHeight: "100vh", background: "var(--ink)", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: "40px 20px", gap: 16,
+    }}>
+      <div className="md-display" style={{ fontSize: 22, letterSpacing: "-0.03em", color: "var(--bone)" }}>DAILIE</div>
+      <p style={{ fontSize: 13, color: "var(--dim)", maxWidth: 360, lineHeight: 1.55, textAlign: "center" }}>
+        Sign-in is not configured on this deployment. Set VITE_CLERK_PUBLISHABLE_KEY before going live.
+      </p>
+    </div>
+  );
+}
+
 export function AuthGate({ children }) {
-  if (!AUTH_ENABLED) return children;
+  if (!AUTH_ENABLED) {
+    if (import.meta.env.PROD) return <MissingAuthScreen />;
+    return children;
+  }
   return (
     <>
       <SignedIn>{children}</SignedIn>

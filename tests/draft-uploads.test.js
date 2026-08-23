@@ -86,11 +86,11 @@ test("failed discard keeps a retryable cleanup record", async () => {
     const drafts = createDraftUploadTracker();
     drafts.keep(file("a"));
     drafts.discard();
+    await new Promise((r) => setTimeout(r, 20));
     assert.equal(fetchCalls, 1);
     const queued = JSON.parse(storage.store.get(CLEANUP_KEY) || "[]");
     assert.equal(queued.length, 1);
     assert.equal(queued[0].filePath, "documents/a.pdf");
-    await new Promise((r) => setTimeout(r, 20));
     assert.equal(JSON.parse(storage.store.get(CLEANUP_KEY) || "[]").length, 1);
   } finally {
     globalThis.fetch = originalFetch;

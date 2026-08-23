@@ -1,4 +1,12 @@
-import { createClerkClient } from "@clerk/backend";
+import {
+  GOOGLE_SCOPES,
+  gmailMessages,
+  googleGet,
+  googleTokenForUser,
+  hasScope,
+} from "../lib/googleWorkspace.js";
+import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
 
 /**
  * Pulls Gmail and Google Calendar straight from the signed-in user's Workspace
@@ -11,134 +19,16 @@ import { createClerkClient } from "@clerk/backend";
  * Requires Clerk's Google connection to use *custom* credentials with the Gmail and
  * Calendar scopes — Clerk's shared development credentials are limited to
  * openid/email/profile and cannot be widened.
+ *
+ * The Google half lives in ../lib/googleWorkspace.js, shared with the scheduled sync
+ * in convex/gmail.ts so both read a mailbox exactly the same way.
  */
-const GMAIL = "https://gmail.googleapis.com/gmail/v1";
 const CALENDAR = "https://www.googleapis.com/calendar/v3";
 
-const NEEDED = {
-  gmail: "https://www.googleapis.com/auth/gmail.readonly",
-  calendar: "https://www.googleapis.com/auth/calendar.readonly",
-};
-
-const MAX_MESSAGES = 50;
 const MAX_EVENTS = 100;
 
 function fail(message, status = 400, extra = {}) {
   return Response.json({ error: message, ...extra }, { status });
-}
-
-function normalizeScopes(scopes) {
-  if (Array.isArray(scopes)) return scopes.filter(Boolean);
-  if (typeof scopes === "string") return scopes.split(/[\s,]+/).filter(Boolean);
-  return [];
-}
-
-async function googleToken(clerk, userId) {
-  // Clerk's docs and SDK have used both ids; try each rather than failing closed.
-  const providers = ["oauth_google", "google"];
-  for (const provider of providers) {
-    try {
-      const res = await clerk.users.getUserOauthAccessToken(userId, provider);
-      const tokens = Array.isArray(res) ? res : res && res.data;
-      const entry = (tokens || [])[0];
-      if (entry && entry.token) {
-        return { token: entry.token, scopes: normalizeScopes(entry.scopes) };
-      }
-    } catch (err) {
-      const lastError = (err && err.message) || "";
-      if (/unprocessable|422/i.test(lastError)) {
-        return {
-          error: "Google needs you to reconnect so the calendar token can be refreshed.",
-          needsReauth: true,
-        };
-      }
-    }
-  }
-  return {
-    error: "No Google account is connected. Sign in with Google, or connect it from your account settings.",
-    needsConnection: true,
-  };
-}
-
-function hasScope(scopes, needed) {
-  const needle = needed.split("/").pop();
-  return normalizeScopes(scopes).some((s) => s === needed || s.endsWith(needle));
-}
-
-async function googleGet(url, token) {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const reason = body && body.error && body.error.message;
-    const err = new Error(reason || `Google returned ${res.status}.`);
-    err.status = res.status;
-    throw err;
-  }
-  return res.json();
-}
-
-function headerValue(headers, name) {
-  const hit = (headers || []).find((h) => h.name.toLowerCase() === name.toLowerCase());
-  return hit ? hit.value : "";
-}
-
-function parseAddresses(raw) {
-  return String(raw || "")
-    .split(",")
-    .map((chunk) => {
-      const angle = chunk.match(/<([^>]+)>/);
-      return (angle ? angle[1] : chunk).trim().toLowerCase();
-    })
-    .filter((a) => a.includes("@"));
-}
-
-/** Gmail messages, flattened into the shape the Emails tab already stores. */
-async function syncGmail(token, account) {
-  const list = await googleGet(
-    `${GMAIL}/users/me/messages?maxResults=${MAX_MESSAGES}&q=${encodeURIComponent("in:anywhere -in:spam -in:trash newer_than:60d")}`,
-    token
-  );
-  const ids = (list.messages || []).map((m) => m.id);
-
-  const messages = await Promise.all(
-    ids.map(async (id) => {
-      try {
-        const m = await googleGet(
-          `${GMAIL}/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
-          token
-        );
-        const headers = (m.payload && m.payload.headers) || [];
-        const from = parseAddresses(headerValue(headers, "From"))[0] || "";
-        const to = parseAddresses([headerValue(headers, "To"), headerValue(headers, "Cc")].filter(Boolean).join(","));
-        const sentAt = Number(m.internalDate) || Date.parse(headerValue(headers, "Date")) || Date.now();
-        const outgoing = account && from === account.toLowerCase();
-        return {
-          id: `gmail-${m.id}`,
-          direction: outgoing ? "out" : "in",
-          account: account || "",
-          from,
-          fromName: (headerValue(headers, "From").match(/^\s*"?([^"<]+?)"?\s*</) || [])[1] || "",
-          to,
-          subject: headerValue(headers, "Subject") || "(no subject)",
-          body: "",
-          snippet: m.snippet || "",
-          sentAt,
-          status: outgoing ? "Sent" : "Received",
-          openCount: 0,
-          lastOpened: null,
-          threadId: m.threadId || "",
-          personId: null,
-          companyId: null,
-          projectId: null,
-          imported: true,
-        };
-      } catch (err) {
-        return null;
-      }
-    })
-  );
-
-  return messages.filter(Boolean);
 }
 
 function attendeeLine(event) {
@@ -250,39 +140,11 @@ async function syncCalendar(token, excludedCalendarIds) {
 }
 
 export async function POST(request) {
-  if (!process.env.CLERK_SECRET_KEY) {
-    return fail("Authentication is not configured on the server.", 501);
-  }
-
-  const clerk = createClerkClient({
-    secretKey: process.env.CLERK_SECRET_KEY,
-    // Development instances wrap the session in a handshake; without the
-    // publishable key `authenticateRequest` cannot resolve it and every call 401s.
-    publishableKey: process.env.CLERK_PUBLISHABLE_KEY || undefined,
-  });
-
-  let auth;
-  try {
-    const state = await clerk.authenticateRequest(request, {
-      // The apps share an origin, so the token is issued for these hosts.
-      authorizedParties: [
-        "https://www.thewizardofops.app",
-        "https://thewizardofops.app",
-        "https://dailie.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3460",
-      ],
-    });
-    auth = state.toAuth();
-    if (!auth || !auth.userId) {
-      return fail(
-        `Could not verify your session${state.reason ? ` (${state.reason})` : ""}. Try signing out and back in.`,
-        401
-      );
-    }
-  } catch (err) {
-    return fail("Could not verify your session.", 401);
-  }
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+  const auth = gate.auth;
+  const limited = rateLimit({ key: `google-sync:${auth.userId}`, limit: 30, windowMs: 60 * 60 * 1000 });
+  if (limited.error) return limited.error;
 
   let body = {};
   try {
@@ -290,28 +152,30 @@ export async function POST(request) {
   } catch (err) { /* defaults below */ }
   const what = body.what === "gmail" ? "gmail" : "calendar";
 
-  const { token, scopes, error, needsReauth, needsConnection } = await googleToken(clerk, auth.userId);
+  const { token, scopes, error, needsReauth, needsConnection } = await googleTokenForUser(auth.userId, {
+    secretKey: process.env.CLERK_SECRET_KEY,
+  });
   if (error) {
     return fail(error, needsReauth ? 403 : 400, {
       needsConnection: !!needsConnection,
       needsReauth: !!needsReauth,
-      missingScope: needsReauth ? NEEDED[what] : undefined,
+      missingScope: needsReauth ? GOOGLE_SCOPES[what] : undefined,
     });
   }
 
   // Empty scopes means Clerk did not tell us — try Google and reauth only if it refuses.
-  if (scopes.length && !hasScope(scopes, NEEDED[what])) {
+  if (scopes.length && !hasScope(scopes, GOOGLE_SCOPES[what])) {
     return fail(
       `Google has not granted ${what === "gmail" ? "Gmail" : "Calendar"} access yet. ` +
         "You will be asked to allow it, then sync runs again.",
       403,
-      { missingScope: NEEDED[what], grantedScopes: scopes, needsReauth: true }
+      { missingScope: GOOGLE_SCOPES[what], grantedScopes: scopes, needsReauth: true }
     );
   }
 
   try {
     if (what === "gmail") {
-      const emails = await syncGmail(token, body.account || "");
+      const emails = await gmailMessages(token, body.account || "");
       return Response.json({ what, emails, count: emails.length });
     }
     const pulled = await syncCalendar(token, Array.isArray(body.excludedCalendarIds) ? body.excludedCalendarIds : []);
@@ -333,7 +197,7 @@ export async function POST(request) {
     return fail(
       err.message || "Google refused the request.",
       googleAuthFail ? 403 : 502,
-      googleAuthFail ? { needsReauth: true, missingScope: NEEDED[what] } : {}
+      googleAuthFail ? { needsReauth: true, missingScope: GOOGLE_SCOPES[what] } : {}
     );
   }
 }

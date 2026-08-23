@@ -19,6 +19,14 @@ test("escapeCsvField quotes commas and doubled quotes", () => {
   assert.equal(escapeCsvField('say "hi"'), '"say ""hi"""');
 });
 
+test("escapeCsvField neutralizes spreadsheet formulas", () => {
+  assert.equal(escapeCsvField("=1+1"), "'=1+1");
+  assert.equal(escapeCsvField("+cmd|' /C calc'!A0"), "'+cmd|' /C calc'!A0");
+  assert.equal(escapeCsvField("-2"), "'-2");
+  assert.equal(escapeCsvField("@SUM(A1)"), "'@SUM(A1)");
+  assert.equal(escapeCsvField("Cut trailer"), "Cut trailer");
+});
+
 test("tableToCsv writes a BOM and one row of values", () => {
   const csv = tableToCsv(columns, [
     { title: "Cut trailer", status: "todo", dueDate: Date.UTC(2026, 7, 21, 12) },

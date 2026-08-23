@@ -4,6 +4,7 @@
  * still works on a plain `vite dev`, and anything large fails loudly rather than
  * silently blowing the localStorage quota.
  */
+import { apiFetch, sessionHeaders } from "./sessionToken.js";
 
 /**
  * `asAttachment` refuses to keep a data URL longer than this, so that a stored record
@@ -29,12 +30,10 @@ const DIRECT_THRESHOLD = 4 * 1024 * 1024;
 
 export function fileSrc(record) {
   if (!record) return "";
-  const url = record.fileUrl || "";
-  if (url.startsWith("https://") && url.includes("blob.vercel-storage.com") && !url.includes(".private.")) {
-    return url;
-  }
   if (record.filePath) return `/api/files?path=${encodeURIComponent(record.filePath)}`;
-  return url;
+  const url = record.fileUrl || "";
+  if (url.startsWith("data:")) return url;
+  return /^(https?:)/i.test(url) ? url : "";
 }
 
 /** Images, stills, kits, PDFs — what the press modal and similar pickers should allow. */
@@ -127,7 +126,9 @@ export async function purgeAttachment(record, item) {
 export function imageSrc(record) {
   if (!record) return "";
   if (record.imagePath) return `/api/files?path=${encodeURIComponent(record.imagePath)}`;
-  return record.imageUrl || "";
+  const url = record.imageUrl || "";
+  if (url.startsWith("data:")) return url;
+  return /^(https?:)/i.test(url) ? url : "";
 }
 
 function readAsDataUrl(file) {
@@ -179,6 +180,7 @@ export async function uploadFile(file, kind = "documents", onProgress) {
       const result = await upload(`${kind}/${safeName}`, file, {
         access: "public",
         handleUploadUrl: "/api/blob-upload",
+        headers: await sessionHeaders(),
         multipart: true,
         contentType: meta.fileType,
         onUploadProgress: onProgress ? ({ percentage }) => onProgress(percentage) : undefined,
@@ -197,7 +199,7 @@ export async function uploadFile(file, kind = "documents", onProgress) {
 
   let res;
   try {
-    res = await fetch(`/api/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, {
+    res = await apiFetch(`/api/files?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name)}`, {
       method: "POST",
       headers: { "Content-Type": meta.fileType },
       body: file,
@@ -335,7 +337,7 @@ export function createDraftUploadTracker(remove) {
 export async function deleteFile(record) {
   const path = record && record.filePath;
   if (!path) return;
-  const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+  const res = await apiFetch(`/api/files?path=${encodeURIComponent(path)}`, { method: "DELETE" });
   if (!res.ok) {
     let message = `Could not delete the file (${res.status}).`;
     try {

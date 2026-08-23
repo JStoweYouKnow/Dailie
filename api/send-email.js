@@ -1,9 +1,17 @@
+import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
+
 // Outbound mail goes through Resend (Vercel Marketplace: `vercel integration add
 // resend/resend-email`). Without the key the client falls back to opening the user's
 // own mail client with the approved draft prefilled — nothing is ever sent silently.
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 export async function POST(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+  const limited = rateLimit({ key: `send-email:${gate.auth.userId}`, limit: 20, windowMs: 60 * 60 * 1000 });
+  if (limited.error) return limited.error;
+
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -22,7 +30,7 @@ export async function POST(request) {
   const to = (Array.isArray(payload.to) ? payload.to : [payload.to]).filter(Boolean);
   const subject = String(payload.subject || "").trim();
   const body = String(payload.body || "").trim();
-  const from = String(payload.from || process.env.MAIL_FROM || "").trim();
+  const from = String(process.env.MAIL_FROM || "").trim();
 
   if (!to.length) return Response.json({ error: "No recipient." }, { status: 400 });
   if (!subject) return Response.json({ error: "No subject." }, { status: 400 });

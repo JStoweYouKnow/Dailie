@@ -8,6 +8,8 @@ import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
 import { mergeSyncedMeetings, excludedMeetingList, excludedCalendarIdSet, restoreExcludedMeeting, setCalendarExcluded } from "../lib/calendarExclusions";
 import { syncFromGoogle, requestGoogleAccess, googleHasScope, GOOGLE_CALENDAR_SCOPE, shouldResumeGoogleCalendarSync, markGoogleCalendarResumeStarted, clearGoogleCalendarResume } from "../lib/googleSync";
 import { useAccount, useAuthToken, useClerkUser } from "../lib/auth";
+import { apiFetch } from "../lib/sessionToken";
+import { isHouseEmail } from "../lib/houseAccess";
 
 /**
  * Primary path is OAuth ("Sync my Google Calendar"). Secret iCal feeds are a fallback
@@ -27,6 +29,7 @@ export default function SyncModal({ onClose }) {
   const [paste, setPaste] = useState("");
   const [preview, setPreview] = useState(null);
 
+  const canManageFeeds = !authEnabled || isHouseEmail(account && account.email);
   const feeds = data.settings.calendarFeeds || [];
   const googleCalendars = data.settings.googleCalendars || [];
   const excludedCalendars = excludedCalendarIdSet(data.settings);
@@ -40,10 +43,14 @@ export default function SyncModal({ onClose }) {
   };
 
   const syncFeed = async (feed, { persist = true } = {}) => {
+    if (!feed.url) {
+      setError("Only a studio account can sync a secret calendar feed.");
+      return null;
+    }
     setBusyFeed(feed.id);
     setError("");
     try {
-      const res = await fetch(`/api/calendar?url=${encodeURIComponent(feed.url)}`);
+      const res = await apiFetch(`/api/calendar?url=${encodeURIComponent(feed.url)}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `The calendar feed returned ${res.status}.`);
@@ -75,6 +82,7 @@ export default function SyncModal({ onClose }) {
   };
 
   const addFeed = async () => {
+    if (!canManageFeeds) return;
     const url = feedUrl.trim();
     if (!url) return;
     const feed = { id: `feed-${Date.now()}`, label: feedLabel.trim() || "Google Calendar", url, lastSyncedAt: null };
@@ -140,7 +148,10 @@ export default function SyncModal({ onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLoaded, user && user.id]);
 
-  const removeFeed = (id) => updateSettings({ calendarFeeds: feeds.filter((f) => f.id !== id) });
+  const removeFeed = (id) => {
+    if (!canManageFeeds) return;
+    updateSettings({ calendarFeeds: feeds.filter((f) => f.id !== id) });
+  };
 
   const scanPaste = () => {
     if (!paste.trim()) return;
@@ -262,19 +273,29 @@ export default function SyncModal({ onClose }) {
                 {feed.lastSyncedAt ? `Synced ${relativeDays(feed.lastSyncedAt)}` : "Never synced"}
               </div>
             </div>
-            <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)", fontSize: 12 }} onClick={() => syncFeed(feed)} disabled={busyFeed === feed.id}>
-              <RefreshCw size={12} className={busyFeed === feed.id ? "md-spin" : ""} /> {busyFeed === feed.id ? "Syncing…" : "Sync now"}
-            </button>
-            <ConfirmButton label="" confirmLabel="Remove?" icon={<Trash2 size={13} />} onConfirm={() => removeFeed(feed.id)} />
+            {canManageFeeds && feed.url && (
+              <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)", fontSize: 12 }} onClick={() => syncFeed(feed)} disabled={busyFeed === feed.id}>
+                <RefreshCw size={12} className={busyFeed === feed.id ? "md-spin" : ""} /> {busyFeed === feed.id ? "Syncing…" : "Sync now"}
+              </button>
+            )}
+            {canManageFeeds && (
+              <ConfirmButton label="" confirmLabel="Remove?" icon={<Trash2 size={13} />} onConfirm={() => removeFeed(feed.id)} />
+            )}
           </div>
         ))}
 
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-          <input className="md-input" style={{ flex: "1 1 130px" }} placeholder="Label (e.g. Elena)" value={feedLabel} onChange={(e) => setFeedLabel(e.target.value)} />
-          <input className="md-input" style={{ flex: "3 1 260px" }} placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" value={feedUrl}
-            onChange={(e) => setFeedUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addFeed(); }} />
-          <button className="md-btn md-btn-primary" onClick={addFeed} disabled={!feedUrl.trim()}><Plus size={13} /> Connect</button>
-        </div>
+        {canManageFeeds ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <input className="md-input" style={{ flex: "1 1 130px" }} placeholder="Label (e.g. Elena)" value={feedLabel} onChange={(e) => setFeedLabel(e.target.value)} />
+            <input className="md-input" style={{ flex: "3 1 260px" }} placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" value={feedUrl}
+              onChange={(e) => setFeedUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addFeed(); }} />
+            <button className="md-btn md-btn-primary" onClick={addFeed} disabled={!feedUrl.trim()}><Plus size={13} /> Connect</button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 10, lineHeight: 1.55 }}>
+            Only a studio account can add or refresh a secret iCal address. Use Sync my Google Calendar for your own account.
+          </div>
+        )}
         {error && <div style={{ color: "var(--red)", fontSize: 12, marginTop: 10 }}>{error}</div>}
       </Section>
 

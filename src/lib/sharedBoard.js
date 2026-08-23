@@ -11,6 +11,10 @@ export const SHARED_COLLECTIONS = [
   "events", "press", "legal", "logs", "notifications",
 ];
 
+export function isSharedCollection(name) {
+  return SHARED_COLLECTIONS.includes(name);
+}
+
 /**
  * Just the records.
  *

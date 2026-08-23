@@ -1,5 +1,8 @@
 import { handleUpload } from "@vercel/blob/client";
 import { clientUploadAccess } from "../lib/blobStore.js";
+import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
+import { ALLOWED_CONTENT_TYPES } from "../lib/allowedUploads.js";
 
 /**
  * Issues short-lived client tokens so the browser uploads straight to blob storage.
@@ -11,18 +14,12 @@ import { clientUploadAccess } from "../lib/blobStore.js";
 const ALLOWED_PREFIX = /^(video|recordings|documents|images)\//;
 const MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
-const CONTENT_TYPES = [
-  "video/webm", "video/mp4",
-  "audio/webm", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-m4a",
-  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/heic", "image/heif",
-  "application/pdf",
-  "application/zip", "application/x-zip-compressed",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/octet-stream",
-];
-
 export async function POST(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+  const limited = rateLimit({ key: `blob-upload:${gate.auth.userId}`, limit: 40, windowMs: 60 * 60 * 1000 });
+  if (limited.error) return limited.error;
+
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
     // The client falls back to the buffered route, then to an inline data URL.
     return Response.json({ error: "No blob store is configured." }, { status: 501 });
@@ -47,7 +44,7 @@ export async function POST(request) {
         }
         return {
           access: clientUploadAccess(),
-          allowedContentTypes: CONTENT_TYPES,
+          allowedContentTypes: ALLOWED_CONTENT_TYPES,
           maximumSizeInBytes: MAX_BYTES,
           addRandomSuffix: true,
           tokenPayload: null,

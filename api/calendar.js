@@ -1,3 +1,5 @@
+import { requireApiAuth } from "../lib/requireApiAuth.js";
+
 // Fetches a Google Calendar secret-iCal feed server-side. Browsers cannot read these
 // directly (no CORS headers on calendar.google.com), so the app proxies through here.
 const ALLOWED_HOSTS = [
@@ -37,6 +39,9 @@ function feedHint(status, target) {
 }
 
 export async function GET(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+
   const raw = new URL(request.url).searchParams.get("url") || "";
   const normalized = raw.replace(/^webcal:\/\//i, "https://");
 

@@ -7,6 +7,7 @@ import { useStore } from "../lib/store";
 import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor, unreadFor } from "../lib/model";
 import { formatShort, formatClock, relativeDays, daysSince, formatMoney } from "../lib/format";
 import { ModalShell, Badge, Avatar, EmptyState, Section } from "../ui/kit";
+import { safeHref } from "../lib/safeUrl";
 
 export function DailieBrandLogo({ size = 36 }) {
   return (
@@ -230,8 +231,8 @@ export function LiveCallBanner({ onRecord, onDismiss, meeting }) {
           Recording needs one click: browsers will not start a screen capture on their own.
         </div>
       </div>
-      {meeting.meetingLink && (
-        <a className="md-btn md-btn-ghost" href={meeting.meetingLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none", border: "1px solid var(--rule)", fontSize: 12 }}>Join</a>
+      {safeHref(meeting.meetingLink) && (
+        <a className="md-btn md-btn-ghost" href={safeHref(meeting.meetingLink)} target="_blank" rel="noreferrer" style={{ textDecoration: "none", border: "1px solid var(--rule)", fontSize: 12 }}>Join</a>
       )}
       <button className="md-btn md-btn-primary" style={{ background: "var(--red)", borderColor: "var(--red)", color: "#fff" }} onClick={() => onRecord(meeting)}>
         <Video size={13} /> Record this call

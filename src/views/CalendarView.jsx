@@ -5,6 +5,7 @@ import { RECORD_TYPES, recordTypeInfo, EVENT_KINDS, lookupColor, lookupLabel } f
 import { formatClock } from "../lib/format";
 import { FilterChips, Section, Badge } from "../ui/kit";
 import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
+import { safeHref } from "../lib/safeUrl";
 
 function dateKey(ts) {
   const d = new Date(ts);
@@ -162,9 +163,9 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
                 {new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {formatClock(m.date)}
               </span>
               <span style={{ flex: "1 1 180px", fontSize: 13, fontWeight: 600 }}>{m.title}</span>
-              {m.meetingLink && (
+              {safeHref(m.meetingLink) && (
                 <>
-                  <a className="md-btn md-btn-ghost" href={m.meetingLink} target="_blank" rel="noreferrer" style={{ textDecoration: "none", border: "1px solid var(--rule)", fontSize: 12 }}>
+                  <a className="md-btn md-btn-ghost" href={safeHref(m.meetingLink)} target="_blank" rel="noreferrer" style={{ textDecoration: "none", border: "1px solid var(--rule)", fontSize: 12 }}>
                     <ExternalLink size={12} /> Join
                   </a>
                   <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--red)", color: "var(--red)", fontSize: 12 }} onClick={() => onRecord && onRecord(m)}>

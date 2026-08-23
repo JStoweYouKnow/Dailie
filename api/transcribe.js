@@ -1,6 +1,8 @@
 import { transcribe, generateText, Output } from "ai";
 import { putOnStore } from "../lib/blobStore.js";
 import { z } from "zod";
+import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
 
 // Duration is set in vercel.json — the bare `maxDuration` export is App Router only.
 // Both Whisper and the gpt-4o transcription models reject payloads over 25 MB.
@@ -114,6 +116,11 @@ ${numbered}`;
 }
 
 export async function POST(request) {
+  const gate = await requireApiAuth(request);
+  if (gate.error) return gate.error;
+  const limited = rateLimit({ key: `transcribe:${gate.auth.userId}`, limit: 20, windowMs: 60 * 60 * 1000 });
+  if (limited.error) return limited.error;
+
   if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {
     return Response.json(
       { error: "Transcription is not configured. Set AI_GATEWAY_API_KEY in the project environment." },

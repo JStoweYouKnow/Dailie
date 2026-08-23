@@ -7,6 +7,7 @@ import {
   PRESS_FILE_ACCEPT,
 } from "../lib/files";
 import { useDraftUploads } from "../lib/draftUploads";
+import { safeHref } from "../lib/safeUrl";
 
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Section,
@@ -133,8 +134,8 @@ export default function PressView({ searchQuery }) {
     { key: "title", label: "TITLE", cellStyle: { minWidth: 230 }, stopClick: true, render: (r) => (
       <div>
         <InlineText value={r.title} style={{ fontWeight: 700 }} onCommit={(v) => update("press", r.id, { title: v })} />
-        {r.url && (
-          <a href={r.url} target="_blank" rel="noreferrer" className="md-mono"
+        {safeHref(r.url) && (
+          <a href={safeHref(r.url)} target="_blank" rel="noreferrer" className="md-mono"
             style={{ fontSize: 10, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
             read <ExternalLink size={9} />
           </a>
