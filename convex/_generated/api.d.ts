@@ -9,8 +9,12 @@
  */
 
 import type * as board from "../board.js";
+import type * as calls from "../calls.js";
 import type * as crons from "../crons.js";
+import type * as driveNotes from "../driveNotes.js";
 import type * as gmail from "../gmail.js";
+import type * as meet from "../meet.js";
+import type * as syncState from "../syncState.js";
 
 import type {
   ApiFromModules,
@@ -20,8 +24,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   board: typeof board;
+  calls: typeof calls;
   crons: typeof crons;
+  driveNotes: typeof driveNotes;
   gmail: typeof gmail;
+  meet: typeof meet;
+  syncState: typeof syncState;
 }>;
 
 /**

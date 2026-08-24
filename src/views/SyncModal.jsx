@@ -6,7 +6,7 @@ import { makeTask } from "../lib/model";
 import { formatShort, formatClock, relativeDays, tsFromDateInput } from "../lib/format";
 import { ModalShell, Field, Section, Badge, ConfirmButton } from "../ui/kit";
 import { mergeSyncedMeetings, excludedMeetingList, excludedCalendarIdSet, restoreExcludedMeeting, setCalendarExcluded } from "../lib/calendarExclusions";
-import { syncFromGoogle, requestGoogleAccess, googleHasScope, GOOGLE_CALENDAR_SCOPE, shouldResumeGoogleCalendarSync, markGoogleCalendarResumeStarted, clearGoogleCalendarResume } from "../lib/googleSync";
+import { syncFromGoogle, requestGoogleAccess, googleHasScope, GOOGLE_CALENDAR_SCOPE, GOOGLE_DRIVE_SCOPE, GOOGLE_SYNC_SCOPES, shouldResumeGoogleCalendarSync, markGoogleCalendarResumeStarted, clearGoogleCalendarResume } from "../lib/googleSync";
 import { useAccount, useAuthToken, useClerkUser } from "../lib/auth";
 import { apiFetch } from "../lib/sessionToken";
 import { isHouseEmail } from "../lib/houseAccess";
@@ -108,7 +108,13 @@ export default function SyncModal({ onClose }) {
           setGoogleState("idle");
           return;
         }
-        const access = await requestGoogleAccess(user, [GOOGLE_CALENDAR_SCOPE]);
+        const access = await requestGoogleAccess(user, GOOGLE_SYNC_SCOPES);
+        if (access.redirecting) return;
+      } else if (user && !afterRedirect && !googleHasScope(user, GOOGLE_DRIVE_SCOPE)) {
+        // Notes shared in from other organisations need Drive. Ask once, on the way
+        // past — but never hold the calendar sync hostage to it: someone who declines
+        // comes back without it and syncs their calendar as before.
+        const access = await requestGoogleAccess(user, GOOGLE_SYNC_SCOPES);
         if (access.redirecting) return;
       }
       const result = await syncFromGoogle("calendar", {
@@ -125,7 +131,7 @@ export default function SyncModal({ onClose }) {
     } catch (err) {
       if (!afterRedirect && user && (err.needsReauth || err.missingScope)) {
         try {
-          const access = await requestGoogleAccess(user, [GOOGLE_CALENDAR_SCOPE], { force: true });
+          const access = await requestGoogleAccess(user, GOOGLE_SYNC_SCOPES, { force: true });
           if (access.redirecting) return;
         } catch (reauthErr) {
           clearGoogleCalendarResume();

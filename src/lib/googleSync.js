@@ -5,6 +5,14 @@
  */
 
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+export const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+export const GOOGLE_MEET_SCOPE = "https://www.googleapis.com/auth/meetings.space.readonly";
+
+/**
+ * Asked for together, so one trip to Google's consent screen covers both the calendar
+ * the app reads and the meeting notes other organisations share into Drive.
+ */
+export const GOOGLE_SYNC_SCOPES = [GOOGLE_CALENDAR_SCOPE, GOOGLE_DRIVE_SCOPE, GOOGLE_MEET_SCOPE];
 export const GOOGLE_CALENDAR_RESUME_KEY = "dailie.googleCalendarResume";
 
 let resumeStarted = false;

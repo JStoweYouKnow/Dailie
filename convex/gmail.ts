@@ -4,9 +4,7 @@ import {
   action,
   internalAction,
   internalMutation,
-  internalQuery,
   type ActionCtx,
-  type MutationCtx,
 } from "./_generated/server";
 import {
   GOOGLE_SCOPES,
@@ -30,10 +28,8 @@ import { isHouseEmail } from "../src/lib/houseAccess.js";
  * revoked Google connection cannot stop the rest.
  */
 
-/** Where each mailbox's last run is remembered, in the `workspace` table. */
-const SYNC_STATE_KEY = "gmailSync";
-
-const MAX_MAILBOXES = 50;
+/** This route's slice of the shared sync state. */
+const GMAIL_STATE = "gmailSync";
 
 type SyncSummary = {
   mailboxes: number;
@@ -49,64 +45,6 @@ const summaryValidator = v.object({
   companies: v.number(),
   people: v.number(),
   errors: v.array(v.string()),
-});
-
-type MailboxState = { lastRunAt?: number; lastError?: string; lastAdded?: number; ranAt?: number };
-
-async function syncState(ctx: MutationCtx): Promise<Record<string, MailboxState>> {
-  const row = await ctx.db
-    .query("workspace")
-    .withIndex("by_key", (q) => q.eq("key", SYNC_STATE_KEY))
-    .unique();
-  return ((row?.value ?? {}) as Record<string, MailboxState>) || {};
-}
-
-/**
- * Who to sync, and how far back each one needs reading.
- *
- * Only the addresses listed in settings as the workspace's own mail accounts — the
- * list the Sync Email dialog already edits. Reading a mailbox on a schedule puts its
- * subjects and participants on a board the whole organisation can see, so that has to
- * be something the workspace declared rather than something a single sign-in implies.
- * To capture every member's mail instead, drop the `declared` filter below.
- */
-export const mailboxes = internalQuery({
-  args: {},
-  returns: v.array(
-    v.object({
-      clerkId: v.string(),
-      email: v.string(),
-      lastRunAt: v.union(v.number(), v.null()),
-    })
-  ),
-  handler: async (ctx) => {
-    const settingsRow = await ctx.db
-      .query("workspace")
-      .withIndex("by_key", (q) => q.eq("key", "settings"))
-      .unique();
-    const settings = (settingsRow?.value ?? {}) as { emailAccounts?: Array<{ address?: string }> };
-    const declared = new Set(
-      (settings.emailAccounts ?? [])
-        .map((a) => String(a?.address ?? "").trim().toLowerCase())
-        .filter(Boolean)
-    );
-    if (declared.size === 0) return [];
-
-    const members = await ctx.db.query("members").take(MAX_MAILBOXES);
-    const row = await ctx.db
-      .query("workspace")
-      .withIndex("by_key", (q) => q.eq("key", SYNC_STATE_KEY))
-      .unique();
-    const state = ((row?.value ?? {}) as Record<string, MailboxState>) || {};
-
-    return members
-      .filter((m) => m.status === "active" && !!m.clerkId && !!m.email && declared.has(m.email.toLowerCase()))
-      .map((m) => ({
-        clerkId: m.clerkId,
-        email: m.email,
-        lastRunAt: state[m.clerkId]?.lastRunAt ?? null,
-      }));
-  },
 });
 
 /**
@@ -191,41 +129,6 @@ export const ingest = internalMutation({
   },
 });
 
-/**
- * Remembers where a mailbox got to. A failed run deliberately leaves `lastRunAt`
- * alone, so the window it could not read is retried rather than skipped.
- */
-export const recordRun = internalMutation({
-  args: {
-    clerkId: v.string(),
-    ranAt: v.number(),
-    added: v.number(),
-    error: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, { clerkId, ranAt, added, error }) => {
-    const state = await syncState(ctx);
-    const previous = state[clerkId] ?? {};
-    const next: Record<string, MailboxState> = {
-      ...state,
-      [clerkId]: {
-        ranAt,
-        lastRunAt: error ? previous.lastRunAt : ranAt,
-        lastAdded: added,
-        ...(error ? { lastError: error } : {}),
-      },
-    };
-
-    const row = await ctx.db
-      .query("workspace")
-      .withIndex("by_key", (q) => q.eq("key", SYNC_STATE_KEY))
-      .unique();
-    if (row) await ctx.db.patch(row._id, { value: next, updatedAt: Date.now() });
-    else await ctx.db.insert("workspace", { key: SYNC_STATE_KEY, value: next, updatedAt: Date.now() });
-    return null;
-  },
-});
-
 async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
   const summary: SyncSummary = { mailboxes: 0, added: 0, companies: 0, people: 0, errors: [] };
 
@@ -238,7 +141,7 @@ async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
     return summary;
   }
 
-  const boxes = await ctx.runQuery(internal.gmail.mailboxes, {});
+  const boxes = await ctx.runQuery(internal.syncState.accountsFor, { stateKey: GMAIL_STATE });
   if (boxes.length === 0) {
     // Not a failure: nobody has declared a mailbox for the workspace to read yet.
     console.log(
@@ -269,11 +172,22 @@ async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
       summary.added += result.added;
       summary.companies += result.companies;
       summary.people += result.people;
-      await ctx.runMutation(internal.gmail.recordRun, { clerkId: box.clerkId, ranAt, added: result.added });
+      await ctx.runMutation(internal.syncState.recordRun, {
+        stateKey: GMAIL_STATE,
+        clerkId: box.clerkId,
+        ranAt,
+        added: result.added,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       summary.errors.push(`${box.email}: ${message}`);
-      await ctx.runMutation(internal.gmail.recordRun, { clerkId: box.clerkId, ranAt, added: 0, error: message });
+      await ctx.runMutation(internal.syncState.recordRun, {
+        stateKey: GMAIL_STATE,
+        clerkId: box.clerkId,
+        ranAt,
+        added: 0,
+        error: message,
+      });
     }
   }
 

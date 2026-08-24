@@ -3,6 +3,7 @@ import { putOnStore } from "../lib/blobStore.js";
 import { z } from "zod";
 import { requireApiAuth } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
+import { summarizeTranscript, DEFAULT_SUMMARY_MODEL } from "../lib/summarize.js";
 
 // Duration is set in vercel.json — the bare `maxDuration` export is App Router only.
 // Both Whisper and the gpt-4o transcription models reject payloads over 25 MB.
@@ -10,26 +11,12 @@ import { rateLimit } from "../lib/rateLimit.js";
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
 const TRANSCRIPTION_MODEL = process.env.TRANSCRIBE_MODEL || "openai/whisper-1";
-const SUMMARY_MODEL = process.env.SUMMARY_MODEL || "anthropic/claude-sonnet-5";
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Whisper emits a segment every few seconds. Merging them into utterances keeps the
 // speaker pass cheap and gives the transcript readable paragraphs instead of fragments.
 const MERGE_GAP_SECONDS = 1.2;
 const MAX_UTTERANCE_SECONDS = 30;
 const MAX_ATTRIBUTED = 400;
-
-const summarySchema = z.object({
-  summary: z.string(),
-  followUps: z.array(
-    z.object({
-      text: z.string(),
-      owner: z.string(),
-      dueDate: z.string(),
-    })
-  ),
-});
 
 const speakerSchema = z.object({
   turns: z.array(
@@ -62,30 +49,6 @@ function mergeSegments(segments) {
     }
   }
   return merged;
-}
-
-function buildSummaryPrompt(transcript, referenceDate, participants) {
-  const who = participants.length ? `\nOn the call: ${participants.join(", ")}.` : "";
-  return `You are summarizing a recorded film/TV production call for a producer's daily log.
-Today's date is ${referenceDate}.${who}
-
-Return:
-- summary: two or three sentences on what was actually decided or discussed.
-- followUps: one entry per concrete action item someone committed to.
-  - text: the action, phrased as an imperative task.
-  - owner: the person responsible, only if the transcript names them. Otherwise "".
-  - dueDate: YYYY-MM-DD, only if the transcript states a deadline. Resolve relative
-    deadlines ("by Friday", "end of next week") against today's date. Otherwise "".
-
-Rules:
-- Use only what is in the transcript. Never invent names, numbers, dates, or commitments.
-- Vague intentions ("we should catch up sometime") are not action items. Omit them.
-- If nothing was committed to, return an empty followUps array.
-- If the transcript is too short or garbled to summarize, set summary to
-  "Transcript too short to summarize." and followUps to an empty array.
-
-TRANSCRIPT:
-${transcript}`;
 }
 
 /**
@@ -192,34 +155,20 @@ export async function POST(request) {
   }
 
   // A failed summary must not discard a good transcript — return it either way.
-  let summary = "";
-  let followUps = [];
-  try {
-    const referenceDate = new URL(request.url).searchParams.get("date") || new Date().toISOString().slice(0, 10);
-    const { output } = await generateText({
-      model: SUMMARY_MODEL,
-      output: Output.object({ schema: summarySchema }),
-      prompt: buildSummaryPrompt(transcript, ISO_DATE.test(referenceDate) ? referenceDate : new Date().toISOString().slice(0, 10), participants),
-    });
-    summary = (output.summary || "").trim();
-    followUps = (output.followUps || [])
-      .map((f) => ({
-        text: String(f.text || "").trim(),
-        owner: String(f.owner || "").trim(),
-        // Drop anything the model returned in a shape the date input can't hold.
-        dueDate: ISO_DATE.test(String(f.dueDate || "").trim()) ? String(f.dueDate).trim() : "",
-      }))
-      .filter((f) => f.text);
-  } catch (err) {
-    console.error("summary failed", err);
-  }
+  const summarized = await summarizeTranscript({
+    transcript,
+    participants,
+    referenceDate: new URL(request.url).searchParams.get("date") || "",
+  });
+  if (summarized.error) console.error("summary failed", summarized.error);
+  const { summary, followUps } = summarized;
 
   // Speaker attribution is a bonus pass: an unlabelled transcript is still useful.
   let segments = utterances.map((u) => ({ ...u, speaker: "" }));
   if (utterances.length > 1 && utterances.length <= MAX_ATTRIBUTED) {
     try {
       const { output } = await generateText({
-        model: SUMMARY_MODEL,
+        model: DEFAULT_SUMMARY_MODEL,
         output: Output.object({ schema: speakerSchema }),
         prompt: buildSpeakerPrompt(utterances, participants),
       });

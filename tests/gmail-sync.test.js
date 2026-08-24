@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { gmailQuery, gmailMessages } from "../lib/googleWorkspace.js";
+import { gmailQuery, gmailMessages, driveNotesQuery, parseMeetingNoteTitle } from "../lib/googleWorkspace.js";
 import { deriveDirectoryFromEmails } from "../src/lib/model.js";
 
 const MINUTE = 60000;
@@ -131,4 +131,41 @@ test("the synced mailbox's own domain is not read as a counterparty", () => {
 
   assert.deepEqual(derived.newCompanies, []);
   assert.deepEqual(derived.newPeople, []);
+});
+
+/* ---- Drive: meeting notes shared in from another organisation ---- */
+
+test("the notes search asks only for shared meeting docs", () => {
+  const q = driveNotesQuery();
+  assert.match(q, /sharedWithMe = true/);
+  assert.match(q, /mimeType = 'application\/vnd\.google-apps\.document'/);
+  assert.match(q, /trashed = false/);
+  assert.match(q, /name contains 'Notes by Gemini' or name contains 'Transcript'/);
+  assert.ok(!q.includes("modifiedTime"), "a first run has no window to continue from");
+});
+
+test("a later notes run asks only for what changed since", () => {
+  const since = Date.parse("2026-04-15T12:00:00.000Z");
+  const q = driveNotesQuery(since);
+  const stamp = q.match(/modifiedTime > '([^']+)'/)[1];
+  assert.equal(Date.parse(stamp), since - 10 * 60000);
+});
+
+test("a Gemini notes title gives up the meeting's own name and when it happened", () => {
+  const parsed = parseMeetingNoteTitle("Monthly Baselane Ambassador Meeting - 2026/04/15 16:55 CDT - Notes by Gemini");
+  assert.equal(parsed.title, "Monthly Baselane Ambassador Meeting");
+  assert.equal(parsed.kind, "notes");
+  assert.equal(new Date(parsed.startedAt).toISOString().slice(0, 10), "2026-04-15");
+});
+
+test("a title with no date leaves the caller to fall back on the file's own", () => {
+  const parsed = parseMeetingNoteTitle("A24 sync - Transcript");
+  assert.equal(parsed.title, "A24 sync");
+  assert.equal(parsed.kind, "transcript");
+  assert.equal(parsed.startedAt, null);
+});
+
+test("a name that is only a marker still yields something to call the meeting", () => {
+  assert.equal(parseMeetingNoteTitle("Notes by Gemini").title, "Notes by Gemini");
+  assert.equal(parseMeetingNoteTitle("").title, "");
 });

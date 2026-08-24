@@ -1169,4 +1169,103 @@ export function makeTask(fields, currentUserId) {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Filing a call
+ *
+ * A recorded call is never just one record: it creates tasks from its next steps and
+ * writes itself back onto the meeting it belongs to. That used to live inside the
+ * recorder's save handler, where only the browser could reach it — these helpers hold
+ * the rules so a transcript arriving from Meet or Zoom is filed the same way.
+ * ------------------------------------------------------------------ */
+
+/** @param {Record<string, any>} [fields] */
+export function makeCall(fields) {
+  const input = fields || {};
+  return {
+    id: uid(),
+    title: "Call Recording",
+    startedAt: Date.now(),
+    durationSec: 0,
+    source: "meeting",
+    transcript: "",
+    summary: "",
+    nextSteps: [],
+    projectId: null,
+    meetingId: null,
+    audioUrl: "",
+    audioPath: "",
+    videoUrl: "",
+    videoPath: "",
+    videoBytes: 0,
+    recordedBy: null,
+    emailSent: false,
+    createdAt: Date.now(),
+    ...input,
+    participants: normalizeParticipants(input.participants),
+    nextSteps: ensureArray(input.nextSteps)
+      .map((step) => ({
+        ...step,
+        text: String(step.text || "").trim(),
+        owner: String(step.owner || "").trim(),
+        dueDate: String(step.dueDate || ""),
+      }))
+      .filter((step) => step.text),
+    segments: ensureArray(input.segments).map((seg) => ({
+      start: Number(seg.start) || 0,
+      end: Number(seg.end) || 0,
+      text: String(seg.text || ""),
+      speaker: String(seg.speaker || ""),
+    })),
+  };
+}
+
+/**
+ * Every next step becomes a real, assignable task — that is the point of capturing
+ * them. An owner the transcript named is matched to the team by name; anyone we
+ * cannot place stays as a label on a task owned by whoever filed the call.
+ *
+ * @param {Record<string, any>} call
+ * @param {{ team?: Array<{ id: string, name?: string }>, currentUserId?: string | null }} [options]
+ */
+export function tasksForCall(call, { team = [], currentUserId = null } = {}) {
+  return ensureArray(call.nextSteps)
+    .map((step) => ({
+      ...step,
+      text: String(step.text || "").trim(),
+      owner: String(step.owner || "").trim(),
+    }))
+    .filter((step) => step.text)
+    .map((step) => {
+      const assignee = team.find(
+        (m) => m.name && m.name.toLowerCase() === step.owner.toLowerCase()
+      );
+      return makeTask({
+        title: step.text,
+        assigneeIds: assignee ? [assignee.id] : (currentUserId ? [currentUserId] : []),
+        assigneeLabel: assignee ? "" : step.owner,
+        dueDate: step.dueDate ? tsFromDateInput(step.dueDate) : null,
+        projectId: call.projectId || null,
+        callId: call.id,
+        meetingId: call.meetingId || null,
+        source: "call",
+        priority: "HIGH",
+      }, currentUserId);
+    });
+}
+
+/**
+ * The patch that hangs a call off the meeting it came from.
+ *
+ * @param {Record<string, any>} meeting
+ * @param {Record<string, any>} call
+ */
+export function meetingNoteForCall(meeting, call) {
+  return {
+    notes: [meeting.notes, `\u{1F399}\uFE0F ${call.title}\n${call.summary || call.transcript}`]
+      .filter(Boolean)
+      .join("\n\n"),
+    callId: call.id,
+  };
+}
+
 export { parseEmailList };

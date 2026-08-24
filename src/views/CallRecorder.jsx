@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Mic, MicOff, Monitor, RefreshCw, Plus, X, ExternalLink, Video } from "lucide-react";
 import { useStore } from "../lib/store";
-import { makeTask, makeParticipant, normalizeParticipants } from "../lib/model";
-import { uid, formatDuration, tsFromDateInput, dateInputValue } from "../lib/format";
+import { makeCall, tasksForCall, meetingNoteForCall, makeParticipant, normalizeParticipants } from "../lib/model";
+import { uid, formatDuration, dateInputValue } from "../lib/format";
 import { uploadFile } from "../lib/files";
 import { apiFetch } from "../lib/sessionToken";
 import { safeHref } from "../lib/safeUrl";
@@ -301,9 +301,7 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
   const removeStep = (id) => setNextSteps((s) => s.filter((x) => x.id !== id));
 
   const save = () => {
-    const steps = nextSteps.filter((s) => s.text.trim()).map((s) => ({ ...s, text: s.text.trim(), owner: s.owner.trim() }));
-
-    const call = add("calls", {
+    const call = add("calls", makeCall({
       title: title.trim() || "Call Recording",
       startedAt: Date.now() - seconds * 1000,
       durationSec: seconds,
@@ -315,41 +313,24 @@ export default function CallRecorder({ onClose, meeting, onSaved }) {
       meetingId: meeting ? meeting.id : null,
       transcript,
       summary,
-      nextSteps: steps,
+      nextSteps,
       audioUrl: audioPath ? "" : audioUrl,
       audioPath,
       videoUrl: videoPath ? "" : videoUrl,
       videoPath,
       recordedBy: currentUser && currentUser.id,
-      emailSent: false,
-    });
+    }));
 
-    // Every next step becomes a real, assignable task — that is the point of capturing them.
-    steps.forEach((step) => {
-      const assignee = data.team.find((m) => m.name.toLowerCase() === step.owner.toLowerCase());
-      add("tasks", makeTask({
-        title: step.text,
-        assigneeIds: assignee ? [assignee.id] : (currentUser ? [currentUser.id] : []),
-        assigneeLabel: assignee ? "" : step.owner,
-        dueDate: step.dueDate ? tsFromDateInput(step.dueDate) : null,
-        projectId: projectId || null,
-        callId: call.id,
-        meetingId: meeting ? meeting.id : null,
-        source: "call",
-        priority: "HIGH",
-      }, currentUser && currentUser.id));
-    });
+    // Every next step becomes a real, assignable task — the same rules the scheduled
+    // transcript imports use, so a call files identically however it was captured.
+    const tasks = tasksForCall(call, { team: data.team, currentUserId: currentUser && currentUser.id });
+    tasks.forEach((task) => add("tasks", task));
 
-    if (meeting) {
-      update("meetings", meeting.id, (m) => ({
-        notes: [m.notes, `🎙️ ${title}\n${summary || transcript}`].filter(Boolean).join("\n\n"),
-        callId: call.id,
-      }));
-    }
+    if (meeting) update("meetings", meeting.id, (m) => meetingNoteForCall(m, call));
 
     showToast(
-      steps.length
-        ? `Call saved · ${steps.length} next step${steps.length === 1 ? "" : "s"} flagged as tasks.`
+      tasks.length
+        ? `Call saved · ${tasks.length} next step${tasks.length === 1 ? "" : "s"} flagged as tasks.`
         : "Call saved with transcript and summary.",
       "success"
     );
