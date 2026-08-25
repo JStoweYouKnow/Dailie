@@ -19,8 +19,8 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
   const [filter, setFilter] = useState("all");
 
   /**
-   * Both project types land on the same grid; the filter is what lets you look at
-   * Service Production alone, or Original IP alone, without losing the combined view.
+   * All project types land on the same grid; the filter is what lets you look at
+   * one type alone without losing the combined view.
    */
   const eventsByDay = useMemo(() => {
     const map = {};

@@ -444,7 +444,7 @@ export function AIAssistantDrawer({ isOpen, onClose }) {
 export function InfoModal({ onClose }) {
   const items = [
     ["Home", "Every person's task list side by side, your projects, and the meetings coming out of Google Calendar."],
-    ["Projects", "Service Production, Original IP and Outside IP on one board — each with its own editable pipeline. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
+    ["Projects", "Service Production, Original IP, Outside IP and Training / Consultancy on one board — each with its own editable pipeline. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
     ["Tasks & Notes", "Shared, assignable tasks and notes. Call and meeting action items land here automatically."],
     ["Calls", "Record a Zoom or Meet tab with video, get a transcript, a summary, and suggested next steps that become tasks. Then draft a follow-up email and approve it before it sends."],
     ["Emails", "Paste from any Gmail account. Dailie logs the messages and flags relationships that have gone quiet."],

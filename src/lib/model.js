@@ -40,14 +40,14 @@ export function stageInfo(key) {
 }
 
 /**
- * Service Production, Original IP and Outside IP are tracked on one board but each
- * carries its own pipeline and its own fields, so the type lives on the record and
- * every view filters by it.
+ * Record types share one board but each carries its own pipeline and fields, so the
+ * type lives on the record and every view filters by it.
  */
 export const RECORD_TYPES = [
   { key: "service", label: "Service Production", short: "Service Prod.", color: HUE.teal, description: "Work produced for a client or studio under a service agreement." },
   { key: "original", label: "Original IP", short: "Original IP", color: HUE.clay, description: "IP we own and develop ourselves." },
   { key: "outside", label: "Outside IP", short: "Outside IP", color: HUE.plum, description: "Third-party IP we option, license or co-develop." },
+  { key: "training", label: "Training / Consultancy", short: "Training", color: HUE.sand, description: "Workshops, training and consultancy delivered to clients." },
 ];
 
 export function recordTypeInfo(key) {
@@ -101,6 +101,14 @@ export const DEFAULT_PIPELINES = {
     { key: "negotiation", label: "In Negotiations", color: HUE.sand },
     { key: "production", label: "Production", color: HUE.clay },
     { key: "released", label: "Released", color: HUE.moss },
+  ],
+  training: [
+    { key: "inquiry", label: "Inquiry", color: HUE.stone },
+    { key: "proposal", label: "Proposal", color: HUE.sage },
+    { key: "confirmed", label: "Confirmed", color: HUE.sand },
+    { key: "delivery", label: "In Delivery", color: HUE.clay },
+    { key: "complete", label: "Complete", color: HUE.moss },
+    { key: "lost", label: "Lost / Passed", color: HUE.faint },
   ],
 };
 

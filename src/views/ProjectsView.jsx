@@ -71,9 +71,8 @@ function GalleryGrid({ projects, onOpen, memberName, companyName }) {
 
 
 /**
- * One editable pipeline per record type. Service Production, Original IP and Outside IP
- * each keep their own columns, so "All Types" stacks the boards rather than hiding two
- * thirds of the slate behind a filter.
+ * One editable pipeline per record type. Each type keeps its own columns, so
+ * "All Types" stacks the boards rather than hiding work behind a filter.
  */
 function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail }) {
   const { data, patch, update, updateProject, memberName, companyName } = useStore();
