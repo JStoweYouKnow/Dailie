@@ -11,17 +11,13 @@ import { safeHref } from "../lib/safeUrl";
 
 export function DailieBrandLogo({ size = 36 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, display: "block" }}>
-      <rect x="3" y="11" width="30" height="22" rx="5" fill="var(--panel-raised)" stroke="var(--accent)" strokeWidth="2" />
-      <path d="M3 12C3 9.79086 4.79086 8 7 8H29C31.2091 8 33 9.79086 33 12V15H3V12Z" fill="var(--accent)" />
-      <path d="M8 8L12 15" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M16 8L20 15" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M24 8L28 15" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round" />
-      <circle cx="10" cy="22" r="2" fill="var(--bone)" />
-      <circle cx="18" cy="22" r="2" fill="var(--bone)" />
-      <circle cx="26" cy="22" r="2" fill="var(--bone)" />
-      <line x1="8" y1="27" x2="28" y2="27" stroke="var(--rule-bright)" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
+    <span
+      className="dailie-mark"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }}
+      aria-hidden
+    >
+      B
+    </span>
   );
 }
 
@@ -31,7 +27,7 @@ export function Toast({ toast }) {
   return (
     <div style={{
       position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 90,
-      background: "var(--panel-raised)", border: `1px solid ${color}`, borderRadius: 100,
+      background: "var(--panel)", border: `1px solid ${color}`, borderRadius: 0,
       padding: "11px 20px", boxShadow: "var(--shadow-lg)", display: "flex", alignItems: "center", gap: 9,
       fontSize: 13, color: "var(--bone)", maxWidth: "90vw",
     }}>
@@ -103,7 +99,7 @@ export function NotificationCenter({ onOpenTab }) {
         <Bell size={15} color={total ? "var(--red)" : "var(--dim)"} />
         {total > 0 && (
           <span className="md-mono" style={{
-            position: "absolute", top: 1, right: 1, minWidth: 15, height: 15, borderRadius: 100,
+            position: "absolute", top: 1, right: 1, minWidth: 15, height: 15, borderRadius: 0,
             background: "var(--red)", color: "#fff", fontSize: 9, fontWeight: 800,
             display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px",
           }}>{total > 99 ? "99+" : total}</span>
@@ -113,7 +109,7 @@ export function NotificationCenter({ onOpenTab }) {
       {open && (
         <div className="md-scroll" style={{
           position: "absolute", right: 0, top: "calc(100% + 6px)", width: 370, maxHeight: 460, overflowY: "auto",
-          background: "var(--panel)", border: "1px solid var(--rule-bright)", borderRadius: 12,
+          background: "var(--panel)", border: "1px solid var(--bone)", borderRadius: 0,
           boxShadow: "var(--shadow-lg)", zIndex: 60, padding: 14,
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -409,7 +405,7 @@ export function AIAssistantDrawer({ isOpen, onClose }) {
   return (
     <div style={{
       position: "fixed", bottom: 24, right: 24, width: 380, maxWidth: "calc(100vw - 32px)", height: 520, maxHeight: "80vh",
-      background: "var(--panel)", border: "1px solid var(--rule-bright)", borderRadius: 16, boxShadow: "var(--shadow-lg)",
+      background: "var(--panel)", border: "1px solid var(--bone)", borderRadius: 0, boxShadow: "var(--shadow-lg)",
       display: "flex", flexDirection: "column", zIndex: 70,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "14px 16px", borderBottom: "1px solid var(--rule)" }}>
