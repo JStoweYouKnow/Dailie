@@ -46,6 +46,10 @@ import PressView from "./views/PressView";
 import LegalView from "./views/LegalView";
 import SchedulerAgent from "./views/SchedulerAgent";
 
+/** Separate Vercel project — not in the microfrontends group (that slot is billed). */
+const BENCH_URL = "https://bench-talent-kappa.vercel.app";
+const BUG_REPORT_URL = "https://docs.google.com/forms/d/e/1FAIpQLScgjtrlOQ8fDxBmgOh8uYmaKSfFPpEQqfY-7-HQyXvnIqbnAQ/viewform?usp=dialog";
+
 /**
  * Fifteen destinations in one scrolling row asked you to read every label to find
  * anything. Grouped in a sidebar they stay one click away without competing.
@@ -630,10 +634,16 @@ function Board({ store }) {
             {loading ? <LoadingState /> : renderTab()}
           </main>
 
-          <footer style={{ padding: "0 28px 28px" }}>
-            {/* Cross-zone: /production is served by the Interface microfrontend. */}
+          <footer style={{ padding: "0 28px 28px", display: "flex", gap: 18, flexWrap: "wrap" }}>
+            {/* /production is Interface on this origin; Bench is a separate site. */}
             <a href="/production" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim-2)", textDecoration: "none" }}>
               Production tracking <ExternalLink size={11} />
+            </a>
+            <a href={BENCH_URL} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim-2)", textDecoration: "none" }}>
+              Bench <ExternalLink size={11} />
+            </a>
+            <a href={BUG_REPORT_URL} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim-2)", textDecoration: "none" }}>
+              Report a bug <ExternalLink size={11} />
             </a>
           </footer>
         </div>

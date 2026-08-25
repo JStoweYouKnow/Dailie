@@ -9,6 +9,8 @@ Dailie and Interface are one site on one domain: **`www.thewizardofops.app`**.
 
 Interface is the [production-tracking app](https://github.com/JStoweYouKnow/Interface) — shots, tasks, review, schedule, AI usage. The link at the bottom of Dailie is a plain `<a href="/production">`: a real navigation into the other app, same origin, same tab.
 
+Bench (Vercel project `bench-talent`) is a **separate site**, not a child of this group. Pro includes two microfrontend projects; a third is billed. The footer links out to [bench-talent-kappa.vercel.app](https://bench-talent-kappa.vercel.app).
+
 `thewizardofops.app` redirects to the `www` host, and `dailie.vercel.app` remains an alias of the default app.
 
 **This repo owns [`microfrontends.json`](./microfrontends.json)** — the routing config for the whole group. Vercel reads it from Dailie's production deployment. Interface pulls a local copy with `vercel microfrontends pull` and does not commit one.
@@ -65,7 +67,7 @@ Checking the child app directly is misleading in two ways worth knowing:
 
 ## Google Workspace
 
-Both apps share one Clerk session (see `src/lib/auth.jsx`), and Clerk's Google
+Dailie and Interface share one Clerk session (see `src/lib/auth.jsx`), and Clerk's Google
 connection is already enabled — "Continue with Google" works today.
 
 Syncing Gmail and Calendar needs more than sign-in, and it is blocked on one thing:
