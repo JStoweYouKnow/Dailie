@@ -31,7 +31,7 @@ export function LoadingState() {
 
 export function EmptyState({ title, subtitle, action }) {
   return (
-    <div style={{ padding: "48px 20px", textAlign: "center", border: "1px solid var(--bone)", background: "var(--panel)" }}>
+    <div style={{ padding: "48px 20px", textAlign: "center", border: "1px dashed var(--rule-bright)", borderRadius: 12, background: "var(--panel)" }}>
       <div className="md-display" style={{ fontSize: 16, marginBottom: 6, color: "var(--bone)" }}>{title}</div>
       <div style={{ fontSize: 13, color: "var(--dim)" }}>{subtitle}</div>
       {action && <div style={{ marginTop: 16 }}>{action}</div>}
@@ -43,7 +43,7 @@ export function ModalShell({ title, subtitle, status, onClose, children, wide })
   return (
     <div className="md-overlay" onClick={onClose}>
       <div className="md-modal" onClick={(e) => e.stopPropagation()} style={wide ? { maxWidth: 860 } : undefined}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", borderBottom: "1px solid var(--rule)", position: "sticky", top: 0, background: "var(--panel)", zIndex: 2 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", borderBottom: "1px solid var(--rule)", position: "sticky", top: 0, background: "var(--panel)", zIndex: 2, borderRadius: "16px 16px 0 0" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               <div className="md-display" style={{ fontSize: 18, fontWeight: 800 }}>{title}</div>
@@ -128,8 +128,8 @@ export function ExportMenu({ title, columns, rows }) {
       {open && (
         <div style={{
           position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 20, minWidth: 180,
-          background: "var(--panel)", border: "1px solid var(--bone)",
-          boxShadow: "var(--shadow-lg)", padding: 6,
+          background: "var(--panel)", border: "1px solid var(--rule)", borderRadius: 10,
+          boxShadow: "0 12px 32px rgba(0,0,0,.28)", padding: 6,
         }}>
           <button className="md-btn md-btn-ghost" style={{ width: "100%", justifyContent: "flex-start", fontSize: 12 }} onClick={() => run("csv")}>
             CSV spreadsheet
@@ -153,7 +153,7 @@ export function Badge({ label, color, subtle, icon, style, solid }) {
   return (
     <span className="md-mono" title={typeof label === "string" ? label : undefined} style={{
       display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 600,
-      padding: solid ? "3px 9px" : "2px 0", borderRadius: 0, whiteSpace: "nowrap",
+      padding: solid ? "3px 9px" : "2px 0", borderRadius: 100, whiteSpace: "nowrap",
       maxWidth: "100%", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
       background: solid ? `${hue}22` : "transparent",
       color: subtle ? "var(--dim)" : hue,
@@ -162,7 +162,7 @@ export function Badge({ label, color, subtle, icon, style, solid }) {
     }}>
       {icon}
       {!icon && !subtle && color && (
-        <span style={{ width: 6, height: 6, background: hue, flexShrink: 0 }} />
+        <span style={{ width: 6, height: 6, borderRadius: 2, background: hue, flexShrink: 0 }} />
       )}
       <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
     </span>
@@ -191,7 +191,7 @@ export function Avatar({ name, size = 28, title }) {
   const color = colorForName(name);
   return (
     <div title={title || name} style={{
-      width: size, height: size, flexShrink: 0,
+      width: size, height: size, borderRadius: "50%", flexShrink: 0,
       background: `${color}2e`, border: `1px solid ${color}`, color,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontSize: Math.max(9, size * 0.36), fontWeight: 800, fontFamily: "var(--font-mono)",
@@ -551,7 +551,7 @@ export function DataTable({ columns, rows, onRowClick, empty, rowKey = (r) => r.
           <ExportMenu title={exportTitle || "Table"} columns={columns} rows={rows} />
         </div>
       )}
-      <div className="md-scroll" style={{ overflowX: "auto", border: "1px solid var(--bone)", background: "var(--panel)" }}>
+      <div className="md-scroll" style={{ overflowX: "auto", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
         <thead>
           <tr style={{ background: "var(--panel-raised)", borderBottom: "1px solid var(--rule)" }}>

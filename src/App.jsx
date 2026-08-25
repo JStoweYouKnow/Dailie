@@ -103,8 +103,8 @@ function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts, mobileOpen 
         <DailieBrandLogo size={26} />
         {!collapsed && (
           <div style={{ minWidth: 0 }}>
-            <div className="dailie-wordmark" style={{ fontSize: 15 }}>Bench</div>
-            <div className="dailie-tag">Matriarch Studios</div>
+            <div className="md-display" style={{ fontSize: 15, letterSpacing: "-0.02em", lineHeight: 1 }}>DAILIE</div>
+            <div className="md-mono" style={{ fontSize: 8.5, color: "var(--dim-2)", letterSpacing: ".14em", marginTop: 2 }}>MATRIARCH STUDIOS</div>
           </div>
         )}
       </div>
@@ -313,14 +313,11 @@ function Board({ store }) {
   }, [authEnabled, loading, account && account.id, linkAccount, store.shared]);
 
   const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem("dailie-theme-v1") || "light"; } catch (e) { return "light"; }
+    try { return localStorage.getItem("dailie-theme-v1") || "dark"; } catch (e) { return "dark"; }
   });
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark-theme", theme === "dark");
-    document.documentElement.classList.remove("light-theme");
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", theme === "dark" ? "#0a0a0a" : "#fafaf8");
+    document.documentElement.classList.toggle("light-theme", theme === "light");
     try { localStorage.setItem("dailie-theme-v1", theme); } catch (e) { /* private mode */ }
   }, [theme]);
 
@@ -558,7 +555,7 @@ function Board({ store }) {
 
         <div className="md-main">
           <header style={{
-            display: "flex", alignItems: "center", gap: 12, padding: "18px 40px", flexWrap: "wrap",
+            display: "flex", alignItems: "center", gap: 12, padding: "16px 28px", flexWrap: "wrap",
             borderBottom: "1px solid var(--rule)", position: "sticky", top: 0, background: "var(--ink)", zIndex: 20,
             paddingTop: "max(16px, env(safe-area-inset-top))",
           }}>
@@ -568,7 +565,7 @@ function Board({ store }) {
             </button>
 
             <div style={{ minWidth: 0, marginRight: "auto" }}>
-              <h1 className="md-display" style={{ fontSize: 26, letterSpacing: "-0.01em", lineHeight: 1.15, fontWeight: 700 }}>{activeItem.label}</h1>
+              <h1 className="md-display" style={{ fontSize: 19, letterSpacing: "-0.02em", lineHeight: 1.2 }}>{activeItem.label}</h1>
             </div>
 
             <div className="md-header-search" style={{ position: "relative", width: 210 }}>
@@ -633,7 +630,7 @@ function Board({ store }) {
             <div style={{ padding: "10px 28px", fontSize: 12.5, color: "var(--red)", borderBottom: "1px solid var(--rule)" }}>{saveError}</div>
           )}
 
-          <main style={{ padding: "32px 40px 64px" }}>
+          <main style={{ padding: "24px 28px 64px" }}>
             {loading ? <LoadingState /> : renderTab()}
           </main>
 
