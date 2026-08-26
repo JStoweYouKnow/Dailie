@@ -251,6 +251,13 @@ export const PRESS_STATUSES = [
   { key: "passed", label: "Passed", color: HUE.faint },
 ];
 
+/** Pitch packages on the slate — ready for anyone on the team to send. */
+export const SLATE_STATUSES = [
+  { key: "draft", label: "Draft", color: HUE.stone },
+  { key: "ready", label: "Ready to send", color: HUE.sage },
+  { key: "sent", label: "Sent", color: HUE.teal },
+];
+
 /** Legal: the people we call when something needs a lawyer. */
 export const LEGAL_KINDS = [
   { key: "attorney", label: "Attorney", color: HUE.teal },
@@ -446,6 +453,22 @@ export const SEED_DATA = {
         { id: "as-2", projectId: "proj-1", role: "Editor — assembly", startDate: now + 45 * DAY, endDate: now + 90 * DAY, allocation: 50, notes: "Tentative" },
       ],
       createdAt: now - 4 * DAY,
+    },
+  ],
+  slate: [
+    {
+      id: "slate-1",
+      projectId: "proj-1",
+      title: "The Obsidian Echo",
+      logline: "A deep-sea acoustician hears something in the trench that should not be there — and realises the signal is coming from her.",
+      synopsis: "When a classified sonar array off the Pacific trench starts returning a human voice, Dr. Mara Voss is brought in to decide whether it is an artefact or a message. The more she isolates the signal, the more it seems to know her. A psychological thriller about isolation, classified science, and what we owe the things we wake.",
+      trailerUrl: "",
+      deckUrl: "",
+      notes: "Original IP. Confirm we do not need to option any prior research papers used as colour. Life rights: none.",
+      status: "ready",
+      ownerId: "u-3",
+      attachments: [],
+      createdAt: now - 6 * DAY,
     },
   ],
   logs: [],
@@ -750,6 +773,12 @@ export function normalizeData(raw) {
         ...r, id, attachments,
       };
     }),
+    slate: ensureArray(input.slate).map((s) => ({
+      ...makeSlatePackage({}),
+      ...s,
+      id: s.id || uid(),
+      attachments: ensureArray(s.attachments).filter((a) => a && a.fileName),
+    })),
     legal: ensureArray(input.legal).map((l) => ({
       kind: "attorney", name: "", firm: "", specialty: "", email: "", phone: "",
       companyId: null, projectId: null, rate: "", notes: "", preferred: false,
@@ -995,6 +1024,24 @@ export function deriveDirectoryFromEmails(data) {
 /* ------------------------------------------------------------------ *
  * Roster availability
  * ------------------------------------------------------------------ */
+
+export function makeSlatePackage(fields) {
+  return {
+    id: uid(),
+    projectId: null,
+    title: "",
+    logline: "",
+    synopsis: "",
+    trailerUrl: "",
+    deckUrl: "",
+    notes: "",
+    status: "draft",
+    ownerId: null,
+    attachments: [],
+    createdAt: Date.now(),
+    ...fields,
+  };
+}
 
 export function makeTalent(fields) {
   const merged = {

@@ -258,6 +258,7 @@ export function CommandPalette({ onClose, onSelect }) {
     data.tasks.forEach((t) => { if (q && t.title.toLowerCase().includes(q)) push("tasks", t.id, t.title, "Task", t); });
     (data.events || []).forEach((e) => { if (q && (e.name || "").toLowerCase().includes(q)) push("events", e.id, e.name, e.venue || "Event", e); });
     (data.press || []).forEach((r) => { if (q && ((r.title || "").toLowerCase().includes(q) || (r.outlet || "").toLowerCase().includes(q))) push("press", r.id, r.title, r.outlet || "Press", r); });
+    (data.slate || []).forEach((s) => { if (q && hit(s.title, s.logline, s.synopsis, s.notes)) push("slate", s.id, s.title || "Pitch package", "Slate", s); });
     (data.legal || []).forEach((l) => { if (q && ((l.name || "").toLowerCase().includes(q) || (l.firm || "").toLowerCase().includes(q))) push("legal", l.id, l.name, l.firm || "Legal", l); });
 
     // These live on tabs whose key differs from the collection name, so the tab key is
@@ -271,7 +272,7 @@ export function CommandPalette({ onClose, onSelect }) {
     (data.notes || []).forEach((n) => { if (hit(n.title, n.body)) push("tasks", n.id, n.title || "Note", "Note", n, "note"); });
 
     const tabs = [
-      ["home", "Home dashboard"], ["projects", "Projects"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
+      ["home", "Home dashboard"], ["projects", "Projects"], ["slate", "Slate"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
       ["meetings", "Meetings"], ["calls", "Calls"], ["events", "Events & Speaking"], ["emails", "Emails"], ["companies", "Companies"],
       ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"],
       ["press", "Press & PR"], ["contracts", "NDAs & Contracts"], ["legal", "Legal & Counsel"],
@@ -445,6 +446,7 @@ export function InfoModal({ onClose }) {
   const items = [
     ["Home", "Every person's task list side by side, your projects, and the meetings coming out of Google Calendar."],
     ["Projects", "Service Production, Original IP, Outside IP and Training / Consultancy on one board — each with its own editable pipeline. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
+    ["Slate", "Pitch packages for each project: title, log line, synopsis, deck, trailer, and notes on option or life rights, so anyone can send a package out."],
     ["Tasks & Notes", "Shared, assignable tasks and notes. Call and meeting action items land here automatically."],
     ["Calls", "Record a Zoom or Meet tab with video, get a transcript, a summary, and suggested next steps that become tasks. Then draft a follow-up email and approve it before it sends."],
     ["Emails", "Paste from any Gmail account. Dailie logs the messages and flags relationships that have gone quiet."],

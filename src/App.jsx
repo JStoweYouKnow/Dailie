@@ -4,7 +4,7 @@ import {
   Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
   Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
   MoreHorizontal, ChevronLeft, ChevronRight, Plus, Upload as UploadIcon, X,
-  Mic2, Megaphone, Scale, Menu,
+  Mic2, Megaphone, Scale, Menu, Presentation,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
@@ -43,6 +43,7 @@ import SyncModal from "./views/SyncModal";
 import SettingsModal from "./views/SettingsModal";
 import EventsView from "./views/EventsView";
 import PressView from "./views/PressView";
+import SlateView from "./views/SlateView";
 import LegalView from "./views/LegalView";
 import SchedulerAgent from "./views/SchedulerAgent";
 
@@ -51,7 +52,7 @@ const BENCH_URL = "https://bench-talent-kappa.vercel.app";
 const BUG_REPORT_URL = "https://docs.google.com/forms/d/e/1FAIpQLScgjtrlOQ8fDxBmgOh8uYmaKSfFPpEQqfY-7-HQyXvnIqbnAQ/viewform?usp=dialog";
 
 /**
- * Fifteen destinations in one scrolling row asked you to read every label to find
+ * Sixteen destinations in one scrolling row asked you to read every label to find
  * anything. Grouped in a sidebar they stay one click away without competing.
  */
 const NAV = [
@@ -63,6 +64,7 @@ const NAV = [
     group: "Work",
     items: [
       { key: "projects", label: "Projects", icon: Clapperboard },
+      { key: "slate", label: "Slate", icon: Presentation },
       { key: "tasks", label: "Tasks & Notes", icon: CheckSquare },
       { key: "calendar", label: "Calendar", icon: CalendarIcon },
       { key: "meetings", label: "Meetings", icon: Users },
@@ -508,6 +510,8 @@ function Board({ store }) {
         return <EventsView searchQuery={searchQuery} />;
       case "press":
         return <PressView searchQuery={searchQuery} />;
+      case "slate":
+        return <SlateView searchQuery={searchQuery} />;
       case "legal":
         return <LegalView searchQuery={searchQuery} />;
       case "contracts":

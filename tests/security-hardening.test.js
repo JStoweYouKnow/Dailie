@@ -132,12 +132,14 @@ test("imageSrc prefers the stored path", () => {
 
 test("isSharedCollection rejects unknown board tables", () => {
   assert.equal(isSharedCollection("projects"), true);
+  assert.equal(isSharedCollection("slate"), true);
   assert.equal(isSharedCollection("members"), false);
   assert.equal(isSharedCollection("workspace"), false);
 });
 
 test("isAllowedContentType rejects HTML and unmarked binaries", () => {
   assert.equal(isAllowedContentType("application/pdf"), true);
+  assert.equal(isAllowedContentType("application/vnd.ms-powerpoint"), true);
   assert.equal(isAllowedContentType("image/png; charset=binary"), true);
   assert.equal(isAllowedContentType("text/html"), false);
   assert.equal(isAllowedContentType("application/octet-stream"), false);

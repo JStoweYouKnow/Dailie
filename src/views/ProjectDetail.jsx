@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw, Presentation } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
-  CONTRACT_STATUSES, INVOICE_STATUSES, lookupLabel, lookupColor, makeTask,
+  CONTRACT_STATUSES, INVOICE_STATUSES, SLATE_STATUSES, lookupLabel, lookupColor, makeTask,
   projectOwnerIds, withProjectOwners, talentDisciplines,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
@@ -154,6 +154,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const notes = data.notes.filter((n) => n.projectId === project.id);
   const contracts = data.contracts.filter((c) => c.projectId === project.id);
   const invoices = data.invoices.filter((i) => i.projectId === project.id);
+  const packages = (data.slate || []).filter((s) => s.projectId === project.id);
   const meetings = visibleMeetings(data.meetings, data.settings).filter((m) => m.projectId === project.id);
   const history = [...(project.history || [])].sort((a, b) => b.date - a.date);
   const booked = (data.talent || [])
@@ -422,6 +423,25 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addNote(); }} />
           <button className="md-btn" onClick={addNote}><Plus size={13} /> Note</button>
         </div>
+      </Section>
+
+      <Section title={`SLATE · ${packages.length}`}>
+        {packages.map((pkg) => (
+          <div key={pkg.id} onClick={() => onOpenRecord && onOpenRecord("slate")} role="button" tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter" && onOpenRecord) onOpenRecord("slate"); }}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6, cursor: "pointer" }}>
+            <Presentation size={14} color="var(--accent)" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{pkg.title || "Pitch package"}</div>
+              {pkg.logline ? <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pkg.logline}</div> : null}
+            </div>
+            <Badge label={lookupLabel(SLATE_STATUSES, pkg.status)} color={lookupColor(SLATE_STATUSES, pkg.status)} />
+          </div>
+        ))}
+        <button className="md-btn md-btn-ghost" style={{ marginTop: packages.length ? 6 : 0, fontSize: 12 }}
+          onClick={() => onOpenRecord && onOpenRecord("slate")}>
+          <Plus size={13} /> {packages.length ? "Open slate" : "Add a pitch package"}
+        </button>
       </Section>
 
       {(contracts.length > 0 || invoices.length > 0) && (

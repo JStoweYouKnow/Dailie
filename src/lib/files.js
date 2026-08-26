@@ -44,6 +44,19 @@ export const PRESS_FILE_ACCEPT = [
   "application/pdf", "application/zip", "application/x-zip-compressed",
 ].join(",");
 
+/** Pitch decks, one-sheets, trailers — PDF, PowerPoint, stills, ZIP, MP4. */
+export const SLATE_FILE_ACCEPT = [
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/*",
+  ".png", ".jpg", ".jpeg", ".webp", ".gif",
+  ".pdf", ".ppt", ".pptx", ".doc", ".docx", ".zip",
+  ".mp4", ".webm",
+  "application/pdf",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/zip", "application/x-zip-compressed",
+  "video/mp4", "video/webm",
+].join(",");
+
 export function kindForFile(file, fallback = "documents") {
   const type = (file && file.type) || "";
   const name = (file && file.name) || "";
