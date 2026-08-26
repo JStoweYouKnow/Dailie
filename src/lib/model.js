@@ -258,6 +258,31 @@ export const SLATE_STATUSES = [
   { key: "sent", label: "Sent", color: HUE.teal },
 ];
 
+/** Social calendar: posts we will publish, and public-facing dates (drops, lives, premieres). */
+export const SOCIAL_KINDS = [
+  { key: "post", label: "Post", color: HUE.teal },
+  { key: "event", label: "Event", color: HUE.clay },
+];
+
+export const SOCIAL_PLATFORMS = [
+  { key: "instagram", label: "Instagram", color: HUE.plum },
+  { key: "tiktok", label: "TikTok", color: HUE.faint },
+  { key: "linkedin", label: "LinkedIn", color: HUE.teal },
+  { key: "x", label: "X", color: HUE.stone },
+  { key: "youtube", label: "YouTube", color: HUE.clay },
+  { key: "facebook", label: "Facebook", color: HUE.slate },
+  { key: "threads", label: "Threads", color: HUE.sand },
+  { key: "other", label: "Other", color: HUE.moss },
+];
+
+export const SOCIAL_STATUSES = [
+  { key: "idea", label: "Idea", color: HUE.stone },
+  { key: "draft", label: "Draft", color: HUE.sand },
+  { key: "scheduled", label: "Scheduled", color: HUE.teal },
+  { key: "posted", label: "Posted", color: HUE.moss },
+  { key: "cancelled", label: "Cancelled", color: HUE.faint },
+];
+
 /** Legal: the people we call when something needs a lawyer. */
 export const LEGAL_KINDS = [
   { key: "attorney", label: "Attorney", color: HUE.teal },
@@ -469,6 +494,40 @@ export const SEED_DATA = {
       ownerId: "u-3",
       attachments: [],
       createdAt: now - 6 * DAY,
+    },
+  ],
+  social: [
+    {
+      id: "soc-1",
+      kind: "post",
+      title: "Obsidian Echo — trench still",
+      copy: "Something in the trench is calling back.",
+      platform: "instagram",
+      scheduledAt: now + 3 * DAY,
+      status: "scheduled",
+      url: "",
+      venue: "",
+      projectId: "proj-1",
+      ownerId: "u-3",
+      notes: "",
+      attachments: [],
+      createdAt: now - 2 * DAY,
+    },
+    {
+      id: "soc-2",
+      kind: "event",
+      title: "Wilderness Tide — live Q&A",
+      copy: "Marcus and the DP on the Alaska block.",
+      platform: "youtube",
+      scheduledAt: now + 10 * DAY,
+      status: "scheduled",
+      url: "",
+      venue: "YouTube Live",
+      projectId: "proj-2",
+      ownerId: "u-2",
+      notes: "",
+      attachments: [],
+      createdAt: now - 1 * DAY,
     },
   ],
   logs: [],
@@ -779,6 +838,12 @@ export function normalizeData(raw) {
       id: s.id || uid(),
       attachments: ensureArray(s.attachments).filter((a) => a && a.fileName),
     })),
+    social: ensureArray(input.social).map((s) => ({
+      ...makeSocialItem({}),
+      ...s,
+      id: s.id || uid(),
+      attachments: ensureArray(s.attachments).filter((a) => a && a.fileName),
+    })),
     legal: ensureArray(input.legal).map((l) => ({
       kind: "attorney", name: "", firm: "", specialty: "", email: "", phone: "",
       companyId: null, projectId: null, rate: "", notes: "", preferred: false,
@@ -1037,6 +1102,26 @@ export function makeSlatePackage(fields) {
     notes: "",
     status: "draft",
     ownerId: null,
+    attachments: [],
+    createdAt: Date.now(),
+    ...fields,
+  };
+}
+
+export function makeSocialItem(fields) {
+  return {
+    id: uid(),
+    kind: "post",
+    title: "",
+    copy: "",
+    platform: "instagram",
+    scheduledAt: null,
+    status: "idea",
+    url: "",
+    venue: "",
+    projectId: null,
+    ownerId: null,
+    notes: "",
     attachments: [],
     createdAt: Date.now(),
     ...fields,

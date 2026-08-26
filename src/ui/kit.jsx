@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Plus, Check, ChevronDown, Paperclip, Trash2, Upload, Film, Search, GripVertical, RotateCcw, Download } from "lucide-react";
-import { initials, colorForName, dateInputValue, tsFromDateInput } from "../lib/format";
+import { initials, colorForName, dateInputValue, tsFromDateInput, datetimeInputValue, tsFromDatetimeInput } from "../lib/format";
 import { looksLikeMarkdown } from "../lib/textFormats";
 import { useStore } from "../lib/store";
 import { useAccount } from "../lib/auth";
@@ -315,6 +315,21 @@ export function InlineDate({ value, onCommit }) {
       className="md-input"
       value={dateInputValue(value)}
       onChange={(e) => onCommit(tsFromDateInput(e.target.value))}
+      onClick={(e) => e.stopPropagation()}
+      style={{ padding: "4px 7px", fontSize: 12, width: "auto", background: "transparent", border: "1px solid transparent", borderRadius: 6, color: "var(--dim)" }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--rule)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "transparent"; }}
+    />
+  );
+}
+
+export function InlineDateTime({ value, onCommit }) {
+  return (
+    <input
+      type="datetime-local"
+      className="md-input"
+      value={datetimeInputValue(value)}
+      onChange={(e) => onCommit(tsFromDatetimeInput(e.target.value))}
       onClick={(e) => e.stopPropagation()}
       style={{ padding: "4px 7px", fontSize: 12, width: "auto", background: "transparent", border: "1px solid transparent", borderRadius: 6, color: "var(--dim)" }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--rule)"; }}

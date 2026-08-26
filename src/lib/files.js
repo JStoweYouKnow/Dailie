@@ -44,6 +44,16 @@ export const PRESS_FILE_ACCEPT = [
   "application/pdf", "application/zip", "application/x-zip-compressed",
 ].join(",");
 
+/** Stills, cutdowns, captions — images, video, PDF, ZIP. */
+export const SOCIAL_FILE_ACCEPT = [
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/*",
+  ".png", ".jpg", ".jpeg", ".webp", ".gif",
+  ".pdf", ".zip",
+  ".mp4", ".webm", ".mov",
+  "application/pdf", "application/zip", "application/x-zip-compressed",
+  "video/mp4", "video/webm", "video/quicktime",
+].join(",");
+
 /** Pitch decks, one-sheets, trailers — PDF, PowerPoint, stills, ZIP, MP4. */
 export const SLATE_FILE_ACCEPT = [
   "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/*",

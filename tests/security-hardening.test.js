@@ -133,6 +133,7 @@ test("imageSrc prefers the stored path", () => {
 test("isSharedCollection rejects unknown board tables", () => {
   assert.equal(isSharedCollection("projects"), true);
   assert.equal(isSharedCollection("slate"), true);
+  assert.equal(isSharedCollection("social"), true);
   assert.equal(isSharedCollection("members"), false);
   assert.equal(isSharedCollection("workspace"), false);
 });

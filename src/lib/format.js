@@ -64,6 +64,25 @@ export function tsFromDateInput(value) {
   return Number.isNaN(ts) ? null : ts;
 }
 
+/** Local `YYYY-MM-DDTHH:mm` for datetime-local inputs. */
+export function datetimeInputValue(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${h}:${min}`;
+}
+
+export function tsFromDatetimeInput(value) {
+  if (!value) return null;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? null : ts;
+}
+
 export function formatDuration(sec) {
   const total = Math.max(0, Math.round(sec || 0));
   const m = Math.floor(total / 60);

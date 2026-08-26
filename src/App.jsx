@@ -4,7 +4,7 @@ import {
   Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
   Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
   MoreHorizontal, ChevronLeft, ChevronRight, Plus, Upload as UploadIcon, X,
-  Mic2, Megaphone, Scale, Menu, Presentation,
+  Mic2, Megaphone, Scale, Menu, Presentation, Share2,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount } from "./lib/auth";
@@ -14,6 +14,7 @@ import { GOOGLE_CALENDAR_RESUME_KEY } from "./lib/googleSync";
 import { SHARED_ENABLED, useSharedBoard } from "./lib/convexBoard";
 import SharedBoundary from "./lib/SharedBoundary";
 import { normalizeData, staleFollowUps } from "./lib/model";
+import { DAY } from "./lib/format";
 import { parseDocumentFile } from "./documentParser";
 import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
 import { mergeSyncedMeetings, isIncomingExcluded } from "./lib/calendarExclusions";
@@ -44,6 +45,7 @@ import SettingsModal from "./views/SettingsModal";
 import EventsView from "./views/EventsView";
 import PressView from "./views/PressView";
 import SlateView from "./views/SlateView";
+import SocialView from "./views/SocialView";
 import LegalView from "./views/LegalView";
 import SchedulerAgent from "./views/SchedulerAgent";
 
@@ -87,6 +89,7 @@ const NAV = [
     items: [
       { key: "events", label: "Events", icon: Mic2 },
       { key: "press", label: "Press & PR", icon: Megaphone },
+      { key: "social", label: "Social", icon: Share2 },
       { key: "contracts", label: "NDAs & Contracts", icon: FileText },
       { key: "legal", label: "Legal", icon: Scale },
       { key: "finance", label: "Invoices", icon: Receipt },
@@ -510,6 +513,8 @@ function Board({ store }) {
         return <EventsView searchQuery={searchQuery} />;
       case "press":
         return <PressView searchQuery={searchQuery} />;
+      case "social":
+        return <SocialView searchQuery={searchQuery} />;
       case "slate":
         return <SlateView searchQuery={searchQuery} />;
       case "legal":
@@ -526,6 +531,10 @@ function Board({ store }) {
   const navCounts = {
     tasks: myOpen || undefined,
     emails: stale.length || undefined,
+    social: (data.social || []).filter((s) =>
+      s.scheduledAt && s.scheduledAt >= Date.now() && s.scheduledAt < Date.now() + 7 * DAY
+      && s.status !== "posted" && s.status !== "cancelled"
+    ).length || undefined,
   };
 
   const menuActions = [
