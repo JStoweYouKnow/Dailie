@@ -48,6 +48,7 @@ export const RECORD_TYPES = [
   { key: "original", label: "Original IP", short: "Original IP", color: HUE.clay, description: "IP we own and develop ourselves." },
   { key: "outside", label: "Outside IP", short: "Outside IP", color: HUE.plum, description: "Third-party IP we option, license or co-develop." },
   { key: "training", label: "Training / Consultancy", short: "Training", color: HUE.sand, description: "Workshops, training and consultancy delivered to clients." },
+  { key: "eventsProduction", label: "Events Production", short: "Events Prod.", color: HUE.moss, description: "Live events, activations and shows we produce." },
 ];
 
 export function recordTypeInfo(key) {
@@ -108,6 +109,15 @@ export const DEFAULT_PIPELINES = {
     { key: "confirmed", label: "Confirmed", color: HUE.sand },
     { key: "delivery", label: "In Delivery", color: HUE.clay },
     { key: "complete", label: "Complete", color: HUE.moss },
+    { key: "lost", label: "Lost / Passed", color: HUE.faint },
+  ],
+  eventsProduction: [
+    { key: "inquiry", label: "Inquiry", color: HUE.stone },
+    { key: "pitch", label: "In Pitch", color: HUE.sage },
+    { key: "booked", label: "Booked", color: HUE.sand },
+    { key: "prep", label: "Pre-Production", color: HUE.teal },
+    { key: "show", label: "Show", color: HUE.clay },
+    { key: "wrapped", label: "Wrapped", color: HUE.moss },
     { key: "lost", label: "Lost / Passed", color: HUE.faint },
   ],
 };
