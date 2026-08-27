@@ -6,7 +6,11 @@ import {
   memberBindPlan,
   PUBLIC_WORKSPACE_KEYS,
   redactSettingsForViewer,
+  canWriteCollection,
+  workspaceAccess,
+  pendingClerkId,
 } from "../src/lib/houseAccess.js";
+import { redactRecordBlobUrls } from "../src/lib/blobUrls.js";
 import { isSharedCollection } from "../src/lib/sharedBoard.js";
 
 /** Writes stay gated. Reads return null when there is no session so the client can wait. */
@@ -19,6 +23,54 @@ async function requireIdentity(ctx) {
 function assertSharedCollection(collection: string) {
   if (!isSharedCollection(collection)) {
     throw new Error("Unknown collection.");
+  }
+}
+
+function assertCanWriteCollection(identity, collection: string) {
+  if (!canWriteCollection(collection, { isHouse: isHouseEmail(identity.email) })) {
+    throw new Error("Only a studio account can edit this part of the board.");
+  }
+}
+
+async function memberByClerk(ctx, clerkId: string) {
+  return await ctx.db
+    .query("members")
+    .withIndex("by_clerk", (q) => q.eq("clerkId", clerkId))
+    .unique();
+}
+
+async function memberByEmail(ctx, identity) {
+  const email = String(identity.email || "").trim().toLowerCase();
+  if (!email) return null;
+  return await ctx.db
+    .query("members")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .unique();
+}
+
+async function accessFor(ctx, identity) {
+  const byClerk = await memberByClerk(ctx, identity.subject);
+  const byEmail = byClerk ? null : await memberByEmail(ctx, identity);
+  return workspaceAccess({
+    clerkId: identity.subject,
+    isHouse: isHouseEmail(identity.email),
+    emailVerified: identity.emailVerified,
+    byClerk,
+    byEmail,
+  });
+}
+
+/** Signed in and already in the workspace (or a verified house email). */
+async function requireMember(ctx) {
+  const identity = await requireIdentity(ctx);
+  const access = await accessFor(ctx, identity);
+  if (!access.allow) throw new Error(access.reason || "This workspace is invite-only.");
+  return identity;
+}
+
+function requireHouse(identity) {
+  if (!isHouseEmail(identity.email)) {
+    throw new Error("Only a studio account can do that.");
   }
 }
 
@@ -40,6 +92,11 @@ const boardReturn = v.object({
   pipelines: v.union(v.any(), v.null()),
 });
 
+const deniedReturn = v.object({
+  denied: v.literal(true),
+  reason: v.string(),
+});
+
 /**
  * The whole board in one reactive read. Convex pushes an update to every open client
  * when any of it changes, which is what makes a project one person adds appear on
@@ -47,15 +104,20 @@ const boardReturn = v.object({
  */
 export const get = query({
   args: {},
-  returns: v.union(boardReturn, v.null()),
+  returns: v.union(boardReturn, deniedReturn, v.null()),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
+    const access = await accessFor(ctx, identity);
+    if (!access.allow) {
+      return { denied: true as const, reason: access.reason || "This workspace is invite-only." };
+    }
+
     const rows = await ctx.db.query("records").collect();
     const collections = {};
     for (const row of rows) {
-      (collections[row.collection] ||= []).push(row.data);
+      (collections[row.collection] ||= []).push(redactRecordBlobUrls(row.data));
     }
 
     const members = await ctx.db.query("members").collect();
@@ -65,7 +127,6 @@ export const get = query({
 
     return {
       collections,
-      // The directory is the team: anyone who has signed in belongs on it.
       team: members
         .map((m) => ({
           id: m.clerkId,
@@ -89,9 +150,11 @@ export const get = query({
 /** Upsert one record. The client's own uid is the key, so ids survive the move. */
 export const put = mutation({
   args: { collection: v.string(), docId: v.string(), data: v.any() },
+  returns: v.null(),
   handler: async (ctx, { collection, docId, data }) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireMember(ctx);
     assertSharedCollection(collection);
+    assertCanWriteCollection(identity, collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_doc", (q) => q.eq("collection", collection).eq("docId", docId))
@@ -100,28 +163,34 @@ export const put = mutation({
     const patch = { collection, docId, data, updatedAt: Date.now(), updatedBy: identity.subject };
     if (existing) await ctx.db.patch(existing._id, patch);
     else await ctx.db.insert("records", patch);
+    return null;
   },
 });
 
 export const remove = mutation({
   args: { collection: v.string(), docId: v.string() },
+  returns: v.null(),
   handler: async (ctx, { collection, docId }) => {
-    await requireIdentity(ctx);
+    const identity = await requireMember(ctx);
     assertSharedCollection(collection);
+    assertCanWriteCollection(identity, collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_doc", (q) => q.eq("collection", collection).eq("docId", docId))
       .unique();
     if (existing) await ctx.db.delete(existing._id);
+    return null;
   },
 });
 
 /** Replace a whole collection — used for reordering and other bulk edits. */
 export const putMany = mutation({
   args: { collection: v.string(), records: v.array(v.any()), prune: v.optional(v.boolean()) },
+  returns: v.object({ written: v.number(), deleted: v.number(), unchanged: v.number() }),
   handler: async (ctx, { collection, records, prune }) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireMember(ctx);
     assertSharedCollection(collection);
+    assertCanWriteCollection(identity, collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_collection", (q) => q.eq("collection", collection))
@@ -158,9 +227,11 @@ export const putMany = mutation({
 /** Removes records no longer in the collection. Pairs with chunked putMany writes. */
 export const pruneCollection = mutation({
   args: { collection: v.string(), keepIds: v.array(v.string()) },
+  returns: v.object({ deleted: v.number() }),
   handler: async (ctx, { collection, keepIds }) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireMember(ctx);
     assertSharedCollection(collection);
+    assertCanWriteCollection(identity, collection);
     if (!isHouseEmail(identity.email)) return { deleted: 0 };
     const keep = new Set(keepIds);
     const existing = await ctx.db
@@ -179,8 +250,9 @@ export const pruneCollection = mutation({
 
 export const setWorkspace = mutation({
   args: { key: v.string(), value: v.any() },
+  returns: v.null(),
   handler: async (ctx, { key, value }) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireMember(ctx);
     if (!PUBLIC_WORKSPACE_KEYS.includes(key)) {
       throw new Error("Unknown workspace key.");
     }
@@ -197,16 +269,18 @@ export const setWorkspace = mutation({
       : value;
     if (existing) await ctx.db.patch(existing._id, { value: next, updatedAt: Date.now() });
     else await ctx.db.insert("workspace", { key, value: next, updatedAt: Date.now() });
+    return null;
   },
 });
 
 /**
  * Called on every sign-in. Matches the session's Clerk id first. A verified
  * email may attach to a row that has no clerkId yet; it must not take over a
- * row that already belongs to someone else.
+ * row that already belongs to someone else. Unknown non-house accounts are refused.
  */
 export const touchMember = mutation({
   args: { name: v.string(), email: v.string(), imageUrl: v.optional(v.string()) },
+  returns: v.string(),
   handler: async (ctx, { name, email, imageUrl }) => {
     const identity = await requireIdentity(ctx);
     const clerkId = identity.subject;
@@ -216,19 +290,10 @@ export const touchMember = mutation({
     if (claimed && identityEmail && claimed !== identityEmail) {
       throw new Error("Email does not match your signed-in account.");
     }
-    const emailVerified = identity.emailVerified === true;
+    const emailVerified = identity.emailVerified;
 
-    const byClerk = await ctx.db
-      .query("members")
-      .withIndex("by_clerk", (q) => q.eq("clerkId", clerkId))
-      .unique();
-
-    const byEmail = !byClerk && identityEmail && emailVerified
-      ? await ctx.db
-          .query("members")
-          .withIndex("by_email", (q) => q.eq("email", identityEmail))
-          .unique()
-      : null;
+    const byClerk = await memberByClerk(ctx, clerkId);
+    const byEmail = !byClerk ? await memberByEmail(ctx, identity) : null;
 
     const plan = memberBindPlan({
       clerkId,
@@ -236,7 +301,12 @@ export const touchMember = mutation({
       emailVerified,
       byClerk,
       byEmail,
+      isHouse: isHouseEmail(identity.email),
     });
+
+    if (plan.action === "refuse") {
+      throw new Error(plan.reason || "This workspace is invite-only.");
+    }
 
     if (plan.action === "update" && plan.target) {
       await ctx.db.patch(plan.target._id, {
@@ -247,7 +317,7 @@ export const touchMember = mutation({
         status: "active",
         lastSeenAt: now,
       });
-      return plan.target.clerkId || clerkId;
+      return clerkId;
     }
 
     await ctx.db.insert("members", {
@@ -265,6 +335,63 @@ export const touchMember = mutation({
 });
 
 /**
+ * House-only: put a contractor on the directory so their next verified sign-in
+ * can bind to this row instead of being refused.
+ */
+export const inviteMember = mutation({
+  args: { name: v.string(), email: v.string() },
+  returns: v.object({ clerkId: v.string() }),
+  handler: async (ctx, { name, email }) => {
+    const identity = await requireMember(ctx);
+    requireHouse(identity);
+    const address = String(email || "").trim().toLowerCase();
+    const label = String(name || "").trim() || (address.includes("@") ? address.split("@")[0] : "");
+    if (!address.includes("@") || !address.split("@")[1]) {
+      throw new Error("Enter an email address to invite.");
+    }
+    if (!label) throw new Error("Enter a name to invite.");
+
+    const existing = await ctx.db
+      .query("members")
+      .withIndex("by_email", (q) => q.eq("email", address))
+      .unique();
+    if (existing) {
+      throw new Error("That email is already on the team.");
+    }
+
+    const clerkId = pendingClerkId(address);
+    const now = Date.now();
+    await ctx.db.insert("members", {
+      clerkId,
+      name: label,
+      email: address,
+      role: "",
+      imageUrl: "",
+      status: "invited",
+      firstSeenAt: now,
+      lastSeenAt: now,
+    });
+    return { clerkId };
+  },
+});
+
+/** House-only: drop a directory row. Does not delete the caller's own row. */
+export const removeMember = mutation({
+  args: { clerkId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { clerkId }) => {
+    const identity = await requireMember(ctx);
+    requireHouse(identity);
+    if (!clerkId || clerkId === identity.subject) {
+      throw new Error("You cannot remove yourself.");
+    }
+    const existing = await memberByClerk(ctx, clerkId);
+    if (existing) await ctx.db.delete(existing._id);
+    return null;
+  },
+});
+
+/**
  * Contribute records from a browser-local board into the shared one.
  *
  * Unlike `seed` this is additive and can run at any time, by anyone: a record whose
@@ -274,14 +401,21 @@ export const touchMember = mutation({
  */
 export const merge = mutation({
   args: { collections: v.any() },
+  returns: v.object({
+    added: v.any(),
+    total: v.number(),
+    skipped: v.number(),
+  }),
   handler: async (ctx, { collections }) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireMember(ctx);
     const now = Date.now();
     const added = {};
     let skipped = 0;
+    const house = isHouseEmail(identity.email);
 
     for (const [collection, records] of Object.entries(collections || {})) {
       if (!isSharedCollection(collection) || !Array.isArray(records)) continue;
+      if (!canWriteCollection(collection, { isHouse: house })) continue;
 
       const existing = await ctx.db
         .query("records")
@@ -305,19 +439,27 @@ export const merge = mutation({
       }
     }
 
-    return { added, total: Object.values(added).reduce((a, b) => a + b, 0), skipped };
+    return { added, total: Object.values(added).reduce((a: number, b: number) => a + b, 0), skipped };
   },
 });
 
 /**
  * One-time lift of a browser-local board into the shared one. Refuses if anything is
  * already there, so a second person opening the app cannot overwrite what the first
- * one uploaded.
+ * one uploaded. Only a studio account may seed, so a contractor cannot plant the board.
  */
 export const seed = mutation({
   args: { collections: v.any(), settings: v.any(), pipelines: v.any() },
+  returns: v.object({
+    seeded: v.boolean(),
+    reason: v.optional(v.string()),
+    count: v.optional(v.number()),
+  }),
   handler: async (ctx, { collections, settings, pipelines }) => {
-    const identity = await requireIdentity(ctx);
+    const identity = await requireMember(ctx);
+    if (!isHouseEmail(identity.email)) {
+      return { seeded: false, reason: "Only a studio account can create the shared board." };
+    }
     const already = await ctx.db.query("records").first();
     if (already) return { seeded: false, reason: "The shared board already has records." };
 
@@ -339,8 +481,8 @@ export const seed = mutation({
     }
     if (settings) {
       const seeded = lockSharedSettings(settings, {
-        isHouse: isHouseEmail(identity.email),
-        prior: isHouseEmail(identity.email) ? settings : {},
+        isHouse: true,
+        prior: settings,
       });
       await ctx.db.insert("workspace", { key: "settings", value: seeded, updatedAt: now });
     }

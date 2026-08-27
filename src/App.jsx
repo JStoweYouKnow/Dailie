@@ -7,7 +7,7 @@ import {
   Mic2, Megaphone, Scale, Menu, Presentation, Share2,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
-import { AuthGate, useAccount } from "./lib/auth";
+import { AuthGate, useAccount, useSignOut } from "./lib/auth";
 import { apiFetch } from "./lib/sessionToken";
 import { canExportBoard, exportEmailFromSession } from "./lib/tableExport";
 import { GOOGLE_CALENDAR_RESUME_KEY } from "./lib/googleSync";
@@ -243,10 +243,30 @@ function LocalBoard() {
   return <Board store={useBoardStore()} />;
 }
 
+function InviteOnlyScreen({ reason }) {
+  const signOut = useSignOut();
+  return (
+    <div style={{
+      minHeight: "100vh", background: "var(--ink)", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: "40px 20px", gap: 18,
+    }}>
+      <div className="md-display" style={{ fontSize: 22, letterSpacing: "-0.03em", color: "var(--bone)" }}>DAILIE</div>
+      <p style={{ fontSize: 13, color: "var(--dim)", maxWidth: 360, lineHeight: 1.55, textAlign: "center" }}>
+        {reason || "This workspace is invite-only."} Ask a studio account to add your email in Settings, then sign in again.
+      </p>
+      {signOut && (
+        <button className="md-btn" onClick={() => signOut()}>Sign out</button>
+      )}
+    </div>
+  );
+}
+
 /** Same board, read from and written to the shared deployment. */
 function SharedBoard() {
   const { account } = useAccount();
-  return <Board store={useSharedBoard(account)} />;
+  const store = useSharedBoard(account);
+  if (store.denied) return <InviteOnlyScreen reason={store.deniedReason} />;
+  return <Board store={store} />;
 }
 
 /** Falls back to this device's board rather than a blank screen. */

@@ -1,8 +1,8 @@
 import { getFromStore, redirectToBlob } from "../lib/blobStore.js";
 import { requireApiAuth } from "../lib/requireApiAuth.js";
 
-// Recordings are read through this route. The connected blob store is public, so
-// signed private URLs are not available — see lib/blobStore.js.
+// Recordings are read through this route. Clients keep the path, not a public
+// store URL — see lib/blobStore.js.
 const RECORDING_PATH = /^recordings\/[A-Za-z0-9._-]+$/;
 
 export async function GET(request) {

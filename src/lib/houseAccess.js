@@ -10,6 +10,49 @@ export function isHouseEmail(email) {
 /** Workspace keys a signed-in member may write. Sync state stays internal. */
 export const PUBLIC_WORKSPACE_KEYS = ["settings", "pipelines"];
 
+/**
+ * Finance, legal, and mailbox history. Contractors can use the rest of the board;
+ * these collections are house-only so a joiner cannot wipe production records.
+ */
+export const HOUSE_ONLY_COLLECTIONS = ["contracts", "invoices", "payments", "emails", "legal"];
+
+export function canWriteCollection(collection, { isHouse } = {}) {
+  if (isHouse) return true;
+  return !HOUSE_ONLY_COLLECTIONS.includes(collection);
+}
+
+/** Placeholder clerkId on a directory row that has been invited but has not signed in. */
+export function pendingClerkId(email) {
+  return `pending:${String(email || "").trim().toLowerCase()}`;
+}
+
+export function isUnboundClerkId(clerkId) {
+  const id = String(clerkId || "");
+  return !id || id.startsWith("pending:");
+}
+
+export function emailLooksVerified(emailVerified) {
+  // Clerk's Convex JWT sometimes omits the claim. Treat missing as verified;
+  // only refuse when the token explicitly says the address is not verified.
+  return emailVerified !== false;
+}
+
+/**
+ * Whether this identity may see the shared board.
+ * House domains join on a verified email. Everyone else must already be in the directory.
+ */
+export function workspaceAccess({ clerkId, isHouse, emailVerified, byClerk, byEmail }) {
+  if (byClerk) return { allow: true };
+  if (emailLooksVerified(emailVerified) && byEmail) {
+    if (byEmail.clerkId && byEmail.clerkId !== clerkId && !isUnboundClerkId(byEmail.clerkId)) {
+      return { allow: false, reason: "That email already belongs to another account." };
+    }
+    return { allow: true };
+  }
+  if (emailLooksVerified(emailVerified) && isHouse) return { allow: true };
+  return { allow: false, reason: "This workspace is invite-only." };
+}
+
 function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? { ...value } : {};
 }
@@ -51,16 +94,23 @@ export function redactSettingsForViewer(settings, { isHouse } = {}) {
 /**
  * How a sign-in maps onto the members directory.
  * A new Clerk id must not inherit another account's row, even when the email matches.
+ * Unknown non-house sign-ins are refused rather than auto-activated.
  */
-export function memberBindPlan({ clerkId, identityEmail, emailVerified, byClerk, byEmail }) {
+export function memberBindPlan({ clerkId, identityEmail, emailVerified, byClerk, byEmail, isHouse }) {
   if (byClerk) {
     return { action: "update", target: byClerk, claimEmail: emailVerified === true };
   }
-  if (emailVerified === true && byEmail) {
-    if (byEmail.clerkId && byEmail.clerkId !== clerkId) {
-      return { action: "create", claimEmail: false };
+  if (emailLooksVerified(emailVerified) && byEmail) {
+    if (byEmail.clerkId && byEmail.clerkId !== clerkId && !isUnboundClerkId(byEmail.clerkId)) {
+      return { action: "refuse", reason: "That email already belongs to another account." };
     }
     return { action: "update", target: byEmail, claimEmail: true };
   }
-  return { action: "create", claimEmail: emailVerified === true && !byEmail };
+  if (isHouse && emailLooksVerified(emailVerified)) {
+    return { action: "create", claimEmail: true };
+  }
+  if (isHouse) {
+    return { action: "refuse", reason: "Verify your studio email to join." };
+  }
+  return { action: "refuse", reason: "This workspace is invite-only." };
 }

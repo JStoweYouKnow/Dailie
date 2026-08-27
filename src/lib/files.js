@@ -5,6 +5,7 @@
  * silently blowing the localStorage quota.
  */
 import { apiFetch, sessionHeaders } from "./sessionToken.js";
+import { blobPathFromUrl, isVercelBlobUrl, storedInlineUrl } from "./blobUrls.js";
 
 /**
  * `asAttachment` refuses to keep a data URL longer than this, so that a stored record
@@ -30,10 +31,11 @@ const DIRECT_THRESHOLD = 4 * 1024 * 1024;
 
 export function fileSrc(record) {
   if (!record) return "";
-  if (record.filePath) return `/api/files?path=${encodeURIComponent(record.filePath)}`;
+  const path = record.filePath || blobPathFromUrl(record.fileUrl);
+  if (path) return `/api/files?path=${encodeURIComponent(path)}`;
   const url = record.fileUrl || "";
   if (url.startsWith("data:")) return url;
-  return /^(https?:)/i.test(url) ? url : "";
+  return "";
 }
 
 /** Images, stills, kits, PDFs — what the press modal and similar pickers should allow. */
@@ -87,13 +89,14 @@ export function kindForFile(file, fallback = "documents") {
 
 /** Shape stored on a record. Never keep a data URL big enough to blow Convex's 1 MB doc limit. */
 export function asAttachment(meta, id) {
-  const fileUrl = meta && meta.fileUrl && String(meta.fileUrl).length < INLINE_URL_MAX ? meta.fileUrl : "";
+  const filePath = (meta && meta.filePath) || blobPathFromUrl(meta && meta.fileUrl) || "";
+  const fileUrl = storedInlineUrl(meta && meta.fileUrl, INLINE_URL_MAX);
   return {
     id: id || (meta && meta.id) || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
     fileName: (meta && meta.fileName) || "file",
     fileSize: Number(meta && meta.fileSize) || 0,
     fileType: (meta && meta.fileType) || "",
-    filePath: (meta && meta.filePath) || "",
+    filePath,
     fileUrl,
     uploadedAt: (meta && meta.uploadedAt) || Date.now(),
     // Set when the attachment is in the trash. The record still points at the blob, so
@@ -148,9 +151,11 @@ export async function purgeAttachment(record, item) {
 
 export function imageSrc(record) {
   if (!record) return "";
-  if (record.imagePath) return `/api/files?path=${encodeURIComponent(record.imagePath)}`;
+  const path = record.imagePath || blobPathFromUrl(record.imageUrl);
+  if (path) return `/api/files?path=${encodeURIComponent(path)}`;
   const url = record.imageUrl || "";
   if (url.startsWith("data:")) return url;
+  if (isVercelBlobUrl(url)) return "";
   return /^(https?:)/i.test(url) ? url : "";
 }
 
@@ -201,14 +206,14 @@ export async function uploadFile(file, kind = "documents", onProgress) {
       const { upload } = await import("@vercel/blob/client");
       const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "-").slice(-60) || "upload";
       const result = await upload(`${kind}/${safeName}`, file, {
-        access: "public",
+        access: import.meta.env.VITE_BLOB_ACCESS === "private" ? "private" : "public",
         handleUploadUrl: "/api/blob-upload",
         headers: await sessionHeaders(),
         multipart: true,
         contentType: meta.fileType,
         onUploadProgress: onProgress ? ({ percentage }) => onProgress(percentage) : undefined,
       });
-      return { ...meta, filePath: result.pathname, fileUrl: result.url || "" };
+      return { ...meta, filePath: result.pathname, fileUrl: "" };
     } catch (err) {
       // Fall through only if the file could still go the buffered way.
       if (file.size > BUFFERED_LIMIT) {
@@ -243,7 +248,7 @@ export async function uploadFile(file, kind = "documents", onProgress) {
     return inline(noStore);
   }
 
-  if (res.ok && body.path) return { ...meta, filePath: body.path, fileUrl: body.url || "" };
+  if (res.ok && body.path) return { ...meta, filePath: body.path, fileUrl: storedInlineUrl(body.url) };
 
   // 501 means the route is live but no store is configured — degrade quietly.
   if (res.status === 501) return inline(noStore);

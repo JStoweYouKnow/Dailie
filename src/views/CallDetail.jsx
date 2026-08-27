@@ -5,12 +5,19 @@ import {
   makeTask, makeParticipant, speakerColor, speakersIn, talkTime, participantNames,
 } from "../lib/model";
 import { formatShort, formatClock, formatDuration, tsFromDateInput } from "../lib/format";
+import { blobPathFromUrl, storedInlineUrl } from "../lib/blobUrls.js";
 import { ModalShell, Field, Section, Badge, Avatar, InlineText, InlineSelect, ConfirmButton } from "../ui/kit";
 
 export function mediaSrc(call, kind) {
   if (!call) return "";
-  if (kind === "video") return call.videoPath ? `/api/files?path=${encodeURIComponent(call.videoPath)}` : call.videoUrl || "";
-  return call.audioPath ? `/api/recording?path=${encodeURIComponent(call.audioPath)}` : call.audioUrl || "";
+  if (kind === "video") {
+    const path = call.videoPath || blobPathFromUrl(call.videoUrl);
+    if (path) return `/api/files?path=${encodeURIComponent(path)}`;
+    return storedInlineUrl(call.videoUrl) || "";
+  }
+  const path = call.audioPath || blobPathFromUrl(call.audioUrl);
+  if (path) return `/api/recording?path=${encodeURIComponent(path)}`;
+  return storedInlineUrl(call.audioUrl) || "";
 }
 
 function timecode(seconds) {

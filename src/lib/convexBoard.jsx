@@ -8,6 +8,7 @@ import { AUTH_ENABLED } from "./auth";
 import { uid } from "./format";
 import { fromSharedBoard, toSharedPayload, toRecordsPayload, hasLocalContent, SHARED_COLLECTIONS } from "./sharedBoard";
 import { loadStoredData } from "./store";
+import { canWriteCollection, isHouseEmail } from "./houseAccess";
 
 /**
  * The shared board.
@@ -55,6 +56,8 @@ export function useSharedBoard(account) {
   const pruneCollection = useMutation(api.board.pruneCollection);
   const setWorkspace = useMutation(api.board.setWorkspace);
   const touchMember = useMutation(api.board.touchMember);
+  const inviteMember = useMutation(api.board.inviteMember);
+  const removeMember = useMutation(api.board.removeMember);
   const seed = useMutation(api.board.seed);
   const merge = useMutation(api.board.merge);
 
@@ -83,8 +86,11 @@ export function useSharedBoard(account) {
     return () => clearTimeout(t);
   }, [toast]);
 
+  const denied = !!(board && board.denied);
+  const deniedReason = denied ? (board.reason || "This workspace is invite-only.") : "";
   const fallback = useMemo(() => normalizeData(SEED_DATA), []);
-  const serverData = useMemo(() => fromSharedBoard(board, fallback), [board, fallback]);
+  const liveBoard = denied ? null : board;
+  const serverData = useMemo(() => fromSharedBoard(liveBoard, fallback), [liveBoard, fallback]);
   const data = useMemo(() => {
     const keys = Object.keys(overlay);
     if (!keys.length) return serverData;
@@ -107,7 +113,7 @@ export function useSharedBoard(account) {
     }
     return next;
   }, [serverData, overlay]);
-  const loading = authLoading || !isAuthenticated || board == null;
+  const loading = authLoading || !isAuthenticated || (board == null && !denied);
 
   // Clerk can be signed in while Convex still has no JWT (missing "convex" template
   // or a mismatched CLERK_JWT_ISSUER_DOMAIN). Wait a beat, then fall through to the
@@ -122,17 +128,17 @@ export function useSharedBoard(account) {
     return () => clearTimeout(t);
   }, [isAuthenticated, authLoading]);
 
-  // Anyone who signs in joins the directory, which is what the team list reads from.
+  // Known members and verified house emails join (or refresh) the directory.
   useEffect(() => {
-    if (!account || loading) return;
+    if (!account || loading || denied) return;
     touchMember({ name: account.name, email: account.email, imageUrl: account.imageUrl || "" })
       .catch(() => { /* the next sign-in retries */ });
-  }, [account && account.id, loading, touchMember]);
+  }, [account && account.id, loading, denied, touchMember]);
 
   // First run on a fresh deployment: lift whatever this browser was holding.
   useEffect(() => {
-    if (loading || seeded.current || !board) return;
-    const empty = SHARED_COLLECTIONS.every((name) => !(board.collections && board.collections[name] || []).length);
+    if (loading || denied || seeded.current || !liveBoard) return;
+    const empty = SHARED_COLLECTIONS.every((name) => !(liveBoard.collections && liveBoard.collections[name] || []).length);
     if (!empty) { seeded.current = true; return; }
     seeded.current = true;
     (async () => {
@@ -144,7 +150,7 @@ export function useSharedBoard(account) {
         showToast(`Moved ${result.count} records into the shared board.`, "success");
       }
     })();
-  }, [loading, board, seed, showToast]);
+  }, [loading, denied, liveBoard, seed, showToast]);
 
   /**
    * Anyone who used the board before it was shared still has those records in their
@@ -152,13 +158,13 @@ export function useSharedBoard(account) {
    * person needs a way to contribute theirs — this counts what is still only local.
    */
   useEffect(() => {
-    if (loading || !board) return;
+    if (loading || denied || !liveBoard) return;
     let cancelled = false;
     (async () => {
       const local = await loadStoredData();
       const counts = {};
       for (const name of SHARED_COLLECTIONS) {
-        const shared = new Set(((board.collections && board.collections[name]) || []).map((r) => String(r.id)));
+        const shared = new Set(((liveBoard.collections && liveBoard.collections[name]) || []).map((r) => String(r.id)));
         const missing = (local[name] || []).filter((r) => r && r.id && !shared.has(String(r.id)));
         if (missing.length) counts[name] = missing.length;
       }
@@ -166,7 +172,7 @@ export function useSharedBoard(account) {
       if (!cancelled) setPendingLocal(total ? { counts, total } : null);
     })();
     return () => { cancelled = true; };
-  }, [loading, board]);
+  }, [loading, denied, liveBoard]);
 
   const publishLocal = useCallback(async () => {
     const local = await loadStoredData();
@@ -256,15 +262,24 @@ export function useSharedBoard(account) {
     });
   }, [put]);
 
+  const houseWriter = !AUTH_ENABLED || isHouseEmail(account && account.email);
+  const allowWrite = useCallback((collection) => {
+    if (canWriteCollection(collection, { isHouse: houseWriter })) return true;
+    showToast("Only a studio account can edit this part of the board.", "error");
+    return false;
+  }, [houseWriter, showToast]);
+
   const add = useCallback((collection, record, { prepend = true } = {}) => {
+    if (!allowWrite(collection)) return null;
     const item = { id: uid(), createdAt: Date.now(), ...record };
     stage(collection, String(item.id), item);
     settle(put({ collection, docId: String(item.id), data: item })).catch(() => {});
     emitNotices(assignmentNotices(collection, null, item, resolveActorId()));
     return item;
-  }, [put, emitNotices, resolveActorId]);
+  }, [allowWrite, put, emitNotices, resolveActorId]);
 
   const update = useCallback((collection, id, changes) => {
+    if (!allowWrite(collection)) return;
     const current = (data[collection] || []).find((r) => r.id === id);
     if (!current) return;
     const delta = typeof changes === "function" ? changes(current) : changes;
@@ -272,12 +287,13 @@ export function useSharedBoard(account) {
     stage(collection, String(id), next);
     settle(put({ collection, docId: String(id), data: next })).catch(() => {});
     emitNotices(assignmentNotices(collection, current, next, resolveActorId()));
-  }, [data, put, emitNotices, resolveActorId]);
+  }, [allowWrite, data, put, emitNotices, resolveActorId]);
 
   const remove = useCallback((collection, id) => {
+    if (!allowWrite(collection)) return;
     stage(collection, String(id), null);
     settle(removeRecord({ collection, docId: String(id) })).catch(() => {});
-  }, [removeRecord]);
+  }, [allowWrite, removeRecord]);
 
   const updateSettings = useCallback((changes) => {
     guard(setWorkspace({ key: "settings", value: { ...data.settings, ...changes } }));
@@ -304,13 +320,14 @@ export function useSharedBoard(account) {
    * carries the whole id list and does the pruning.
    */
   const writeCollection = useCallback(async (collection, records) => {
+    if (!allowWrite(collection)) return;
     if (records.length <= CHUNK_SIZE) return putMany({ collection, records });
     for (let i = 0; i < records.length; i += CHUNK_SIZE) {
       await putMany({ collection, records: records.slice(i, i + CHUNK_SIZE), prune: false });
     }
     // Everything is stored; this last call only removes what is no longer in the list.
     return pruneCollection({ collection, keepIds: records.map((r) => String(r.id)) });
-  }, [putMany, pruneCollection]);
+  }, [allowWrite, putMany, pruneCollection]);
 
   /**
    * Bulk edits. `patch` is how views change a whole collection at once (reordering a
@@ -345,6 +362,14 @@ export function useSharedBoard(account) {
   const companyName = useCallback((id) => nameOf(data.companies, id), [data.companies]);
   const personName = useCallback((id) => nameOf(data.people, id), [data.people]);
 
+  const invite = useCallback(async ({ name, email }) => {
+    return inviteMember({ name, email });
+  }, [inviteMember]);
+
+  const removeDirectoryMember = useCallback(async (clerkId) => {
+    return removeMember({ clerkId });
+  }, [removeMember]);
+
   if (authGaveUp && !isAuthenticated) {
     throw new Error("Not signed in.");
   }
@@ -354,7 +379,11 @@ export function useSharedBoard(account) {
     loading,
     saveError,
     shared: true,
+    denied,
+    deniedReason,
     patch, add, update, remove, updateSettings, updateProject,
+    inviteMember: invite,
+    removeMember: removeDirectoryMember,
     setData: () => { /* the shared board is the source of truth */ },
     persist: () => {},
     reload: async () => data,

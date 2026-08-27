@@ -11,6 +11,7 @@ import {
   hasScope,
 } from "../lib/googleWorkspace.js";
 import { summarizeTranscript } from "../lib/summarize.js";
+import { isHouseEmail } from "../src/lib/houseAccess.js";
 
 /**
  * Meeting notes shared in from someone else's Workspace.
@@ -172,6 +173,9 @@ export const syncNotesNow = action({
   handler: async (ctx): Promise<SyncSummary> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not signed in.");
+    if (!isHouseEmail(identity.email)) {
+      throw new Error("Only a studio account can run Drive notes sync.");
+    }
     return await syncAll(ctx);
   },
 });

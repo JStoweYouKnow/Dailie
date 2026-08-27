@@ -8,6 +8,7 @@ import {
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile, deleteFile } from "../lib/files";
+import { storedInlineUrl } from "../lib/blobUrls.js";
 import {
   ModalShell, Field, Section, Badge, InlineText, InlineSelect, MemberPicker, ConfirmButton, Avatar,
 } from "../ui/kit";
@@ -26,7 +27,7 @@ function ImageHeader({ project, onChange }) {
     setError("");
     try {
       const meta = await uploadFile(file, "images");
-      onChange({ imagePath: meta.filePath || "", imageUrl: meta.fileUrl || "", ...intoTrash() });
+      onChange({ imagePath: meta.filePath || "", imageUrl: storedInlineUrl(meta.fileUrl), ...intoTrash() });
     } catch (err) {
       setError(err.message || "Upload failed.");
     }

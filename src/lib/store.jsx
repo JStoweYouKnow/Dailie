@@ -243,6 +243,8 @@ export function useBoardStore() {
     data, setData, persist, patch, add, update, remove, updateSettings, updateProject,
     reload, loading, saveError, currentUser, memberName, projectName, companyName, personName, linkAccount,
     shared: false, pendingLocal: null, publishLocal: null,
+    denied: false, deniedReason: "",
+    inviteMember: null, removeMember: null,
     // A private board has no one else's work to protect, so a restore replaces it.
     importBoard: async (parsed) => patch(normalizeData(parsed)),
     toast, showToast, stageInfo,

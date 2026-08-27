@@ -7,19 +7,36 @@ import { uid } from "../lib/format";
 import { ModalShell, Field, Section, Avatar, InlineText, ConfirmButton, Badge } from "../ui/kit";
 
 export default function SettingsModal({ onClose }) {
-  const { data, patch, updateSettings, currentUser, shared, pendingLocal, publishLocal } = useStore();
+  const { data, patch, updateSettings, currentUser, shared, pendingLocal, publishLocal, inviteMember, removeMember, showToast } = useStore();
   const [publishing, setPublishing] = useState(false);
   const { enabled: authEnabled, account: signedIn } = useAccount();
   const signOut = useSignOut();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [account, setAccount] = useState("");
+  const [inviting, setInviting] = useState(false);
 
   const accounts = data.settings.emailAccounts || [];
   const canManageMailboxes = !authEnabled || isHouseEmail(signedIn && signedIn.email);
+  const canManageTeam = !authEnabled || isHouseEmail(signedIn && signedIn.email);
 
-  const addMember = () => {
+  const addMember = async () => {
     if (!name.trim()) return;
+    if (shared && inviteMember) {
+      if (!email.trim()) return;
+      setInviting(true);
+      try {
+        await inviteMember({ name: name.trim(), email: email.trim().toLowerCase() });
+        setName("");
+        setEmail("");
+        if (showToast) showToast("Invite saved. They can sign in with that email.", "success");
+      } catch (err) {
+        if (showToast) showToast((err && err.message) || "Could not invite that person.", "error");
+      } finally {
+        setInviting(false);
+      }
+      return;
+    }
     patch((current) => ({
       team: [...current.team, { id: uid(), name: name.trim(), email: email.trim().toLowerCase(), role: "" }],
     }));
@@ -27,7 +44,16 @@ export default function SettingsModal({ onClose }) {
     setEmail("");
   };
 
-  const removeMember = (id) => {
+  const removeDirectoryMember = async (member) => {
+    if (shared && removeMember) {
+      try {
+        await removeMember(member.clerkId || member.id);
+      } catch (err) {
+        if (showToast) showToast((err && err.message) || "Could not remove that person.", "error");
+      }
+      return;
+    }
+    const id = member.id;
     patch((current) => ({
       team: current.team.filter((m) => m.id !== id),
       settings: current.settings.currentUserId === id
@@ -107,11 +133,13 @@ export default function SettingsModal({ onClose }) {
       <Section title={authEnabled ? "TEAM" : "WHO ARE YOU"}>
         <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10 }}>
           {authEnabled
-            ? "Everyone who can be assigned work. Your own row is set by whoever you signed in as."
+            ? (shared
+              ? "Studio accounts join on their own. Invite a contractor by email so their sign-in can bind to this row."
+              : "Everyone who can be assigned work. Your own row is set by whoever you signed in as.")
             : "This drives \"My Projects\", \"My Tasks\" and who new records are assigned to."}
         </div>
         {data.team.map((m) => (
-          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--rule)" }}>
+          <div key={m.id || m.email} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--rule)" }}>
             <Avatar name={m.name} size={30} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <InlineText value={m.name} style={{ fontWeight: 600 }}
@@ -119,6 +147,7 @@ export default function SettingsModal({ onClose }) {
               <InlineText value={m.email} mono placeholder="Add email" style={{ fontSize: 11, color: "var(--dim)" }}
                 onCommit={(v) => patch((c) => ({ team: c.team.map((x) => (x.id === m.id ? { ...x, email: v.trim().toLowerCase() } : x)) }))} />
             </div>
+            {m.status === "invited" ? <Badge label="INVITED" subtle /> : null}
             {currentUser && currentUser.id === m.id ? (
               <Badge label="THIS IS ME" color="var(--accent)" />
             ) : authEnabled ? null : (
@@ -127,15 +156,23 @@ export default function SettingsModal({ onClose }) {
                 <UserCheck size={12} /> This is me
               </button>
             )}
-            {data.team.length > 1 && <ConfirmButton label="" confirmLabel="Remove?" icon={<Trash2 size={13} />} onConfirm={() => removeMember(m.id)} />}
+            {canManageTeam && data.team.length > 1 && currentUser && currentUser.id !== m.id && (
+              <ConfirmButton label="" confirmLabel="Remove?" icon={<Trash2 size={13} />} onConfirm={() => removeDirectoryMember(m)} />
+            )}
           </div>
         ))}
-        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-          <input className="md-input" style={{ flex: "1 1 130px" }} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className="md-input" style={{ flex: "1 1 160px" }} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addMember(); }} />
-          <button className="md-btn" onClick={addMember}><Plus size={13} /> Add</button>
-        </div>
+        {canManageTeam ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <input className="md-input" style={{ flex: "1 1 130px" }} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className="md-input" style={{ flex: "1 1 160px" }} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addMember(); }} />
+            <button className="md-btn" disabled={inviting} onClick={addMember}><Plus size={13} /> {inviting ? "Inviting…" : "Add"}</button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 10 }}>
+            Only a studio account can invite people to this workspace.
+          </div>
+        )}
       </Section>
 
       <Section title="GMAIL ACCOUNTS">

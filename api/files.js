@@ -1,12 +1,13 @@
 import { del } from "@vercel/blob";
 import { putOnStore, getFromStore, redirectToBlob } from "../lib/blobStore.js";
-import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { requireApiAuth, requireHouseApiAuth } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
 import { isAllowedContentType, normalizeContentType } from "../lib/allowedUploads.js";
 
 // Reads go through this route so the rest of the app can keep using /api/files.
-// The connected store is public (it cannot be switched to private after creation),
-// so uploads must match that access mode — see lib/blobStore.js.
+// The connected store may still be public (that mode cannot be switched after
+// creation). Uploads must match the store's access mode — see lib/blobStore.js.
+// The JSON from POST never includes the store URL; the client keeps the path.
 const KINDS = new Set(["documents", "images", "recordings", "video"]);
 const PATH_RE = /^(documents|images|recordings|video)\/[A-Za-z0-9._~%-]+$/;
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -54,7 +55,9 @@ export async function POST(request) {
 
   try {
     const result = await putOnStore(`${kind}/${crypto.randomUUID()}.${ext}`, body, { contentType, addRandomSuffix: true });
-    return Response.json({ path: result.pathname, url: result.url || "", size: body.byteLength, contentType });
+    // Do not return the store's public URL. The client keeps the path and reads
+    // through this authenticated route so a leaked board row is not a capability URL.
+    return Response.json({ path: result.pathname, url: "", size: body.byteLength, contentType });
   } catch (err) {
     console.error("blob upload failed", err);
     const detail = err && err.message ? String(err.message) : "";
@@ -101,7 +104,7 @@ export async function GET(request) {
 }
 
 export async function DELETE(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireHouseApiAuth(request);
   if (gate.error) return gate.error;
 
   const path = new URL(request.url).searchParams.get("path") || "";

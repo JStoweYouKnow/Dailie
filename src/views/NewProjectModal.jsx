@@ -3,6 +3,7 @@ import { useStore } from "../lib/store";
 import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, withProjectOwners } from "../lib/model";
 import { ModalShell, Field, FileAttachButton, AttachmentRow, MemberPicker } from "../ui/kit";
 import { useDraftUploads } from "../lib/draftUploads";
+import { storedInlineUrl } from "../lib/blobUrls.js";
 
 export default function NewProjectModal({ onClose, initialTitle = "", initialDesc = "", onCreated }) {
   const { data, add, currentUser, showToast, memberName } = useStore();
@@ -51,7 +52,7 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
       nextStep: form.nextStep.trim(),
       paymentStatus: "na",
       imagePath: image ? image.filePath : "",
-      imageUrl: image ? image.fileUrl : "",
+      imageUrl: image ? storedInlineUrl(image.fileUrl) : "",
       customFields: {},
       createdAt: now,
       updatedAt: now,

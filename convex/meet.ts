@@ -16,6 +16,7 @@ import {
   segmentsToTranscript,
 } from "../lib/googleWorkspace.js";
 import { summarizeTranscript } from "../lib/summarize.js";
+import { isHouseEmail } from "../src/lib/houseAccess.js";
 
 /**
  * Conferences our own organisation hosted.
@@ -209,6 +210,9 @@ export const syncTranscriptsNow = action({
   handler: async (ctx): Promise<SyncSummary> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not signed in.");
+    if (!isHouseEmail(identity.email)) {
+      throw new Error("Only a studio account can run Meet sync.");
+    }
     return await syncAll(ctx);
   },
 });
