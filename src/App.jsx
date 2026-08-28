@@ -50,7 +50,7 @@ import LegalView from "./views/LegalView";
 import SchedulerAgent from "./views/SchedulerAgent";
 
 /** Separate Vercel project — not in the microfrontends group (that slot is billed). */
-const BENCH_URL = "https://bench-talent-kappa.vercel.app";
+const BENCH_URL = "https://bench.thewizardofops.app";
 const BUG_REPORT_URL = "https://docs.google.com/forms/d/e/1FAIpQLScgjtrlOQ8fDxBmgOh8uYmaKSfFPpEQqfY-7-HQyXvnIqbnAQ/viewform?usp=dialog";
 
 /**
