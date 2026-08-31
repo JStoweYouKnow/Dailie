@@ -43,3 +43,24 @@ test("normalize fills a missing events production pipeline without wiping existi
     DEFAULT_PIPELINES.eventsProduction.map((s) => s.key)
   );
 });
+
+test("Keynote / Presentation is a record type with its own pipeline", () => {
+  const type = RECORD_TYPES.find((t) => t.key === "keynotePresentation");
+  assert.ok(type);
+  assert.equal(type.label, "Keynote / Presentation");
+  assert.ok(Array.isArray(DEFAULT_PIPELINES.keynotePresentation));
+  assert.ok(DEFAULT_PIPELINES.keynotePresentation.length > 0);
+});
+
+test("normalize fills a missing keynote pipeline without wiping existing ones", () => {
+  const data = normalizeData({
+    pipelines: {
+      training: [{ key: "custom", label: "Custom", color: "#000" }],
+    },
+  });
+  assert.equal(data.pipelines.training[0].key, "custom");
+  assert.deepEqual(
+    data.pipelines.keynotePresentation.map((s) => s.key),
+    DEFAULT_PIPELINES.keynotePresentation.map((s) => s.key)
+  );
+});

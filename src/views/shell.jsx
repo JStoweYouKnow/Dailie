@@ -446,7 +446,7 @@ export function AIAssistantDrawer({ isOpen, onClose }) {
 export function InfoModal({ onClose }) {
   const items = [
     ["Home", "Every person's task list side by side, your projects, and the meetings coming out of Google Calendar."],
-    ["Projects", "Service Production, Original IP, Outside IP, Training / Consultancy and Events Production on one board — each with its own editable pipeline. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
+    ["Projects", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
     ["Slate", "Pitch packages for each project: title, log line, synopsis, deck, trailer, and notes on option or life rights, so anyone can send a package out."],
     ["Social", "Posts and public dates on one calendar — Instagram, TikTok, a premiere, a live — so the week ahead is not a thread of DMs."],
     ["Tasks & Notes", "Shared, assignable tasks and notes. Call and meeting action items land here automatically."],
