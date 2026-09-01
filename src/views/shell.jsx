@@ -4,7 +4,7 @@ import {
   Mail, FileText, Receipt, Video, Info, Clock, UserPlus, Clapperboard, CheckSquare,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor, unreadFor, isRepresentationKind } from "../lib/model";
+import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor, unreadFor, isRepresentationKind, mandateLabel, pitchLabel } from "../lib/model";
 import { formatShort, formatClock, relativeDays, daysSince, formatMoney } from "../lib/format";
 import { ModalShell, Badge, Avatar, EmptyState, Section } from "../ui/kit";
 import { safeHref } from "../lib/safeUrl";
@@ -258,7 +258,16 @@ export function CommandPalette({ onClose, onSelect }) {
     data.tasks.forEach((t) => { if (q && t.title.toLowerCase().includes(q)) push("tasks", t.id, t.title, "Task", t); });
     (data.events || []).forEach((e) => { if (q && (e.name || "").toLowerCase().includes(q)) push("events", e.id, e.name, e.venue || "Event", e); });
     (data.press || []).forEach((r) => { if (q && ((r.title || "").toLowerCase().includes(q) || (r.outlet || "").toLowerCase().includes(q))) push("press", r.id, r.title, r.outlet || "Press", r); });
-    (data.slate || []).forEach((s) => { if (q && hit(s.title, s.logline, s.synopsis, s.notes)) push("slate", s.id, s.title || "Pitch package", "Slate", s); });
+    (data.slate || []).forEach((s) => { if (q && hit(s.title, s.logline, s.synopsis, s.notes, s.driveUrl)) push("slate", s.id, s.title || "Pitch package", "Slate", s); });
+    (data.mandates || []).forEach((m) => {
+      if (q && hit(m.name, m.mandate, m.notes, mandateLabel(m, data.companies))) {
+        push("slate", m.id, mandateLabel(m, data.companies) || "Mandate", "Mandate", m, "mandate");
+      }
+    });
+    (data.pitches || []).forEach((p) => {
+      const who = pitchLabel(p, data.companies, data.mandates);
+      if (q && hit(p.name, p.reason, who)) push("slate", p.id, who || "Pitched to", "Pitched to", p, "pitch");
+    });
     (data.social || []).forEach((s) => { if (q && hit(s.title, s.copy, s.venue, s.notes)) push("social", s.id, s.title || "Social", s.kind === "event" ? "Social event" : "Social post", s); });
     (data.legal || []).forEach((l) => {
       if (q && ((l.name || "").toLowerCase().includes(q) || (l.firm || "").toLowerCase().includes(q))) {
@@ -393,8 +402,10 @@ export function AIAssistantDrawer({ isOpen, onClose }) {
       const open = data.tasks.filter((t) => t.status !== "done").length;
       const byType = {};
       data.projects.forEach((x) => { byType[x.recordType] = (byType[x.recordType] || 0) + 1; });
+      const pitched = (data.pitches || []).length;
       return `**Slate report**\n\n` +
         `• Projects: ${data.projects.length} (${Object.entries(byType).map(([k, v]) => `${recordTypeInfo(k).short} ${v}`).join(", ")})\n` +
+        `• Mandates: ${(data.mandates || []).length}\n• Pitch packages: ${(data.slate || []).length}\n• Pitched to: ${pitched}\n` +
         `• Open tasks: ${open}\n• Calls recorded: ${data.calls.length}\n• People: ${data.people.length} · Companies: ${data.companies.length}\n` +
         `• Relationships gone quiet: ${staleFollowUps(data).length}`;
     }
@@ -453,7 +464,7 @@ export function InfoModal({ onClose }) {
   const items = [
     ["Home", "Every person's task list side by side, your projects, and the meetings coming out of Google Calendar."],
     ["Projects", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Add start, delivery, a Google Drive folder, an external link, and any extra dates (wrap, premiere, a pitch) so they show on the calendar. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
-    ["Slate", "Pitch packages for each project: title, log line, synopsis, deck, trailer, and notes on option or life rights, so anyone can send a package out."],
+    ["Slate", "Mandates from streamers and studios, pitch packages (title, log line, synopsis, deck, trailer, Drive folder, rights notes), and who each IP has been pitched to — including whether the fit came from their mandate, an AI assessment, or both. Uploaded packages that are not linked to a project sit under Pitch package, not Sent."],
     ["Social", "Posts and public dates on one calendar — Instagram, TikTok, a premiere, a live — so the week ahead is not a thread of DMs."],
     ["Events", "Keynotes, panels, hosting and pitches. Click a row to open the full event — date, venue, who's speaking, the linked project."],
     ["Tasks & Notes", "Shared, assignable tasks and notes. Call and meeting action items land here automatically."],

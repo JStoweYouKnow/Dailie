@@ -4,8 +4,8 @@ import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
   CONTRACT_STATUSES, INVOICE_STATUSES, SLATE_STATUSES, SOCIAL_STATUSES, EVENT_KINDS, EVENT_STATUSES,
-  lookupLabel, lookupColor, makeTask, makeProjectDate, PROJECT_DATE_SUGGESTIONS,
-  projectOwnerIds, withProjectOwners, normalizeProjectDates,
+  PITCH_SOURCES, PITCH_STATUSES, lookupLabel, lookupColor, makeTask, makeProjectDate, PROJECT_DATE_SUGGESTIONS,
+  projectOwnerIds, withProjectOwners, normalizeProjectDates, pitchLabel, resolvedSlateStatus,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile, deleteFile } from "../lib/files";
@@ -178,6 +178,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const contracts = data.contracts.filter((c) => c.projectId === project.id);
   const invoices = data.invoices.filter((i) => i.projectId === project.id);
   const packages = (data.slate || []).filter((s) => s.projectId === project.id);
+  const pitches = (data.pitches || []).filter((p) => p.projectId === project.id);
   const social = (data.social || []).filter((s) => s.projectId === project.id);
   const meetings = visibleMeetings(data.meetings, data.settings).filter((m) => m.projectId === project.id);
   const history = [...(project.history || [])].sort((a, b) => b.date - a.date);
@@ -526,21 +527,43 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
       </Section>
 
       <Section title={`SLATE · ${packages.length}`}>
-        {packages.map((pkg) => (
-          <div key={pkg.id} onClick={() => onOpenRecord && onOpenRecord("slate")} role="button" tabIndex={0}
-            onKeyDown={(e) => { if (e.key === "Enter" && onOpenRecord) onOpenRecord("slate"); }}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6, cursor: "pointer" }}>
-            <Presentation size={14} color="var(--accent)" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{pkg.title || "Pitch package"}</div>
-              {pkg.logline ? <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pkg.logline}</div> : null}
+        {packages.map((pkg) => {
+          const status = resolvedSlateStatus(pkg);
+          return (
+            <div key={pkg.id} onClick={() => onOpenRecord && onOpenRecord("slate")} role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" && onOpenRecord) onOpenRecord("slate"); }}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6, cursor: "pointer" }}>
+              <Presentation size={14} color="var(--accent)" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{pkg.title || "Pitch package"}</div>
+                {pkg.logline ? <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pkg.logline}</div> : null}
+              </div>
+              <Badge label={lookupLabel(SLATE_STATUSES, status)} color={lookupColor(SLATE_STATUSES, status)} />
             </div>
-            <Badge label={lookupLabel(SLATE_STATUSES, pkg.status)} color={lookupColor(SLATE_STATUSES, pkg.status)} />
+          );
+        })}
+        {pitches.length > 0 && (
+          <div style={{ marginTop: packages.length ? 10 : 0, marginBottom: 6 }}>
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>PITCHED TO</div>
+            {pitches.map((pitch) => (
+              <div key={pitch.id} onClick={() => onOpenRecord && onOpenRecord("slate")} role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" && onOpenRecord) onOpenRecord("slate"); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6, cursor: "pointer" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{pitchLabel(pitch, data.companies, data.mandates)}</div>
+                  {pitch.reason ? (
+                    <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pitch.reason}</div>
+                  ) : null}
+                </div>
+                <Badge label={lookupLabel(PITCH_SOURCES, pitch.source)} color={lookupColor(PITCH_SOURCES, pitch.source)} />
+                <Badge label={lookupLabel(PITCH_STATUSES, pitch.status)} color={lookupColor(PITCH_STATUSES, pitch.status)} />
+              </div>
+            ))}
           </div>
-        ))}
-        <button className="md-btn md-btn-ghost" style={{ marginTop: packages.length ? 6 : 0, fontSize: 12 }}
+        )}
+        <button className="md-btn md-btn-ghost" style={{ marginTop: packages.length || pitches.length ? 6 : 0, fontSize: 12 }}
           onClick={() => onOpenRecord && onOpenRecord("slate")}>
-          <Plus size={13} /> {packages.length ? "Open slate" : "Add a pitch package"}
+          <Plus size={13} /> {packages.length || pitches.length ? "Open slate" : "Add a pitch package"}
         </button>
       </Section>
 

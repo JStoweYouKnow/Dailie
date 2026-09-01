@@ -318,8 +318,33 @@ export const PRESS_STATUSES = [
 /** Pitch packages on the slate — ready for anyone on the team to send. */
 export const SLATE_STATUSES = [
   { key: "draft", label: "Draft", color: HUE.stone },
+  { key: "package", label: "Pitch package", color: HUE.sand },
   { key: "ready", label: "Ready to send", color: HUE.sage },
   { key: "sent", label: "Sent", color: HUE.teal },
+];
+
+/** Who the mandate is from — a streamer, a studio, a network. */
+export const MANDATE_KINDS = [
+  { key: "streamer", label: "Streamer", color: HUE.plum },
+  { key: "studio", label: "Studio", color: HUE.clay },
+  { key: "network", label: "Network", color: HUE.teal },
+  { key: "platform", label: "Platform", color: HUE.slate },
+  { key: "other", label: "Other", color: HUE.stone },
+];
+
+/** How a project landed in front of a buyer. */
+export const PITCH_SOURCES = [
+  { key: "mandate", label: "From their mandate", color: HUE.sand },
+  { key: "ai", label: "AI assessment", color: HUE.plum },
+  { key: "both", label: "Mandate + AI", color: HUE.teal },
+  { key: "manual", label: "We chose them", color: HUE.stone },
+];
+
+export const PITCH_STATUSES = [
+  { key: "suggested", label: "Suggested", color: HUE.sand },
+  { key: "pitched", label: "Pitched", color: HUE.teal },
+  { key: "in-talks", label: "In talks", color: HUE.sage },
+  { key: "passed", label: "Passed", color: HUE.faint },
 ];
 
 /** Social calendar: posts we will publish, and public-facing dates (drops, lives, premieres). */
@@ -598,8 +623,29 @@ export const SEED_DATA = {
       notes: "Original IP. Confirm we do not need to option any prior research papers used as colour. Life rights: none.",
       status: "ready",
       ownerId: "u-3",
+      driveUrl: "",
       attachments: [],
       createdAt: now - 6 * DAY,
+    },
+  ],
+  mandates: [
+    {
+      id: "man-1", kind: "streamer", name: "Roku", companyId: null,
+      mandate: "Family animation and visual IP that can live as shorts, then series. Bright character, clear toyetic hook.",
+      notes: "", ownerId: "u-3", createdAt: now - 20 * DAY,
+    },
+    {
+      id: "man-2", kind: "platform", name: "", companyId: "co-3",
+      mandate: "Premium original series. Psychological sci-fi and contained thrillers with a female lead.",
+      notes: "", ownerId: "u-1", createdAt: now - 12 * DAY,
+    },
+  ],
+  pitches: [
+    {
+      id: "pit-1", projectId: "proj-1", packageId: "slate-1", companyId: "co-3", mandateId: "man-2",
+      name: "", status: "suggested", source: "both",
+      reason: "Fits Netflix's female-led psychological sci-fi mandate; AI flagged the trench voice as a series engine.",
+      pitchedAt: null, createdAt: now - 5 * DAY,
     },
   ],
   social: [
@@ -940,11 +986,23 @@ export function normalizeData(raw) {
         ...r, id, attachments,
       };
     }),
-    slate: ensureArray(input.slate).map((s) => ({
-      ...makeSlatePackage({}),
-      ...s,
-      id: s.id || uid(),
-      attachments: ensureArray(s.attachments).filter((a) => a && a.fileName),
+    slate: ensureArray(input.slate).map((s) => {
+      const merged = { ...makeSlatePackage({}), ...s, id: s.id || uid() };
+      return {
+        ...merged,
+        attachments: ensureArray(s.attachments).filter((a) => a && a.fileName),
+        status: resolvedSlateStatus(merged),
+      };
+    }),
+    mandates: ensureArray(input.mandates).map((m) => ({
+      ...makeMandate({}),
+      ...m,
+      id: m.id || uid(),
+    })),
+    pitches: ensureArray(input.pitches).map((p) => ({
+      ...makePitch({}),
+      ...p,
+      id: p.id || uid(),
     })),
     social: ensureArray(input.social).map((s) => ({
       ...makeSocialItem({}),
@@ -1210,6 +1268,7 @@ export function makeSlatePackage(fields) {
     synopsis: "",
     trailerUrl: "",
     deckUrl: "",
+    driveUrl: "",
     notes: "",
     status: "draft",
     ownerId: null,
@@ -1217,6 +1276,93 @@ export function makeSlatePackage(fields) {
     createdAt: Date.now(),
     ...fields,
   };
+}
+
+export function makeMandate(fields) {
+  return {
+    id: uid(),
+    companyId: null,
+    name: "",
+    kind: "streamer",
+    mandate: "",
+    notes: "",
+    ownerId: null,
+    createdAt: Date.now(),
+    ...fields,
+  };
+}
+
+export function makePitch(fields) {
+  return {
+    id: uid(),
+    projectId: null,
+    packageId: null,
+    companyId: null,
+    mandateId: null,
+    name: "",
+    status: "suggested",
+    source: "mandate",
+    reason: "",
+    pitchedAt: null,
+    ownerId: null,
+    createdAt: Date.now(),
+    ...fields,
+  };
+}
+
+/** Unlinked uploaded packages used to sit in a pile labelled Sent. They are pitch packages. */
+export function resolvedSlateStatus(pkg) {
+  const known = SLATE_STATUSES.some((s) => s.key === pkg.status);
+  let status = known ? pkg.status : "draft";
+  const files = (pkg.attachments || []).some((a) => a && a.fileName && !a.deletedAt);
+  if (!pkg.projectId && status === "sent") return "package";
+  if (!pkg.projectId && status === "draft" && files) return "package";
+  return status;
+}
+
+export function mandateLabel(mandate, companies) {
+  if (!mandate) return "";
+  const company = (companies || []).find((c) => c.id === mandate.companyId);
+  return (company && company.name) || mandate.name || "Untitled";
+}
+
+export function pitchLabel(pitch, companies, mandates) {
+  if (!pitch) return "";
+  if (pitch.companyId) {
+    const company = (companies || []).find((c) => c.id === pitch.companyId);
+    if (company && company.name) return company.name;
+  }
+  if ((pitch.name || "").trim()) return pitch.name.trim();
+  if (pitch.mandateId) {
+    return mandateLabel((mandates || []).find((m) => m.id === pitch.mandateId), companies);
+  }
+  return "Untitled";
+}
+
+function significantWords(text) {
+  return [...new Set(String(text || "").toLowerCase().match(/[a-z0-9]{4,}/g) || [])];
+}
+
+/** Why this IP might fit a buyer's mandate — overlap between the package and what they asked for. */
+export function mandateFitReason(mandate, project, pkg) {
+  const needles = significantWords(mandate && mandate.mandate);
+  if (!needles.length) return null;
+  const hay = new Set(significantWords([
+    project && project.title,
+    project && project.description,
+    pkg && pkg.title,
+    pkg && pkg.logline,
+    pkg && pkg.synopsis,
+  ].filter(Boolean).join(" ")));
+  const hits = needles.filter((w) => hay.has(w));
+  if (hits.length < 2) return null;
+  return `Fits their mandate (${hits.slice(0, 6).join(", ")}).`;
+}
+
+export function suggestMandateFits(mandates, project, pkg) {
+  return (mandates || [])
+    .map((mandate) => ({ mandate, reason: mandateFitReason(mandate, project, pkg) }))
+    .filter((row) => row.reason);
 }
 
 export function makeSocialItem(fields) {
