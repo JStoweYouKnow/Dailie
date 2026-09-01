@@ -4,7 +4,7 @@ import {
   Mail, FileText, Receipt, Video, Info, Clock, UserPlus, Clapperboard, CheckSquare,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor, unreadFor } from "../lib/model";
+import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor, unreadFor, isRepresentationKind } from "../lib/model";
 import { formatShort, formatClock, relativeDays, daysSince, formatMoney } from "../lib/format";
 import { ModalShell, Badge, Avatar, EmptyState, Section } from "../ui/kit";
 import { safeHref } from "../lib/safeUrl";
@@ -260,7 +260,12 @@ export function CommandPalette({ onClose, onSelect }) {
     (data.press || []).forEach((r) => { if (q && ((r.title || "").toLowerCase().includes(q) || (r.outlet || "").toLowerCase().includes(q))) push("press", r.id, r.title, r.outlet || "Press", r); });
     (data.slate || []).forEach((s) => { if (q && hit(s.title, s.logline, s.synopsis, s.notes)) push("slate", s.id, s.title || "Pitch package", "Slate", s); });
     (data.social || []).forEach((s) => { if (q && hit(s.title, s.copy, s.venue, s.notes)) push("social", s.id, s.title || "Social", s.kind === "event" ? "Social event" : "Social post", s); });
-    (data.legal || []).forEach((l) => { if (q && ((l.name || "").toLowerCase().includes(q) || (l.firm || "").toLowerCase().includes(q))) push("legal", l.id, l.name, l.firm || "Legal", l); });
+    (data.legal || []).forEach((l) => {
+      if (q && ((l.name || "").toLowerCase().includes(q) || (l.firm || "").toLowerCase().includes(q))) {
+        const tab = isRepresentationKind(l.kind) ? "representation" : "legal";
+        push(tab, l.id, l.name, l.firm || (tab === "representation" ? "Representation" : "Legal"), l);
+      }
+    });
 
     // These live on tabs whose key differs from the collection name, so the tab key is
     // what goes in `type` and the badge is set separately.
@@ -276,7 +281,8 @@ export function CommandPalette({ onClose, onSelect }) {
       ["home", "Home dashboard"], ["projects", "Projects"], ["slate", "Slate"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
       ["meetings", "Meetings"], ["calls", "Calls"], ["events", "Events & Speaking"], ["emails", "Emails"], ["companies", "Companies"],
       ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"],
-      ["press", "Press & PR"], ["social", "Social calendar"], ["contracts", "NDAs & Contracts"], ["legal", "Legal & Counsel"],
+      ["press", "Press & PR"], ["social", "Social calendar"], ["contracts", "NDAs & Contracts"],
+      ["representation", "Representation"], ["legal", "Legal & Counsel"],
       ["finance", "Invoices & Payments"], ["timeline", "Timeline"],
     ];
     tabs.forEach(([key, label]) => { if (!q || label.toLowerCase().includes(q)) push("tab", key, `Go to ${label}`, "Navigation", null); });
@@ -455,6 +461,7 @@ export function InfoModal({ onClose }) {
     ["Emails", "Paste from any Gmail account. Dailie logs the messages and flags relationships that have gone quiet."],
     ["Companies & People", "Built from your mail traffic. Label each company a Client, Vendor, Platform or AI Tool and filter on it."],
     ["NDAs & Contracts", "Who you have signed with, what is still open, with the documents attached."],
+    ["Representation", "Agents, managers and business affairs — who represents the roster, separate from counsel."],
     ["Invoices & Payments", "What clients owe, what vendors billed, and what you still have to pay out."],
   ];
   return (

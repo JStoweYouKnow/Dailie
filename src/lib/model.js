@@ -347,13 +347,37 @@ export const SOCIAL_STATUSES = [
   { key: "cancelled", label: "Cancelled", color: HUE.faint },
 ];
 
-/** Legal: the people we call when something needs a lawyer. */
-export const LEGAL_KINDS = [
+/** Counsel: the people we call when something needs a lawyer. */
+export const COUNSEL_KINDS = [
   { key: "attorney", label: "Attorney", color: HUE.teal },
   { key: "firm", label: "Firm", color: HUE.sage },
   { key: "counsel", label: "In-House Counsel", color: HUE.slate },
-  { key: "agent", label: "Agent / Business Affairs", color: HUE.sand },
 ];
+
+/** Representation: agents, managers, business affairs — not mixed in with counsel. */
+export const REPRESENTATION_KINDS = [
+  { key: "agent", label: "Agent", color: HUE.sand },
+  { key: "manager", label: "Manager", color: HUE.sage },
+  { key: "businessAffairs", label: "Business Affairs", color: HUE.slate },
+];
+
+export const LEGAL_KINDS = [...COUNSEL_KINDS, ...REPRESENTATION_KINDS];
+
+export function isRepresentationKind(kind) {
+  return REPRESENTATION_KINDS.some((k) => k.key === kind);
+}
+
+/** Roster people whose Agent / Rep field names this contact or their firm. */
+export function rosterRepresentedBy(talentList, contact) {
+  const needles = [contact && contact.name, contact && contact.firm]
+    .map((s) => String(s || "").trim().toLowerCase())
+    .filter((s) => s.length >= 2);
+  if (!needles.length) return [];
+  return (talentList || []).filter((t) => {
+    const agent = String(t.agent || "").toLowerCase();
+    return agent && needles.some((n) => agent.includes(n));
+  });
+}
 
 export const LEGAL_SPECIALTIES = [
   "Production Legal", "IP & Copyright", "Contracts", "Employment",
@@ -521,6 +545,13 @@ export const SEED_DATA = {
   ],
   payments: [
     { id: "pay-1", companyId: "co-5", projectId: "proj-2", invoiceId: "inv-2", amount: 60000, currency: "USD", dueAt: now + 7 * DAY, status: "unpaid", method: "Wire", notes: "Colour pass 1 — release on delivery of graded reels.", createdAt: now - 8 * DAY },
+  ],
+  legal: [
+    {
+      id: "leg-1", kind: "agent", name: "Dana Liu", firm: "WME", specialty: "Contracts",
+      email: "", phone: "", rate: "", companyId: null, projectId: "proj-2",
+      notes: "Represents Ines Okafor.", preferred: true, createdAt: now - 70 * DAY,
+    },
   ],
   talent: [
     {

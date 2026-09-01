@@ -4,7 +4,7 @@ import {
   Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
   Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
   MoreHorizontal, ChevronLeft, ChevronRight, Plus, Upload as UploadIcon, X,
-  Mic2, Megaphone, Scale, Menu, Presentation, Share2,
+  Mic2, Megaphone, Scale, Menu, Presentation, Share2, Briefcase,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount, useSignOut } from "./lib/auth";
@@ -91,6 +91,7 @@ const NAV = [
       { key: "press", label: "Press & PR", icon: Megaphone },
       { key: "social", label: "Social", icon: Share2 },
       { key: "contracts", label: "NDAs & Contracts", icon: FileText },
+      { key: "representation", label: "Representation", icon: Briefcase },
       { key: "legal", label: "Legal", icon: Scale },
       { key: "finance", label: "Invoices", icon: Receipt },
       { key: "timeline", label: "Timeline", icon: History },
@@ -537,6 +538,8 @@ function Board({ store }) {
         return <SocialView searchQuery={searchQuery} />;
       case "slate":
         return <SlateView searchQuery={searchQuery} />;
+      case "representation":
+        return <LegalView searchQuery={searchQuery} scope="representation" />;
       case "legal":
         return <LegalView searchQuery={searchQuery} />;
       case "contracts":

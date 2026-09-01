@@ -1,16 +1,24 @@
 import { useMemo, useState } from "react";
-import { Plus, Scale, Star, Mail, Phone } from "lucide-react";
+import { Plus, Scale, Briefcase, Star } from "lucide-react";
 import { useStore } from "../lib/store";
-import { LEGAL_KINDS, LEGAL_SPECIALTIES, lookupColor } from "../lib/model";
+import {
+  LEGAL_KINDS, COUNSEL_KINDS, REPRESENTATION_KINDS, LEGAL_SPECIALTIES,
+  isRepresentationKind, rosterRepresentedBy, lookupColor,
+} from "../lib/model";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Avatar,
   InlineText, InlineSelect, ModalShell, Field, ConfirmButton,
 } from "../ui/kit";
 
-function NewCounselModal({ onClose }) {
+/**
+ * One view backs Legal and Representation — same contact records, split by kind
+ * so agents are not mixed in with counsel.
+ */
+function NewCounselModal({ onClose, representation }) {
   const { data, add } = useStore();
+  const kinds = representation ? REPRESENTATION_KINDS : COUNSEL_KINDS;
   const [form, setForm] = useState({
-    kind: "attorney", name: "", firm: "", specialty: LEGAL_SPECIALTIES[0],
+    kind: kinds[0].key, name: "", firm: "", specialty: LEGAL_SPECIALTIES[0],
     email: "", phone: "", rate: "", companyId: "", projectId: "", notes: "",
   });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -29,17 +37,21 @@ function NewCounselModal({ onClose }) {
   };
 
   return (
-    <ModalShell title="New Legal Contact" subtitle="Attorneys, firms, in-house counsel and agents" onClose={onClose}>
+    <ModalShell
+      title={representation ? "New Representation" : "New Legal Contact"}
+      subtitle={representation ? "Agents, managers and business affairs" : "Attorneys, firms and in-house counsel"}
+      onClose={onClose}
+    >
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="NAME"><input className="md-input" autoFocus value={form.name} onChange={set("name")} placeholder="Full name" /></Field>
         <Field label="TYPE">
           <select className="md-select" value={form.kind} onChange={set("kind")}>
-            {LEGAL_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+            {kinds.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
           </select>
         </Field>
       </div>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="FIRM"><input className="md-input" value={form.firm} onChange={set("firm")} placeholder="e.g. Loeb & Loeb" /></Field>
+        <Field label="FIRM"><input className="md-input" value={form.firm} onChange={set("firm")} placeholder={representation ? "e.g. WME" : "e.g. Loeb & Loeb"} /></Field>
         <Field label="SPECIALTY">
           <select className="md-select" value={form.specialty} onChange={set("specialty")}>
             {LEGAL_SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -65,19 +77,27 @@ function NewCounselModal({ onClose }) {
           {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </Field>
-      <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save Contact</button>
+      <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>
+        {representation ? "Save Representation" : "Save Contact"}
+      </button>
     </ModalShell>
   );
 }
 
-export default function LegalView({ searchQuery }) {
+export default function LegalView({ searchQuery, scope = "legal" }) {
   const { data, update, remove } = useStore();
   const [kindFilter, setKindFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
+  const representation = scope === "representation";
+  const kinds = representation ? REPRESENTATION_KINDS : COUNSEL_KINDS;
+  const Icon = representation ? Briefcase : Scale;
 
-  const all = data.legal || [];
+  const scoped = useMemo(() => (
+    (data.legal || []).filter((l) => representation ? isRepresentationKind(l.kind) : !isRepresentationKind(l.kind))
+  ), [data.legal, representation]);
+
   const rows = useMemo(() => {
-    let list = [...all];
+    let list = [...scoped];
     if (kindFilter !== "all") list = list.filter((l) => l.kind === kindFilter);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -87,12 +107,12 @@ export default function LegalView({ searchQuery }) {
         (l.specialty || "").toLowerCase().includes(q) ||
         (l.email || "").toLowerCase().includes(q));
     }
-    // Preferred counsel first — that is who you call.
     return list.sort((a, b) => (b.preferred ? 1 : 0) - (a.preferred ? 1 : 0) || (a.name || "").localeCompare(b.name || ""));
-  }, [all, kindFilter, searchQuery]);
+  }, [scoped, kindFilter, searchQuery]);
 
-  const firms = new Set(all.map((l) => (l.firm || "").trim().toLowerCase()).filter(Boolean));
-  const onRetainer = all.filter((l) => l.preferred);
+  const firms = new Set(scoped.map((l) => (l.firm || "").trim().toLowerCase()).filter(Boolean));
+  const onRetainer = scoped.filter((l) => l.preferred);
+  const repped = (data.talent || []).filter((t) => (t.agent || "").trim()).length;
 
   const columns = [
     { key: "name", label: "NAME", cellStyle: { minWidth: 200 }, stopClick: true, render: (l) => (
@@ -113,6 +133,18 @@ export default function LegalView({ searchQuery }) {
       <InlineSelect value={l.specialty} options={LEGAL_SPECIALTIES.map((s) => ({ key: s, label: s }))} placeholder="—"
         onCommit={(v) => update("legal", l.id, { specialty: v })} />
     ) },
+    ...(representation ? [{
+      key: "represents", label: "REPRESENTS", cellStyle: { minWidth: 160 }, render: (l) => {
+        const list = rosterRepresentedBy(data.talent, l);
+        if (!list.length) return <span style={{ fontSize: 12, color: "var(--dim-2)" }}>—</span>;
+        return (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {list.slice(0, 2).map((t) => <Badge key={t.id} label={t.name} subtle />)}
+            {list.length > 2 && <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>+{list.length - 2}</span>}
+          </div>
+        );
+      },
+    }] : []),
     { key: "email", label: "EMAIL", stopClick: true, render: (l) => (
       <InlineText value={l.email} mono placeholder="—" style={{ color: "var(--accent)", fontSize: 12 }}
         onCommit={(v) => update("legal", l.id, { email: v.trim().toLowerCase() })} />
@@ -136,7 +168,7 @@ export default function LegalView({ searchQuery }) {
       <InlineText value={l.notes} placeholder="Add note" onCommit={(v) => update("legal", l.id, { notes: v })} />
     ) },
     { key: "preferred", label: "", stopClick: true, width: 40, render: (l) => (
-      <button className="md-btn md-btn-ghost" title={l.preferred ? "Preferred counsel" : "Mark as preferred"}
+      <button className="md-btn md-btn-ghost" title={l.preferred ? "Preferred" : "Mark as preferred"}
         style={{ padding: 5 }} onClick={() => update("legal", l.id, { preferred: !l.preferred })}>
         <Star size={14} color={l.preferred ? "var(--warn)" : "var(--dim-2)"} fill={l.preferred ? "var(--warn)" : "none"} />
       </button>
@@ -146,33 +178,39 @@ export default function LegalView({ searchQuery }) {
 
   return (
     <div>
-      <ViewHeader count={rows.length} label="LEGAL">
-        <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> New Contact</button>
+      <ViewHeader count={rows.length} label={representation ? "REPRESENTATION" : "LEGAL"}>
+        <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}>
+          <Plus size={14} /> {representation ? "New Agent" : "New Contact"}
+        </button>
       </ViewHeader>
 
       <div style={{ display: "flex", gap: 34, flexWrap: "wrap", padding: "13px 18px", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 20 }}>
-        <Stat label="CONTACTS" value={all.length} />
+        <Stat label="CONTACTS" value={scoped.length} />
         <Stat label="FIRMS" value={firms.size} />
         <Stat label="PREFERRED" value={onRetainer.length} accent="var(--warn)" />
-        <Stat label="CONTRACTS ON FILE" value={(data.contracts || []).length} accent="var(--accent)" />
+        {representation
+          ? <Stat label="ROSTER WITH A REP" value={repped} accent="var(--accent)" />
+          : <Stat label="CONTRACTS ON FILE" value={(data.contracts || []).length} accent="var(--accent)" />}
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <FilterChips options={LEGAL_KINDS.map((k) => ({ ...k, count: all.filter((l) => l.kind === k.key).length }))}
-          value={kindFilter} onChange={setKindFilter} allLabel="All Contacts" />
+        <FilterChips options={kinds.map((k) => ({ ...k, count: scoped.filter((l) => l.kind === k.key).length }))}
+          value={kindFilter} onChange={setKindFilter} allLabel={representation ? "All Representation" : "All Contacts"} />
       </div>
 
       {rows.length === 0 ? (
         <EmptyState
-          title="No legal contacts yet"
-          subtitle="Keep attorneys, firms, in-house counsel and agents here — with their specialty, rate and which project they cover. Signed paper lives in Contracts."
-          action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Scale size={14} /> New Contact</button>}
+          title={representation ? "No representation yet" : "No legal contacts yet"}
+          subtitle={representation
+            ? "Keep agents, managers and business affairs here — with who they represent on the roster. Counsel stays on Legal."
+            : "Keep attorneys, firms and in-house counsel here — with their specialty, rate and which project they cover. Agents live on Representation. Signed paper lives in Contracts."}
+          action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Icon size={14} /> {representation ? "New Agent" : "New Contact"}</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} exportTitle="Legal" />
+        <DataTable columns={columns} rows={rows} exportTitle={representation ? "Representation" : "Legal"} />
       )}
 
-      {showNew && <NewCounselModal onClose={() => setShowNew(false)} />}
+      {showNew && <NewCounselModal onClose={() => setShowNew(false)} representation={representation} />}
     </div>
   );
 }
