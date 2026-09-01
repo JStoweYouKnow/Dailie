@@ -539,9 +539,9 @@ function Board({ store }) {
       case "slate":
         return <SlateView searchQuery={searchQuery} />;
       case "representation":
-        return <LegalView searchQuery={searchQuery} scope="representation" />;
+        return <LegalView searchQuery={searchQuery} scope="representation" onOpenTab={openTab} />;
       case "legal":
-        return <LegalView searchQuery={searchQuery} />;
+        return <LegalView searchQuery={searchQuery} onOpenTab={openTab} />;
       case "contracts":
         return <ContractsView searchQuery={searchQuery} />;
       case "finance":

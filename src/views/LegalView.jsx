@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
-import { Plus, Scale, Briefcase, Star } from "lucide-react";
+import { Plus, Scale, Briefcase, Star, Mail, ExternalLink } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
-  LEGAL_KINDS, COUNSEL_KINDS, REPRESENTATION_KINDS, LEGAL_SPECIALTIES,
-  isRepresentationKind, rosterRepresentedBy, lookupColor,
+  LEGAL_KINDS, COUNSEL_KINDS, REPRESENTATION_KINDS, CONTRACT_STATUSES,
+  isRepresentationKind, rosterRepresentedBy, lookupColor, lookupLabel, lastContactFor,
 } from "../lib/model";
+import { relativeDays, formatShort, daysSince } from "../lib/format";
+import { safeHref } from "../lib/safeUrl";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Avatar,
-  InlineText, InlineSelect, ModalShell, Field, ConfirmButton,
+  InlineText, InlineSelect, ModalShell, Field, Section, ConfirmButton,
 } from "../ui/kit";
 
 /**
@@ -18,7 +20,7 @@ function NewCounselModal({ onClose, representation }) {
   const { data, add } = useStore();
   const kinds = representation ? REPRESENTATION_KINDS : COUNSEL_KINDS;
   const [form, setForm] = useState({
-    kind: kinds[0].key, name: "", firm: "", specialty: LEGAL_SPECIALTIES[0],
+    kind: kinds[0].key, name: "", firm: "", specialty: "",
     email: "", phone: "", rate: "", companyId: "", projectId: "", notes: "",
   });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -52,11 +54,7 @@ function NewCounselModal({ onClose, representation }) {
       </div>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="FIRM"><input className="md-input" value={form.firm} onChange={set("firm")} placeholder={representation ? "e.g. WME" : "e.g. Loeb & Loeb"} /></Field>
-        <Field label="SPECIALTY">
-          <select className="md-select" value={form.specialty} onChange={set("specialty")}>
-            {LEGAL_SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </Field>
+        <Field label="SPECIALTY"><input className="md-input" value={form.specialty} onChange={set("specialty")} placeholder="e.g. Production Legal" /></Field>
       </div>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="EMAIL"><input className="md-input" value={form.email} onChange={set("email")} placeholder="name@firm.com" /></Field>
@@ -84,9 +82,172 @@ function NewCounselModal({ onClose, representation }) {
   );
 }
 
-export default function LegalView({ searchQuery, scope = "legal" }) {
+function CounselDetail({ contact, onClose, onOpenTab, representation }) {
+  const { data, update, remove } = useStore();
+  const live = (data.legal || []).find((l) => l.id === contact.id) || contact;
+  const patch = (changes) => update("legal", live.id, changes);
+  const kind = LEGAL_KINDS.find((k) => k.key === live.kind) || LEGAL_KINDS[0];
+  const addresses = (live.email || "").trim() ? [live.email.trim().toLowerCase()] : [];
+  const last = lastContactFor(data.emails, addresses);
+  const emails = data.emails
+    .filter((e) => {
+      if (!addresses.length) return false;
+      const set = new Set(addresses);
+      return [e.from, ...(e.to || [])].some((p) => set.has(String(p || "").toLowerCase()));
+    })
+    .sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
+  const contracts = (data.contracts || []).filter((c) =>
+    (live.companyId && c.companyId === live.companyId) || (live.projectId && c.projectId === live.projectId));
+  const roster = representation ? rosterRepresentedBy(data.talent, live) : [];
+  const project = data.projects.find((p) => p.id === live.projectId);
+  const company = data.companies.find((c) => c.id === live.companyId);
+  const stale = last && daysSince(last) > (data.settings.followUpDays || 14);
+  const kinds = representation ? REPRESENTATION_KINDS : COUNSEL_KINDS;
+
+  return (
+    <ModalShell
+      wide
+      title={live.name || live.firm || "Untitled"}
+      subtitle={[lookupLabel(kinds, live.kind, lookupLabel(LEGAL_KINDS, live.kind)), live.firm, live.specialty].filter(Boolean).join(" · ")}
+      onClose={onClose}
+    >
+      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 20 }}>
+        <Avatar name={live.name || live.firm} size={54} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <InlineText value={live.name} style={{ fontSize: 18, fontWeight: 700 }} placeholder="Add a name"
+            onCommit={(v) => v.trim() && patch({ name: v.trim() })} />
+          <InlineText value={live.firm} placeholder="Add a firm" style={{ color: "var(--dim)" }}
+            onCommit={(v) => patch({ firm: v })} />
+        </div>
+        <button className="md-btn md-btn-ghost" title={live.preferred ? "Preferred" : "Mark as preferred"}
+          style={{ padding: 8 }} onClick={() => patch({ preferred: !live.preferred })}>
+          <Star size={18} color={live.preferred ? "var(--warn)" : "var(--dim-2)"} fill={live.preferred ? "var(--warn)" : "none"} />
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginBottom: 20 }}>
+        <Field label="TYPE">
+          <InlineSelect value={live.kind} options={kinds} color={kind.color} onCommit={(v) => patch({ kind: v })} />
+        </Field>
+        <Field label="SPECIALTY">
+          <InlineText value={live.specialty} placeholder="e.g. Production Legal"
+            onCommit={(v) => patch({ specialty: v })} />
+        </Field>
+        <Field label="EMAIL">
+          <div>
+            <InlineText value={live.email} mono style={{ color: "var(--accent)" }} placeholder="name@firm.com"
+              onCommit={(v) => patch({ email: v.trim().toLowerCase() })} />
+            {safeHref(live.email && `mailto:${live.email}`) && (
+              <a href={safeHref(`mailto:${live.email}`)} className="md-mono"
+                style={{ fontSize: 11, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6 }}>
+                Write <ExternalLink size={11} />
+              </a>
+            )}
+          </div>
+        </Field>
+        <Field label="PHONE">
+          <InlineText value={live.phone} mono placeholder="+1 …" onCommit={(v) => patch({ phone: v })} />
+        </Field>
+        <Field label="RATE">
+          <InlineText value={live.rate} mono placeholder="e.g. $650/hr" onCommit={(v) => patch({ rate: v })} />
+        </Field>
+        <Field label="PROJECT">
+          <InlineSelect value={live.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="No project"
+            onCommit={(v) => patch({ projectId: v })} />
+        </Field>
+        <Field label="COMPANY">
+          <InlineSelect value={live.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="Not linked"
+            onCommit={(v) => patch({ companyId: v })} />
+        </Field>
+        <Field label="LAST CONTACT">
+          <div style={{ fontSize: 13, color: stale ? "var(--red)" : "var(--bone)" }}>{relativeDays(last)}</div>
+        </Field>
+      </div>
+
+      <Field label="NOTES">
+        <InlineText value={live.notes} multiline placeholder="What they cover, who introduced them, anything the team should know…"
+          onCommit={(v) => patch({ notes: v })} />
+      </Field>
+
+      {representation && (
+        <Section title={`REPRESENTS · ${roster.length}`} right={
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenTab && onOpenTab("team")}>
+            Open Roster <ExternalLink size={11} />
+          </button>
+        }>
+          {roster.length === 0 && <div style={{ fontSize: 12, color: "var(--dim)" }}>Nobody on the roster names this agent yet.</div>}
+          {roster.map((t) => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--rule)" }}>
+              <Avatar name={t.name} size={26} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{t.name}</div>
+                <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{t.discipline || t.agent || "—"}</div>
+              </div>
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {(project || company) && (
+        <Section title="LINKED">
+          {project && (
+            <div style={{ fontSize: 13, padding: "6px 0" }}>
+              Project · {project.title}
+            </div>
+          )}
+          {company && (
+            <div style={{ fontSize: 13, padding: "6px 0" }}>
+              Company · {company.name}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {contracts.length > 0 && (
+        <Section title={`CONTRACTS & NDAs · ${contracts.length}`} right={
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenTab && onOpenTab("contracts")}>
+            Open Contracts <ExternalLink size={11} />
+          </button>
+        }>
+          {contracts.map((c) => (
+            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", fontSize: 13 }}>
+              <span style={{ flex: 1 }}>{c.title}</span>
+              <Badge label={lookupLabel(CONTRACT_STATUSES, c.status)} color={lookupColor(CONTRACT_STATUSES, c.status)} />
+            </div>
+          ))}
+        </Section>
+      )}
+
+      <Section title={`EMAILS · ${emails.length}`} right={
+        <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenTab && onOpenTab("emails")}>
+          Open Emails <ExternalLink size={11} />
+        </button>
+      }>
+        {emails.length === 0 && <div style={{ fontSize: 12, color: "var(--dim)" }}>No email logged with this contact yet.</div>}
+        {emails.slice(0, 8).map((e) => (
+          <div key={e.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--rule)" }}>
+            <Mail size={13} color="var(--dim)" />
+            <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.subject}</span>
+            <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{formatShort(e.sentAt)}</span>
+          </div>
+        ))}
+      </Section>
+
+      <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
+        <ConfirmButton
+          label={representation ? "Remove representation" : "Remove contact"}
+          confirmLabel="Yes, remove"
+          onConfirm={() => { remove("legal", live.id); onClose(); }}
+        />
+      </div>
+    </ModalShell>
+  );
+}
+
+export default function LegalView({ searchQuery, scope = "legal", onOpenTab }) {
   const { data, update, remove } = useStore();
   const [kindFilter, setKindFilter] = useState("all");
+  const [open, setOpen] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const representation = scope === "representation";
   const kinds = representation ? REPRESENTATION_KINDS : COUNSEL_KINDS;
@@ -115,13 +276,12 @@ export default function LegalView({ searchQuery, scope = "legal" }) {
   const repped = (data.talent || []).filter((t) => (t.agent || "").trim()).length;
 
   const columns = [
-    { key: "name", label: "NAME", cellStyle: { minWidth: 200 }, stopClick: true, render: (l) => (
+    { key: "name", label: "NAME", cellStyle: { minWidth: 200 }, render: (l) => (
       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-        <Avatar name={l.name} size={28} />
+        <Avatar name={l.name || l.firm} size={28} />
         <div style={{ minWidth: 0 }}>
-          <InlineText value={l.name} style={{ fontWeight: 700 }} onCommit={(v) => update("legal", l.id, { name: v })} />
-          <InlineText value={l.firm} placeholder="Add firm" style={{ fontSize: 11, color: "var(--dim)" }}
-            onCommit={(v) => update("legal", l.id, { firm: v })} />
+          <div style={{ fontWeight: 700, color: "var(--bone)" }}>{l.name || l.firm || "Untitled"}</div>
+          {l.firm && l.name ? <div style={{ fontSize: 11, color: "var(--dim)" }}>{l.firm}</div> : null}
         </div>
       </div>
     ) },
@@ -130,8 +290,7 @@ export default function LegalView({ searchQuery, scope = "legal" }) {
         onCommit={(v) => update("legal", l.id, { kind: v })} />
     ) },
     { key: "specialty", label: "SPECIALTY", stopClick: true, render: (l) => (
-      <InlineSelect value={l.specialty} options={LEGAL_SPECIALTIES.map((s) => ({ key: s, label: s }))} placeholder="—"
-        onCommit={(v) => update("legal", l.id, { specialty: v })} />
+      <InlineText value={l.specialty} placeholder="—" onCommit={(v) => update("legal", l.id, { specialty: v })} />
     ) },
     ...(representation ? [{
       key: "represents", label: "REPRESENTS", cellStyle: { minWidth: 160 }, render: (l) => {
@@ -207,9 +366,17 @@ export default function LegalView({ searchQuery, scope = "legal" }) {
           action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Icon size={14} /> {representation ? "New Agent" : "New Contact"}</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} exportTitle={representation ? "Representation" : "Legal"} />
+        <DataTable columns={columns} rows={rows} onRowClick={setOpen} exportTitle={representation ? "Representation" : "Legal"} />
       )}
 
+      {open && (
+        <CounselDetail
+          contact={(data.legal || []).find((l) => l.id === open.id) || open}
+          onClose={() => setOpen(null)}
+          onOpenTab={onOpenTab}
+          representation={representation}
+        />
+      )}
       {showNew && <NewCounselModal onClose={() => setShowNew(false)} representation={representation} />}
     </div>
   );
