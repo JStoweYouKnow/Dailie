@@ -79,6 +79,51 @@ export function isOnProject(project, userId) {
   return isProjectOwner(project, userId) || (project.teamIds || []).includes(userId);
 }
 
+/** Extra dates on a project — wrap, premiere, festival, a pitch, whatever the work needs. */
+export const PROJECT_DATE_SUGGESTIONS = ["Greenlight", "Wrap", "Premiere", "Festival", "Table Read", "Pitch"];
+
+export function makeProjectDate(fields) {
+  return {
+    id: uid(),
+    label: "",
+    date: null,
+    ...fields,
+  };
+}
+
+export function normalizeProjectDates(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((d) => d && typeof d === "object")
+    .map((d) => ({
+      id: d.id || uid(),
+      label: String(d.label || "").trim(),
+      date: typeof d.date === "number" && Number.isFinite(d.date) ? d.date : null,
+    }));
+}
+
+/** Start, delivery, and any extra dates — what the calendar plots for a project. */
+export function projectCalendarMarks(project) {
+  if (!project) return [];
+  const type = recordTypeInfo(project.recordType);
+  const marks = [];
+  if (project.startDate) {
+    marks.push({ id: `ps-${project.id}`, ts: project.startDate, label: `${project.title} — start`, color: type.color });
+  }
+  if (project.endDate) {
+    marks.push({ id: `pe-${project.id}`, ts: project.endDate, label: `${project.title} — delivery`, color: type.color });
+  }
+  normalizeProjectDates(project.dates).forEach((d) => {
+    if (!d.date) return;
+    marks.push({
+      id: `pd-${project.id}-${d.id}`,
+      ts: d.date,
+      label: `${project.title} — ${d.label || "date"}`,
+      color: type.color,
+    });
+  });
+  return marks;
+}
+
 /** Default deal pipelines. Columns are editable per type and stored in data.pipelines. */
 export const DEFAULT_PIPELINES = {
   service: [
@@ -319,8 +364,17 @@ export const CONTRACT_KINDS = [
   { key: "nda", label: "NDA" },
   { key: "deal", label: "Deal Contract" },
   { key: "vendor", label: "Vendor Contract" },
+  { key: "betaTester", label: "Beta Tester Agreement" },
   { key: "other", label: "Other Agreement" },
 ];
+
+/** Keep Other last. Untitled or unknown kinds land there, unless the title is a beta tester agreement. */
+export function resolvedContractKind(contract) {
+  const known = CONTRACT_KINDS.some((k) => k.key === contract.kind);
+  const kind = known ? contract.kind : "other";
+  if (kind === "other" && /beta\s*-?\s*tester/i.test(contract.title || "")) return "betaTester";
+  return kind;
+}
 
 export const CONTRACT_STATUSES = [
   { key: "draft", label: "Draft", color: HUE.stone },
@@ -403,7 +457,9 @@ export const SEED_DATA = {
       imageUrl: "", companyId: "co-1", budget: "$14.5M", priority: "HIGH", studio: "A24 / Matriarch",
       contactName: "David Sterling", contactEmail: "d.sterling@a24films.com", contactPhone: "+1 (212) 555-0130",
       nextStep: "Finalize lead attachment deal memo with agent", paymentStatus: "unpaid",
-      startDate: now + 40 * DAY, createdAt: now - 14 * DAY, updatedAt: now - 2 * 3600000,
+      startDate: now + 40 * DAY, endDate: now + 180 * DAY,
+      dates: [{ id: "pd-1", label: "Premiere", date: now + 220 * DAY }],
+      createdAt: now - 14 * DAY, updatedAt: now - 2 * 3600000,
       history: [
         { id: "h1", date: now - 14 * DAY, note: "Added to the board — Development" },
         { id: "h2", date: now - 8 * DAY, note: "Script revision 3 completed by writer room" },
@@ -686,6 +742,7 @@ function migrateProjects(raw, team, companies) {
       companyId: company ? company.id : null,
       pipelineStage: p.pipelineStage || pipeline[0].key,
       stage: p.stage || "development",
+      dates: normalizeProjectDates(p.dates),
       createdAt: p.createdAt || Date.now(),
       updatedAt: p.updatedAt || Date.now(),
       history: ensureArray(p.history),
@@ -878,7 +935,10 @@ export function normalizeData(raw) {
       };
       return { ...merged, ...withTalentDisciplines(talentDisciplines(merged)) };
     }),
-    contracts: ensureArray(input.contracts).map((c) => ({ status: "draft", kind: "other", talentId: null, ...c, id: c.id || uid() })),
+    contracts: ensureArray(input.contracts).map((c) => {
+      const merged = { status: "draft", kind: "other", talentId: null, ...c, id: c.id || uid() };
+      return { ...merged, kind: resolvedContractKind(merged) };
+    }),
     invoices: ensureArray(input.invoices).map((i) => ({ status: "draft", direction: "incoming", currency: "USD", ...i, id: i.id || uid() })),
     payments: ensureArray(input.payments).map((p) => ({ status: "unpaid", currency: "USD", ...p, id: p.id || uid() })),
     logs: ensureArray(input.logs).filter((l) => l.id !== "log-1"),

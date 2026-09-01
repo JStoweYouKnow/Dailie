@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw, Presentation, Share2 } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw, Presentation, Share2, Mic2 } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
-  CONTRACT_STATUSES, INVOICE_STATUSES, SLATE_STATUSES, SOCIAL_STATUSES, lookupLabel, lookupColor, makeTask,
-  projectOwnerIds, withProjectOwners, talentDisciplines,
+  CONTRACT_STATUSES, INVOICE_STATUSES, SLATE_STATUSES, SOCIAL_STATUSES, EVENT_KINDS, EVENT_STATUSES,
+  lookupLabel, lookupColor, makeTask, makeProjectDate, PROJECT_DATE_SUGGESTIONS,
+  projectOwnerIds, withProjectOwners, normalizeProjectDates,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile, deleteFile } from "../lib/files";
@@ -133,6 +134,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const [newTask, setNewTask] = useState("");
   const [note, setNote] = useState("");
   const [newFieldName, setNewFieldName] = useState("");
+  const [newDateLabel, setNewDateLabel] = useState("");
   const [saveStatus, setSaveStatus] = useState(null);
   const saveTimer = useRef(null);
 
@@ -163,6 +165,9 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
     .map((t) => ({ talent: t, assignment: (t.assignments || []).find((a) => a.projectId === project.id) }))
     .filter((x) => x.assignment);
   const customFields = project.customFields || {};
+  const extraDates = normalizeProjectDates(project.dates);
+  const linkedEvents = (data.events || []).filter((e) => e.projectId === project.id)
+    .sort((a, b) => (a.date || Infinity) - (b.date || Infinity));
 
   const addTask = () => {
     if (!newTask.trim()) return;
@@ -195,6 +200,27 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
     if (!name) return;
     patchProject({ customFields: { ...customFields, [name]: "" } }, undefined, "saved");
     setNewFieldName("");
+  };
+
+  const addExtraDate = (label) => {
+    const name = (label || newDateLabel).trim();
+    if (!name) return;
+    patchProject({ dates: [...extraDates, makeProjectDate({ label: name })] }, `Added date: ${name}`, "saved");
+    setNewDateLabel("");
+  };
+
+  const patchExtraDate = (id, changes) => {
+    patchProject({
+      dates: extraDates.map((d) => (d.id === id ? { ...d, ...changes } : d)),
+    });
+  };
+
+  const removeExtraDate = (id) => {
+    const gone = extraDates.find((d) => d.id === id);
+    patchProject(
+      { dates: extraDates.filter((d) => d.id !== id) },
+      gone && gone.label ? `Removed date: ${gone.label}` : undefined
+    );
   };
 
   /** Changing the record type re-homes the project on the new type's pipeline. */
@@ -305,6 +331,33 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
           <input type="date" className="md-input" style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: "transparent" }}
             value={dateInputValue(project.endDate)} onChange={(e) => patchProject({ endDate: tsFromDateInput(e.target.value) })} />
         </Row>
+        {extraDates.map((d) => (
+          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--rule)", flexWrap: "wrap" }}>
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", width: 130, flexShrink: 0 }}>DATE</div>
+            <div style={{ flex: 1, minWidth: 120 }}>
+              <InlineText value={d.label} placeholder="Date name" onCommit={(v) => patchExtraDate(d.id, { label: v.trim() })} />
+            </div>
+            <input type="date" className="md-input" style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: "transparent" }}
+              value={dateInputValue(d.date)} onChange={(e) => patchExtraDate(d.id, { date: tsFromDateInput(e.target.value) })} />
+            <button className="md-btn md-btn-ghost" style={{ padding: 4 }} title="Remove date"
+              onClick={() => removeExtraDate(d.id)}><X size={12} /></button>
+          </div>
+        ))}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: extraDates.length ? 8 : 0 }}>
+            {PROJECT_DATE_SUGGESTIONS
+              .filter((label) => !extraDates.some((d) => d.label.toLowerCase() === label.toLowerCase()))
+              .map((label) => (
+                <button key={label} className="md-btn md-btn-ghost" style={{ fontSize: 11, padding: "4px 8px" }}
+                  onClick={() => addExtraDate(label)}>+ {label}</button>
+              ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <input className="md-input" placeholder="Add a date (e.g. Wrap, Premiere, Pitch)" value={newDateLabel}
+              onChange={(e) => setNewDateLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addExtraDate(); }} />
+            <button className="md-btn" onClick={() => addExtraDate()}><Plus size={13} /> Add date</button>
+          </div>
+        </div>
         {Object.keys(customFields).map((name) => (
           <Row key={name} label={name.toUpperCase()}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -425,6 +478,27 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addNote(); }} />
           <button className="md-btn" onClick={addNote}><Plus size={13} /> Note</button>
         </div>
+      </Section>
+
+      <Section title={`EVENTS · ${linkedEvents.length}`}>
+        {linkedEvents.map((e) => (
+          <div key={e.id} onClick={() => onOpenRecord && onOpenRecord("events")} role="button" tabIndex={0}
+            onKeyDown={(ev) => { if (ev.key === "Enter" && onOpenRecord) onOpenRecord("events"); }}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6, cursor: "pointer" }}>
+            <Mic2 size={14} color="var(--accent)" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{e.name || "Untitled event"}</div>
+              <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>
+                {e.date ? formatShort(e.date) : "No date"} · {lookupLabel(EVENT_KINDS, e.kind)}
+              </div>
+            </div>
+            <Badge label={lookupLabel(EVENT_STATUSES, e.status)} color={lookupColor(EVENT_STATUSES, e.status)} />
+          </div>
+        ))}
+        <button className="md-btn md-btn-ghost" style={{ marginTop: linkedEvents.length ? 6 : 0, fontSize: 12 }}
+          onClick={() => onOpenRecord && onOpenRecord("events")}>
+          <Plus size={13} /> {linkedEvents.length ? "Open events" : "Add an event"}
+        </button>
       </Section>
 
       <Section title={`SLATE · ${packages.length}`}>

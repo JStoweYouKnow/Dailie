@@ -1,32 +1,127 @@
 import { useMemo, useState } from "react";
-import { Plus, Mic2, MapPin, ExternalLink } from "lucide-react";
+import { Plus, Mic2, ExternalLink } from "lucide-react";
 import { useStore } from "../lib/store";
-import { EVENT_KINDS, EVENT_STATUSES, lookupColor } from "../lib/model";
-import { tsFromDateInput, DAY } from "../lib/format";
+import { EVENT_KINDS, EVENT_STATUSES, lookupColor, lookupLabel } from "../lib/model";
+import { tsFromDateInput, DAY, dateInputValue } from "../lib/format";
 import { safeHref } from "../lib/safeUrl";
 import {
-  ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Avatar, AvatarStack,
+  ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat,
   InlineText, InlineSelect, InlineDate, ModalShell, Field, ConfirmButton, MemberPicker,
 } from "../ui/kit";
 
-function NewEventModal({ onClose }) {
+function EventDetail({ event, onClose }) {
+  const { data, update, remove, memberName } = useStore();
+  const live = (data.events || []).find((e) => e.id === event.id) || event;
+  const patch = (changes) => update("events", live.id, changes);
+  const kind = EVENT_KINDS.find((k) => k.key === live.kind) || EVENT_KINDS[0];
+  const project = data.projects.find((p) => p.id === live.projectId);
+
+  return (
+    <ModalShell
+      wide
+      title={live.name || "Untitled event"}
+      subtitle={[lookupLabel(EVENT_KINDS, live.kind), live.venue, live.location].filter(Boolean).join(" · ")}
+      onClose={onClose}
+    >
+      <Field label="EVENT NAME">
+        <InlineText value={live.name} style={{ fontSize: 18, fontWeight: 700 }} placeholder="Name this event"
+          onCommit={(v) => v.trim() && patch({ name: v.trim() })} />
+      </Field>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 8 }}>
+        <Field label="OUR ROLE">
+          <InlineSelect value={live.kind} options={EVENT_KINDS} color={kind.color} onCommit={(v) => patch({ kind: v })} />
+        </Field>
+        <Field label="STATUS">
+          <InlineSelect value={live.status} options={EVENT_STATUSES} color={lookupColor(EVENT_STATUSES, live.status)}
+            onCommit={(v) => patch({ status: v })} />
+        </Field>
+        <Field label="DATE">
+          <input type="date" className="md-input" value={dateInputValue(live.date)}
+            onChange={(e) => patch({ date: tsFromDateInput(e.target.value) })} />
+        </Field>
+        <Field label="COST">
+          <InlineText value={live.cost} mono placeholder="e.g. $4,500" onCommit={(v) => patch({ cost: v })} />
+        </Field>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 8 }}>
+        <Field label="VENUE">
+          <InlineText value={live.venue} placeholder="e.g. Austin Convention Center" onCommit={(v) => patch({ venue: v })} />
+        </Field>
+        <Field label="LOCATION">
+          <InlineText value={live.location} placeholder="City, country" onCommit={(v) => patch({ location: v })} />
+        </Field>
+        <Field label="LINK">
+          <div>
+            <InlineText value={live.url} mono placeholder="https://" onCommit={(v) => patch({ url: v.trim() })} />
+            {safeHref(live.url) && (
+              <a href={safeHref(live.url)} target="_blank" rel="noreferrer" className="md-mono"
+                style={{ fontSize: 11, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6 }}>
+                Open link <ExternalLink size={11} />
+              </a>
+            )}
+          </div>
+        </Field>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 8 }}>
+        <Field label="PROJECT">
+          <InlineSelect value={live.projectId} options={data.projects.map((p) => ({ key: p.id, label: p.title }))} placeholder="No project"
+            onCommit={(v) => patch({ projectId: v })} />
+        </Field>
+        <Field label="COMPANY">
+          <InlineSelect value={live.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="No company"
+            onCommit={(v) => patch({ companyId: v })} />
+        </Field>
+      </div>
+
+      <Field label="WHO'S SPEAKING">
+        <MemberPicker team={data.team} selectedIds={live.speakerIds || []} label="Add speaker"
+          onChange={(ids) => patch({ speakerIds: ids })} />
+        {(live.speakerIds || []).length > 0 && (
+          <div style={{ marginTop: 8, fontSize: 12, color: "var(--dim)" }}>
+            {(live.speakerIds || []).map(memberName).filter(Boolean).join(", ")}
+            {project ? ` · ${project.title}` : ""}
+          </div>
+        )}
+      </Field>
+
+      <Field label="NOTES">
+        <InlineText value={live.notes} multiline placeholder="What this date is, who to confirm, travel, the talk title…"
+          onCommit={(v) => patch({ notes: v })} />
+      </Field>
+
+      <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
+        <ConfirmButton label="Remove event" confirmLabel="Yes, remove" onConfirm={() => { remove("events", live.id); onClose(); }} />
+      </div>
+    </ModalShell>
+  );
+}
+
+function NewEventModal({ onClose, onCreated }) {
   const { data, add, currentUser } = useStore();
-  const [form, setForm] = useState({ name: "", kind: "panel", status: "invited", venue: "", location: "", url: "" });
+  const [form, setForm] = useState({ name: "", kind: "panel", status: "invited", venue: "", location: "", url: "", projectId: "" });
   const [date, setDate] = useState("");
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = () => {
     if (!form.name.trim()) return;
-    add("events", {
-      ...form,
+    const event = add("events", {
       name: form.name.trim(),
+      kind: form.kind,
+      status: form.status,
+      venue: form.venue.trim(),
+      location: form.location.trim(),
+      url: form.url.trim(),
       date: tsFromDateInput(date),
       speakerIds: currentUser ? [currentUser.id] : [],
-      projectId: null,
+      projectId: form.projectId || null,
       companyId: null,
       notes: "",
       cost: "",
     });
+    if (onCreated) onCreated(event);
     onClose();
   };
 
@@ -53,15 +148,22 @@ function NewEventModal({ onClose }) {
         <Field label="LOCATION"><input className="md-input" value={form.location} onChange={set("location")} placeholder="Austin, TX" /></Field>
         <Field label="LINK"><input className="md-input" value={form.url} onChange={set("url")} placeholder="https://" /></Field>
       </div>
+      <Field label="PROJECT">
+        <select className="md-select" value={form.projectId} onChange={set("projectId")}>
+          <option value="">No project</option>
+          {data.projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+        </select>
+      </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Add Event</button>
     </ModalShell>
   );
 }
 
 export default function EventsView({ searchQuery }) {
-  const { data, update, remove, memberName } = useStore();
+  const { data, update, remove } = useStore();
   const [kindFilter, setKindFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
+  const [open, setOpen] = useState(null);
 
   const rows = useMemo(() => {
     let list = [...(data.events || [])];
@@ -84,11 +186,12 @@ export default function EventsView({ searchQuery }) {
   const needsAnswer = (data.events || []).filter((e) => e.status === "invited" || e.status === "submitted");
 
   const columns = [
-    { key: "name", label: "EVENT", cellStyle: { minWidth: 230 }, stopClick: true, render: (e) => (
+    { key: "name", label: "EVENT", cellStyle: { minWidth: 230 }, render: (e) => (
       <div>
-        <InlineText value={e.name} style={{ fontWeight: 700 }} onCommit={(v) => update("events", e.id, { name: v })} />
+        <div style={{ fontWeight: 700, color: "var(--bone)" }}>{e.name}</div>
         {safeHref(e.url) && (
           <a href={safeHref(e.url)} target="_blank" rel="noreferrer" className="md-mono"
+            onClick={(ev) => ev.stopPropagation()}
             style={{ fontSize: 10, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
             link <ExternalLink size={9} />
           </a>
@@ -129,7 +232,7 @@ export default function EventsView({ searchQuery }) {
     { key: "notes", label: "NOTES", cellStyle: { minWidth: 200 }, stopClick: true, render: (e) => (
       <InlineText value={e.notes} placeholder="Add note" onCommit={(v) => update("events", e.id, { notes: v })} />
     ) },
-    { key: "del", label: "", stopClick: true, render: (e) => <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => remove("events", e.id)} /> },
+    { key: "del", label: "", stopClick: true, render: (e) => <ConfirmButton label="" confirmLabel="Sure?" onConfirm={() => { if (open && open.id === e.id) setOpen(null); remove("events", e.id); }} /> },
   ];
 
   return (
@@ -157,10 +260,11 @@ export default function EventsView({ searchQuery }) {
           action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Mic2 size={14} /> New Event</button>}
         />
       ) : (
-        <DataTable columns={columns} rows={rows} exportTitle="Events" />
+        <DataTable columns={columns} rows={rows} onRowClick={setOpen} exportTitle="Events" />
       )}
 
-      {showNew && <NewEventModal onClose={() => setShowNew(false)} />}
+      {showNew && <NewEventModal onClose={() => setShowNew(false)} onCreated={setOpen} />}
+      {open && <EventDetail event={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }

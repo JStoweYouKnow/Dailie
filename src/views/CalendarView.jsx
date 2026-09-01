@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Video, ExternalLink, EyeOff } from "lucide-react";
 import { useStore } from "../lib/store";
-import { RECORD_TYPES, recordTypeInfo, EVENT_KINDS, lookupColor, lookupLabel } from "../lib/model";
+import { RECORD_TYPES, EVENT_KINDS, lookupColor, lookupLabel, projectCalendarMarks } from "../lib/model";
 import { formatClock } from "../lib/format";
 import { FilterChips, Section, Badge } from "../ui/kit";
 import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
@@ -57,9 +57,9 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
       data.projects
         .filter((p) => filter === "all" || p.recordType === filter)
         .forEach((p) => {
-          const type = recordTypeInfo(p.recordType);
-          if (p.startDate) push(p.startDate, { id: `ps-${p.id}`, kind: "project", label: `${p.title} — start`, color: type.color, ts: p.startDate, project: p });
-          if (p.endDate) push(p.endDate, { id: `pe-${p.id}`, kind: "project", label: `${p.title} — delivery`, color: type.color, ts: p.endDate, project: p });
+          projectCalendarMarks(p).forEach((mark) => {
+            push(mark.ts, { id: mark.id, kind: "project", label: mark.label, color: mark.color, ts: mark.ts, project: p });
+          });
         });
     }
 
