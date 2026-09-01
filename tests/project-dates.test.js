@@ -33,6 +33,21 @@ test("normalize fills an empty dates list without wiping other project fields", 
   });
   assert.deepEqual(data.projects[0].dates, []);
   assert.equal(data.projects[0].nextStep, "Call the agent");
+  assert.equal(data.projects[0].driveUrl, "");
+  assert.equal(data.projects[0].externalUrl, "");
+});
+
+test("a project keeps a Drive folder and an external link", () => {
+  const data = normalizeData({
+    projects: [{
+      id: "proj-x",
+      title: "Echo",
+      driveUrl: "https://drive.google.com/drive/folders/abc",
+      externalUrl: "https://frame.io/reviews/echo",
+    }],
+  });
+  assert.equal(data.projects[0].driveUrl, "https://drive.google.com/drive/folders/abc");
+  assert.equal(data.projects[0].externalUrl, "https://frame.io/reviews/echo");
 });
 
 test("normalizeProjectDates drops junk and keeps a usable id and label", () => {

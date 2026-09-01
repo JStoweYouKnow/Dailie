@@ -252,7 +252,7 @@ export function CommandPalette({ onClose, onSelect }) {
     const push = (type, id, label, sub, item, badge) => out.push({ type, id, label, sub, item, badge: badge || type });
     const hit = (...fields) => q && fields.some((f) => String(f || "").toLowerCase().includes(q));
 
-    data.projects.forEach((p) => { if (!q || hit(p.title, p.contactName, p.contactEmail, p.contactPhone)) push("project", p.id, p.title, recordTypeInfo(p.recordType).short, p); });
+    data.projects.forEach((p) => { if (!q || hit(p.title, p.contactName, p.contactEmail, p.contactPhone, p.driveUrl, p.externalUrl)) push("project", p.id, p.title, recordTypeInfo(p.recordType).short, p); });
     data.people.forEach((p) => { if (q && (p.name.toLowerCase().includes(q) || (p.email || "").includes(q))) push("people", p.id, p.name, p.organization || p.email, p); });
     data.companies.forEach((c) => { if (q && hit(c.name, c.domain, c.contactName, c.contactEmail, c.contactPhone)) push("companies", c.id, c.name, c.contactName || c.domain, c); });
     data.tasks.forEach((t) => { if (q && t.title.toLowerCase().includes(q)) push("tasks", t.id, t.title, "Task", t); });
@@ -452,7 +452,7 @@ export function AIAssistantDrawer({ isOpen, onClose }) {
 export function InfoModal({ onClose }) {
   const items = [
     ["Home", "Every person's task list side by side, your projects, and the meetings coming out of Google Calendar."],
-    ["Projects", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Add start, delivery, and any extra dates (wrap, premiere, a pitch) so they show on the calendar. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
+    ["Projects", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Add start, delivery, a Google Drive folder, an external link, and any extra dates (wrap, premiere, a pitch) so they show on the calendar. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
     ["Slate", "Pitch packages for each project: title, log line, synopsis, deck, trailer, and notes on option or life rights, so anyone can send a package out."],
     ["Social", "Posts and public dates on one calendar — Instagram, TikTok, a premiere, a live — so the week ahead is not a thread of DMs."],
     ["Events", "Keynotes, panels, hosting and pitches. Click a row to open the full event — date, venue, who's speaking, the linked project."],

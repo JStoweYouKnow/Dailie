@@ -14,6 +14,7 @@ import {
   ModalShell, Field, Section, Badge, InlineText, InlineSelect, MemberPicker, ConfirmButton, Avatar,
 } from "../ui/kit";
 import { visibleMeetings } from "../lib/calendarExclusions";
+import { safeHref } from "../lib/safeUrl";
 
 function ImageHeader({ project, onChange }) {
   const [busy, setBusy] = useState(false);
@@ -123,9 +124,28 @@ function sendToProductionHref(project) {
 function Row({ label, children }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--rule)" }}>
-      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", width: 130, flexShrink: 0 }}>{label}</div>
+      <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", width: 148, flexShrink: 0 }}>{label}</div>
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
     </div>
+  );
+}
+
+function LinkRow({ label, value, placeholder, onCommit }) {
+  const href = safeHref(value);
+  return (
+    <Row label={label}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <InlineText value={value} mono placeholder={placeholder} style={{ color: "var(--accent)", fontSize: 12 }}
+            onCommit={(v) => onCommit(v.trim())} />
+        </div>
+        {href && (
+          <a href={href} target="_blank" rel="noreferrer" className="md-btn md-btn-ghost" style={{ padding: 4 }} title="Open link">
+            <ExternalLink size={12} />
+          </a>
+        )}
+      </div>
+    </Row>
   );
 }
 
@@ -331,9 +351,13 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
           <input type="date" className="md-input" style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: "transparent" }}
             value={dateInputValue(project.endDate)} onChange={(e) => patchProject({ endDate: tsFromDateInput(e.target.value) })} />
         </Row>
+        <LinkRow label="GOOGLE DRIVE LINK" value={project.driveUrl} placeholder="https://drive.google.com/…"
+          onCommit={(v) => patchProject({ driveUrl: v })} />
+        <LinkRow label="EXTERNAL LINK" value={project.externalUrl} placeholder="https://"
+          onCommit={(v) => patchProject({ externalUrl: v })} />
         {extraDates.map((d) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--rule)", flexWrap: "wrap" }}>
-            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", width: 130, flexShrink: 0 }}>DATE</div>
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", width: 148, flexShrink: 0 }}>DATE</div>
             <div style={{ flex: 1, minWidth: 120 }}>
               <InlineText value={d.label} placeholder="Date name" onCommit={(v) => patchExtraDate(d.id, { label: v.trim() })} />
             </div>

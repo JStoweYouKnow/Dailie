@@ -764,6 +764,7 @@ function migrateProjects(raw, team, companies) {
       description: "", budget: "", priority: "MEDIUM", studio: "", nextStep: "", imageUrl: "",
       paymentStatus: "na", tags: [],
       contactName: "", contactEmail: "", contactPhone: "",
+      driveUrl: "", externalUrl: "",
       ...p,
       id: p.id || uid(),
       recordType,
