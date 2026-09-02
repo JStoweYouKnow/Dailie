@@ -143,7 +143,13 @@ export async function POST(request) {
   const gate = await requireApiAuth(request);
   if (gate.error) return gate.error;
   const auth = gate.auth;
-  const limited = rateLimit({ key: `google-sync:${auth.userId}`, limit: 30, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({
+    bucket: "google-sync",
+    key: `google-sync:${auth.userId}`,
+    limit: 30,
+    windowMs: 60 * 60 * 1000,
+    request,
+  });
   if (limited.error) return limited.error;
 
   let body = {};

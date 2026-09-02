@@ -1,17 +1,12 @@
 import { requireApiAuth } from "../lib/requireApiAuth.js";
+import {
+  ALLOWED_CALENDAR_HOSTS,
+  fetchCalendarFeed,
+  isAllowedCalendarHost,
+} from "../lib/calendarProxy.js";
 
 // Fetches a Google Calendar secret-iCal feed server-side. Browsers cannot read these
 // directly (no CORS headers on calendar.google.com), so the app proxies through here.
-const ALLOWED_HOSTS = [
-  "calendar.google.com",
-  "www.google.com",
-  "calendarusercontent.google.com",
-  "outlook.office365.com",
-  "outlook.live.com",
-  "p.calendarlabs.com",
-  "webcal.calendar.yahoo.com",
-];
-
 const MAX_BYTES = 4 * 1024 * 1024;
 
 function feedHint(status, target) {
@@ -56,17 +51,17 @@ export async function GET(request) {
     return Response.json({ error: "Calendar feeds must be https." }, { status: 400 });
   }
   // Restricting the host keeps this from becoming a general-purpose SSRF proxy.
-  if (!ALLOWED_HOSTS.includes(target.hostname)) {
+  if (!isAllowedCalendarHost(target.hostname)) {
     return Response.json(
-      { error: `Only calendar providers are allowed here (${ALLOWED_HOSTS.slice(0, 3).join(", ")}…).` },
+      { error: `Only calendar providers are allowed here (${ALLOWED_CALENDAR_HOSTS.slice(0, 3).join(", ")}…).` },
       { status: 400 }
     );
   }
 
   let upstream;
+  let finalUrl = target;
   try {
-    upstream = await fetch(target.toString(), {
-      redirect: "follow",
+    const fetched = await fetchCalendarFeed(target, {
       headers: {
         Accept: "text/calendar, text/plain, */*",
         // Google 401s many datacenter fetches that omit a browser-like UA.
@@ -74,12 +69,17 @@ export async function GET(request) {
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
       },
     });
+    upstream = fetched.response;
+    finalUrl = fetched.finalUrl;
   } catch (err) {
+    if (err && err.status === 400) {
+      return Response.json({ error: err.message || "Calendar redirect left the allowed hosts." }, { status: 400 });
+    }
     return Response.json({ error: "Could not reach the calendar feed." }, { status: 502 });
   }
 
   if (!upstream.ok) {
-    return Response.json({ error: feedHint(upstream.status, target) }, { status: 502 });
+    return Response.json({ error: feedHint(upstream.status, finalUrl) }, { status: 502 });
   }
 
   const text = await upstream.text();

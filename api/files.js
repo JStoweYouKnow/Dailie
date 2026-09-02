@@ -1,8 +1,8 @@
 import { del } from "@vercel/blob";
 import { putOnStore, getFromStore, redirectToBlob } from "../lib/blobStore.js";
-import { requireApiAuth, requireHouseApiAuth } from "../lib/requireApiAuth.js";
+import { requireApiAuth, requireHouseApiAuth, requireBoardMember } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
-import { isAllowedContentType, normalizeContentType } from "../lib/allowedUploads.js";
+import { resolveUploadType } from "../lib/allowedUploads.js";
 
 // Reads go through this route so the rest of the app can keep using /api/files.
 // The connected store may still be public (that mode cannot be switched after
@@ -22,7 +22,13 @@ function extensionFor(name, contentType) {
 export async function POST(request) {
   const gate = await requireApiAuth(request);
   if (gate.error) return gate.error;
-  const limited = rateLimit({ key: `files:${gate.auth.userId}`, limit: 80, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({
+    bucket: "files",
+    key: `files:${gate.auth.userId}`,
+    limit: 80,
+    windowMs: 60 * 60 * 1000,
+    request,
+  });
   if (limited.error) return limited.error;
 
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
@@ -47,10 +53,15 @@ export async function POST(request) {
     return Response.json({ error: `File is ${Math.round(body.byteLength / (1024 * 1024))} MB. The limit is 25 MB.` }, { status: 413 });
   }
 
-  const contentType = normalizeContentType(request.headers.get("content-type")) || "application/octet-stream";
-  if (!isAllowedContentType(contentType)) {
-    return Response.json({ error: "That file type is not allowed." }, { status: 415 });
+  const resolved = resolveUploadType({
+    bytes: body,
+    claimedType: request.headers.get("content-type"),
+    fileName: url.searchParams.get("name"),
+  });
+  if (resolved.error) {
+    return Response.json({ error: resolved.error }, { status: 415 });
   }
+  const contentType = resolved.contentType;
   const ext = extensionFor(url.searchParams.get("name"), contentType);
 
   try {
@@ -68,7 +79,7 @@ export async function POST(request) {
 }
 
 export async function GET(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
 
   const path = new URL(request.url).searchParams.get("path") || "";

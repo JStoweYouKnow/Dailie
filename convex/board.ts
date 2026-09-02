@@ -7,6 +7,7 @@ import {
   PUBLIC_WORKSPACE_KEYS,
   redactSettingsForViewer,
   canWriteCollection,
+  canReadCollection,
   workspaceAccess,
   pendingClerkId,
 } from "../src/lib/houseAccess.js";
@@ -91,6 +92,7 @@ const boardReturn = v.object({
       imageUrl: v.string(),
       status: v.string(),
       lastSeenAt: v.number(),
+      googleSyncConsent: v.boolean(),
     })
   ),
   settings: v.union(v.any(), v.null()),
@@ -121,7 +123,9 @@ export const get = query({
 
     const rows = await ctx.db.query("records").collect();
     const collections = {};
+    const house = isHouseEmail(identity.email);
     for (const row of rows) {
+      if (!canReadCollection(row.collection, { isHouse: house })) continue;
       (collections[row.collection] ||= []).push(redactRecordBlobUrls(row.data));
     }
 
@@ -142,6 +146,7 @@ export const get = query({
           imageUrl: m.imageUrl || "",
           status: m.status,
           lastSeenAt: m.lastSeenAt,
+          googleSyncConsent: m.googleSyncConsent === true,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       settings: settings
@@ -393,6 +398,31 @@ export const removeMember = mutation({
     }
     const existing = await memberByClerk(ctx, clerkId);
     if (existing) await ctx.db.delete(existing._id);
+    return null;
+  },
+});
+
+/** Whether this session may use the shared board — used by /api/files, not the UI. */
+export const viewerMayAccess = query({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return false;
+    const access = await accessFor(ctx, identity);
+    return access.allow === true;
+  },
+});
+
+/** Opt in (or out) of having this account's Google mail/Drive/Meet ingested. */
+export const setGoogleSyncConsent = mutation({
+  args: { consent: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, { consent }) => {
+    const identity = await requireMember(ctx);
+    const row = await memberByClerk(ctx, identity.subject);
+    if (!row) throw new Error("Not a member of this workspace.");
+    await ctx.db.patch(row._id, { googleSyncConsent: consent });
     return null;
   },
 });

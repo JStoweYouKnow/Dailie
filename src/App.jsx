@@ -10,6 +10,7 @@ import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount, useSignOut } from "./lib/auth";
 import { apiFetch } from "./lib/sessionToken";
 import { canExportBoard, exportEmailFromSession } from "./lib/tableExport";
+import { isHouseEmail } from "./lib/houseAccess";
 import { GOOGLE_CALENDAR_RESUME_KEY } from "./lib/googleSync";
 import { SHARED_ENABLED, useSharedBoard } from "./lib/convexBoard";
 import SharedBoundary from "./lib/SharedBoundary";
@@ -76,7 +77,7 @@ const NAV = [
   {
     group: "Relationships",
     items: [
-      { key: "emails", label: "Emails", icon: Mail },
+      { key: "emails", label: "Emails", icon: Mail, houseOnly: true },
       { key: "companies", label: "Companies", icon: Building2 },
       { key: "people", label: "People", icon: Contact },
       { key: "team", label: "Team", icon: UserCheck },
@@ -90,10 +91,10 @@ const NAV = [
       { key: "events", label: "Events", icon: Mic2 },
       { key: "press", label: "Press & PR", icon: Megaphone },
       { key: "social", label: "Social", icon: Share2 },
-      { key: "contracts", label: "NDAs & Contracts", icon: FileText },
-      { key: "representation", label: "Representation", icon: Briefcase },
-      { key: "legal", label: "Legal", icon: Scale },
-      { key: "finance", label: "Invoices", icon: Receipt },
+      { key: "contracts", label: "NDAs & Contracts", icon: FileText, houseOnly: true },
+      { key: "representation", label: "Representation", icon: Briefcase, houseOnly: true },
+      { key: "legal", label: "Legal", icon: Scale, houseOnly: true },
+      { key: "finance", label: "Invoices", icon: Receipt, houseOnly: true },
       { key: "timeline", label: "Timeline", icon: History },
     ],
   },
@@ -101,7 +102,7 @@ const NAV = [
 
 const ALL_TABS = NAV.flatMap((g) => g.items);
 
-function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts, mobileOpen }) {
+function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts, mobileOpen, showHouseNav }) {
   return (
     <nav className={"md-sidebar" + (collapsed ? " collapsed" : "") + (mobileOpen ? " md-sidebar--open" : "")}
       aria-label="Sections" aria-hidden={undefined}>
@@ -118,7 +119,7 @@ function Sidebar({ activeTab, onSelect, collapsed, onToggle, counts, mobileOpen 
       {NAV.map((section, i) => (
         <div key={section.group || `s-${i}`} className="md-nav-group">
           {section.group && !collapsed && <div className="md-nav-label">{section.group}</div>}
-          {section.items.map((item) => {
+          {section.items.filter((item) => showHouseNav || !item.houseOnly).map((item) => {
             const Icon = item.icon;
             const count = counts[item.key];
             return (
@@ -444,6 +445,7 @@ function Board({ store }) {
 
   const exportEmail = exportEmailFromSession({ authEnabled, account, currentUser });
   const canBackup = canExportBoard(exportEmail);
+  const showHouseNav = !authEnabled || isHouseEmail((account && account.email) || (currentUser && currentUser.email));
 
   const exportBoard = () => {
     if (!canExportBoard(exportEmailFromSession({ authEnabled, account, currentUser }))) {
@@ -466,6 +468,10 @@ function Board({ store }) {
     const ext = file.name.split(".").pop().toLowerCase();
 
     if (ext === "json") {
+      if (!canExportBoard(exportEmailFromSession({ authEnabled, account, currentUser }))) {
+        showToast("Only a studio account can restore a backup.", "error");
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
@@ -490,11 +496,17 @@ function Board({ store }) {
   };
 
   const openTab = (tab) => {
-    setActiveTab(tab);
+    const item = ALL_TABS.find((t) => t.key === tab);
+    setActiveTab(item && item.houseOnly && !showHouseNav ? "home" : tab);
     setSearchQuery("");
     // On a handheld the nav sits over the board, so picking a tab has to close it.
     setNavOpen(false);
   };
+
+  useEffect(() => {
+    const item = ALL_TABS.find((t) => t.key === activeTab);
+    if (item && item.houseOnly && !showHouseNav) setActiveTab("home");
+  }, [activeTab, showHouseNav]);
 
   const stale = useMemo(() => staleFollowUps(data), [data]);
   const openTasks = data.tasks.filter((t) => t.status !== "done").length;
@@ -585,6 +597,7 @@ function Board({ store }) {
           onToggle={() => setNavCollapsed((c) => !c)}
           counts={navCounts}
           mobileOpen={navOpen}
+          showHouseNav={showHouseNav}
         />
 
         <div className="md-main">

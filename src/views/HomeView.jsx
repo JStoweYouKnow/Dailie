@@ -208,7 +208,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
                     <div key={p.id} className="md-card" role="button" tabIndex={0}
                       onClick={() => onOpenProject(p)} onKeyDown={(e) => { if (e.key === "Enter") onOpenProject(p); }}
                       style={{ cursor: "pointer", overflow: "hidden", borderLeft: `3px solid ${type.color}` }}>
-                      {image && <div style={{ height: 80, background: `var(--panel-raised) url(${image}) center/cover no-repeat` }} />}
+                      {image && <img src={image} alt="" style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />}
                       <div style={{ padding: 13 }}>
                         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{p.title}</div>
                         <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>

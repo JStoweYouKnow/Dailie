@@ -129,7 +129,7 @@ export const ingest = internalMutation({
   },
 });
 
-async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
+async function syncAll(ctx: ActionCtx, callerEmail?: string): Promise<SyncSummary> {
   const summary: SyncSummary = { mailboxes: 0, added: 0, companies: 0, people: 0, errors: [] };
 
   const secretKey = process.env.CLERK_SECRET_KEY;
@@ -141,12 +141,14 @@ async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
     return summary;
   }
 
-  const boxes = await ctx.runQuery(internal.syncState.accountsFor, { stateKey: GMAIL_STATE });
+  const boxes = await ctx.runQuery(internal.syncState.accountsFor, {
+    stateKey: GMAIL_STATE,
+    ...(callerEmail ? { callerEmail } : {}),
+  });
   if (boxes.length === 0) {
-    // Not a failure: nobody has declared a mailbox for the workspace to read yet.
+    // Not a failure: nobody has opted in a mailbox for the workspace to read yet.
     console.log(
-      "Gmail sync: no mailbox to read. Add the address under Sync Email → which account is this from, " +
-        "and make sure that person has signed in with Google."
+      "Gmail sync: no mailbox to read. Add the address under Settings, and have that person allow Google sync."
     );
     return summary;
   }
@@ -214,6 +216,7 @@ export const syncNow = action({
     if (!isHouseEmail(identity.email)) {
       throw new Error("Only a studio account can run mailbox sync.");
     }
-    return await syncAll(ctx);
+    await ctx.runMutation(internal.syncState.grantCallerConsent, { clerkId: identity.subject });
+    return await syncAll(ctx, identity.email);
   },
 });

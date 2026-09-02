@@ -1,4 +1,6 @@
 /** Paths this app writes to blob storage. Keep in lockstep with api/files.js. */
+import { isAllowedInlineDataUrl } from "../../lib/allowedUploads.js";
+
 export const BLOB_PATH_RE = /^(documents|images|recordings|video)\/[A-Za-z0-9._~%-]+$/;
 
 export function isVercelBlobUrl(url) {
@@ -27,7 +29,7 @@ export function blobPathFromUrl(url) {
  */
 export function storedInlineUrl(url, maxLength = 250000) {
   const value = String(url || "");
-  if (!value.startsWith("data:")) return "";
+  if (!isAllowedInlineDataUrl(value)) return "";
   return value.length < maxLength ? value : "";
 }
 

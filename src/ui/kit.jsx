@@ -848,8 +848,8 @@ export function AttachmentRow({ record, onRemove, onRestore, onPurge, trashed })
       opacity: trashed ? 0.62 : 1,
     }}>
       <Paperclip size={13} color={trashed ? "var(--dim)" : "var(--accent)"} style={{ flexShrink: 0 }} />
-      {trashed ? (
-        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--dim)", textDecoration: "line-through" }}>
+      {trashed || !src ? (
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--dim)", textDecoration: trashed ? "line-through" : "none" }}>
           {record.fileName}
         </span>
       ) : (

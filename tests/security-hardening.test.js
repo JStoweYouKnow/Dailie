@@ -7,14 +7,17 @@ import {
   memberBindPlan,
   redactSettingsForViewer,
   canWriteCollection,
+  canReadCollection,
   workspaceAccess,
   pendingClerkId,
+  mailboxSyncTargets,
 } from "../src/lib/houseAccess.js";
 import { safeHref } from "../src/lib/safeUrl.js";
 import { fileSrc, imageSrc, asAttachment } from "../src/lib/files.js";
-import { blobPathFromUrl, redactRecordBlobUrls } from "../src/lib/blobUrls.js";
+import { blobPathFromUrl, redactRecordBlobUrls, storedInlineUrl } from "../src/lib/blobUrls.js";
 import { isSharedCollection } from "../src/lib/sharedBoard.js";
-import { isAllowedContentType } from "../lib/allowedUploads.js";
+import { isAllowedContentType, isAllowedInlineDataUrl, resolveUploadType } from "../lib/allowedUploads.js";
+import { calendarRedirectTarget, isAllowedCalendarHost } from "../lib/calendarProxy.js";
 import { rateLimit } from "../lib/rateLimit.js";
 import { MAX_RECIPIENTS, normalizeRecipients, normalizeSubject } from "../lib/outboundMail.js";
 
@@ -118,12 +121,12 @@ test("memberBindPlan refuses unknown non-house sign-ins and allows verified hous
     memberBindPlan({
       clerkId: "user_house",
       identityEmail: "elena@matriarch-studios.com",
-      emailVerified: true,
+      emailVerified: undefined,
       byClerk: null,
       byEmail: null,
       isHouse: true,
     }).action,
-    "create"
+    "refuse"
   );
 });
 
@@ -136,7 +139,7 @@ test("workspaceAccess is invite-only except house and existing members", () => {
   }).allow, true);
   assert.equal(workspaceAccess({
     clerkId: "user_x", isHouse: true, emailVerified: undefined, byClerk: null, byEmail: null,
-  }).allow, true);
+  }).allow, false);
   assert.equal(workspaceAccess({
     clerkId: "user_x", isHouse: true, emailVerified: false, byClerk: null, byEmail: null,
   }).allow, false);
@@ -158,6 +161,9 @@ test("canWriteCollection keeps finance and legal house-only", () => {
   assert.equal(canWriteCollection("emails", { isHouse: false }), false);
   assert.equal(canWriteCollection("legal", { isHouse: false }), false);
   assert.equal(canWriteCollection("contracts", { isHouse: true }), true);
+  assert.equal(canReadCollection("emails", { isHouse: false }), false);
+  assert.equal(canReadCollection("projects", { isHouse: false }), true);
+  assert.equal(canReadCollection("legal", { isHouse: true }), true);
 });
 
 test("lockMailboxSettings keeps contractor writes from changing synced inboxes", () => {
@@ -197,7 +203,9 @@ test("fileSrc prefers the authenticated proxy over a public blob URL", () => {
   );
   assert.equal(fileSrc({ fileUrl: "https://evil.example/x.pdf" }), "");
   assert.equal(fileSrc({ fileUrl: "javascript:alert(1)" }), "");
-  assert.match(fileSrc({ fileUrl: "data:text/plain,hello" }), /^data:/);
+  assert.equal(fileSrc({ fileUrl: "data:text/html,<script>alert(1)</script>" }), "");
+  assert.equal(fileSrc({ fileUrl: "data:image/svg+xml,<svg></svg>" }), "");
+  assert.match(fileSrc({ fileUrl: "data:application/pdf;base64,AAAA" }), /^data:/);
 });
 
 test("imageSrc prefers the stored path and never uses a public blob URL", () => {
@@ -211,6 +219,9 @@ test("imageSrc prefers the stored path and never uses a public blob URL", () => 
   );
   assert.equal(imageSrc({ imageUrl: "javascript:alert(1)" }), "");
   assert.equal(imageSrc({ imageUrl: "https://cdn.example/still.jpg" }), "https://cdn.example/still.jpg");
+  assert.equal(imageSrc({ imageUrl: 'https://cdn.example/a.jpg");opacity:0;/*' }), "");
+  assert.equal(imageSrc({ imageUrl: "data:text/html,<script>alert(1)</script>" }), "");
+  assert.match(imageSrc({ imageUrl: "data:image/png;base64,iVBORw0KGgo=" }), /^data:image\/png/);
 });
 
 test("asAttachment and redactRecordBlobUrls drop durable public blob URLs", () => {
@@ -260,11 +271,57 @@ test("isAllowedContentType rejects HTML and unmarked binaries", () => {
   assert.equal(isAllowedContentType("image/png; charset=binary"), true);
   assert.equal(isAllowedContentType("text/html"), false);
   assert.equal(isAllowedContentType("application/octet-stream"), false);
+  assert.equal(isAllowedInlineDataUrl("data:application/pdf;base64,AAAA"), true);
+  assert.equal(isAllowedInlineDataUrl("data:text/html,<h1>x</h1>"), false);
+  assert.equal(storedInlineUrl("data:text/html,<script>"), "");
 });
 
-test("rateLimit trips after the window fills", () => {
+test("resolveUploadType sniffs bytes and ignores a lying Content-Type", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.equal(resolveUploadType({ bytes: png, claimedType: "image/png", fileName: "still.png" }).contentType, "image/png");
+  assert.match(resolveUploadType({ bytes: png, claimedType: "application/pdf", fileName: "still.pdf" }).error, /match/);
+  const html = new TextEncoder().encode("<!DOCTYPE html><script>alert(1)</script>");
+  assert.match(resolveUploadType({ bytes: html, claimedType: "application/pdf", fileName: "x.pdf" }).error, /not allowed/);
+  const pdf = new TextEncoder().encode("%PDF-1.4\n%");
+  assert.equal(resolveUploadType({ bytes: pdf, claimedType: "application/pdf", fileName: "nda.pdf" }).contentType, "application/pdf");
+  const empty = new Uint8Array([0, 1, 2, 3]);
+  assert.match(resolveUploadType({ bytes: empty, claimedType: "application/pdf", fileName: "x.pdf" }).error, /recognise/);
+});
+
+test("rateLimit trips after the window fills", async () => {
   const key = `test-${Date.now()}`;
-  assert.equal(rateLimit({ key, limit: 2, windowMs: 60_000 }).error, undefined);
-  assert.equal(rateLimit({ key, limit: 2, windowMs: 60_000 }).error, undefined);
-  assert.equal(rateLimit({ key, limit: 2, windowMs: 60_000 }).error.status, 429);
+  assert.equal((await rateLimit({ key, limit: 2, windowMs: 60_000 })).error, undefined);
+  assert.equal((await rateLimit({ key, limit: 2, windowMs: 60_000 })).error, undefined);
+  assert.equal((await rateLimit({ key, limit: 2, windowMs: 60_000 })).error.status, 429);
+});
+
+test("mailboxSyncTargets requires consent on cron and only the caller on demand", () => {
+  const members = [
+    { clerkId: "user_a", email: "a@matriarch-studios.com", status: "active", googleSyncConsent: true },
+    { clerkId: "user_b", email: "b@matriarch-studios.com", status: "active", googleSyncConsent: false },
+  ];
+  const declared = ["a@matriarch-studios.com", "b@matriarch-studios.com"];
+  assert.deepEqual(
+    mailboxSyncTargets(members, { declaredEmails: declared }).map((m) => m.email),
+    ["a@matriarch-studios.com"]
+  );
+  assert.deepEqual(
+    mailboxSyncTargets(members, { declaredEmails: declared, callerEmail: "b@matriarch-studios.com" }).map((m) => m.email),
+    ["b@matriarch-studios.com"]
+  );
+});
+
+test("calendar redirects stay on the allowlist", () => {
+  assert.equal(isAllowedCalendarHost("calendar.google.com"), true);
+  assert.equal(isAllowedCalendarHost("www.google.com"), false);
+  const ok = calendarRedirectTarget(
+    new URL("https://calendar.google.com/calendar/ical/x/basic.ics"),
+    "https://calendar.google.com/calendar/ical/y/basic.ics"
+  );
+  assert.equal(ok.url.hostname, "calendar.google.com");
+  const hop = calendarRedirectTarget(
+    new URL("https://calendar.google.com/calendar/ical/x/basic.ics"),
+    "https://169.254.169.254/latest/meta-data/"
+  );
+  assert.match(hop.error, /allowed hosts/);
 });

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { mailboxSyncTargets } from "../src/lib/houseAccess.js";
 
 /**
  * Where the scheduled syncs remember what they have already read.
@@ -41,9 +42,9 @@ export const accountValidator = v.object({
  * rather than something a single sign-in implies.
  */
 export const accountsFor = internalQuery({
-  args: { stateKey: v.string() },
+  args: { stateKey: v.string(), callerEmail: v.optional(v.string()) },
   returns: v.array(accountValidator),
-  handler: async (ctx, { stateKey }) => {
+  handler: async (ctx, { stateKey, callerEmail }) => {
     const settingsRow = await ctx.db
       .query("workspace")
       .withIndex("by_key", (q) => q.eq("key", "settings"))
@@ -63,13 +64,27 @@ export const accountsFor = internalQuery({
       .unique();
     const state = ((row?.value ?? {}) as Record<string, AccountState>) || {};
 
-    return members
-      .filter((m) => m.status === "active" && !!m.clerkId && !!m.email && declared.has(m.email.toLowerCase()))
-      .map((m) => ({
-        clerkId: m.clerkId,
-        email: m.email,
-        lastRunAt: state[m.clerkId]?.lastRunAt ?? null,
-      }));
+    return mailboxSyncTargets(members, { declaredEmails: declared, callerEmail }).map((m) => ({
+      clerkId: m.clerkId,
+      email: m.email,
+      lastRunAt: state[m.clerkId]?.lastRunAt ?? null,
+    }));
+  },
+});
+
+/** Pressing on-demand sync is consent for the caller's own mailbox. */
+export const grantCallerConsent = internalMutation({
+  args: { clerkId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { clerkId }) => {
+    const member = await ctx.db
+      .query("members")
+      .withIndex("by_clerk", (q) => q.eq("clerkId", clerkId))
+      .unique();
+    if (member && member.googleSyncConsent !== true) {
+      await ctx.db.patch(member._id, { googleSyncConsent: true });
+    }
+    return null;
   },
 });
 

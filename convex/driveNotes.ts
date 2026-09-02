@@ -48,7 +48,7 @@ const summaryValidator = v.object({
   errors: v.array(v.string()),
 });
 
-async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
+async function syncAll(ctx: ActionCtx, callerEmail?: string): Promise<SyncSummary> {
   const summary: SyncSummary = { accounts: 0, filed: 0, skipped: 0, tasks: 0, errors: [] };
 
   const secretKey = process.env.CLERK_SECRET_KEY;
@@ -59,7 +59,10 @@ async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
     return summary;
   }
 
-  const accounts = await ctx.runQuery(internal.syncState.accountsFor, { stateKey: DRIVE_STATE });
+  const accounts = await ctx.runQuery(internal.syncState.accountsFor, {
+    stateKey: DRIVE_STATE,
+    ...(callerEmail ? { callerEmail } : {}),
+  });
   if (accounts.length === 0) {
     console.log(
       "Meeting notes: no account to read. Add the address under Sync Email → which account is this from, " +
@@ -176,6 +179,7 @@ export const syncNotesNow = action({
     if (!isHouseEmail(identity.email)) {
       throw new Error("Only a studio account can run Drive notes sync.");
     }
-    return await syncAll(ctx);
+    await ctx.runMutation(internal.syncState.grantCallerConsent, { clerkId: identity.subject });
+    return await syncAll(ctx, identity.email);
   },
 });

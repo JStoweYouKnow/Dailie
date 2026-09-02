@@ -38,7 +38,13 @@ Rules:
 export async function POST(request) {
   const gate = await requireApiAuth(request);
   if (gate.error) return gate.error;
-  const limited = rateLimit({ key: `draft-email:${gate.auth.userId}`, limit: 40, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({
+    bucket: "draft-email",
+    key: `draft-email:${gate.auth.userId}`,
+    limit: 40,
+    windowMs: 60 * 60 * 1000,
+    request,
+  });
   if (limited.error) return limited.error;
 
   if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_OIDC_TOKEN) {

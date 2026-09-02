@@ -69,10 +69,14 @@ function ImageHeader({ project, onChange }) {
     <div style={{ marginBottom: 18 }}>
       <div style={{
         height: 150, borderRadius: 12, border: "1px solid var(--rule)", position: "relative", overflow: "hidden",
-        background: src ? `var(--panel-raised) url(${src}) center/cover no-repeat` : "var(--panel-raised)",
+        background: "var(--panel-raised)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        {!src && <ImageIcon size={26} color="var(--dim-2)" />}
+        {src ? (
+          <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <ImageIcon size={26} color="var(--dim-2)" />
+        )}
         <div style={{ position: "absolute", right: 10, bottom: 10, display: "flex", gap: 6 }}>
           <label className="md-btn md-btn-ghost" style={{ background: "rgba(10,10,11,.7)", border: "1px solid var(--rule-bright)", cursor: "pointer", fontSize: 12, color: "var(--bone)" }}>
             {busy ? "Uploading…" : src ? "Replace image" : "Add project image"}

@@ -7,7 +7,7 @@ import { uid } from "../lib/format";
 import { ModalShell, Field, Section, Avatar, InlineText, ConfirmButton, Badge } from "../ui/kit";
 
 export default function SettingsModal({ onClose }) {
-  const { data, patch, updateSettings, currentUser, shared, pendingLocal, publishLocal, inviteMember, removeMember, showToast } = useStore();
+  const { data, patch, updateSettings, currentUser, shared, pendingLocal, publishLocal, inviteMember, removeMember, setGoogleSyncConsent, showToast } = useStore();
   const [publishing, setPublishing] = useState(false);
   const { enabled: authEnabled, account: signedIn } = useAccount();
   const signOut = useSignOut();
@@ -19,6 +19,8 @@ export default function SettingsModal({ onClose }) {
   const accounts = data.settings.emailAccounts || [];
   const canManageMailboxes = !authEnabled || isHouseEmail(signedIn && signedIn.email);
   const canManageTeam = !authEnabled || isHouseEmail(signedIn && signedIn.email);
+  const myClerkId = (signedIn && signedIn.id) || (currentUser && currentUser.id);
+  const me = (data.team || []).find((m) => m.clerkId === myClerkId);
 
   const addMember = async () => {
     if (!name.trim()) return;
@@ -178,7 +180,22 @@ export default function SettingsModal({ onClose }) {
       <Section title="GMAIL ACCOUNTS">
         <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10 }}>
           Mail from these addresses counts as sent by us. Everything else is treated as received.
+          {shared && setGoogleSyncConsent
+            ? " Syncing an inbox onto the shared board needs that person to allow it below — adding someone else's address does not read their Google until they opt in."
+            : ""}
         </div>
+        {shared && setGoogleSyncConsent && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--bone)", marginBottom: 12, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={!!(me && me.googleSyncConsent)}
+              onChange={(e) => setGoogleSyncConsent({ consent: e.target.checked }).catch((err) => {
+                if (showToast) showToast((err && err.message) || "Could not save that.", "error");
+              })}
+            />
+            <span>Allow Dailie to sync my Google mail, Drive notes, and Meet transcripts onto the shared board.</span>
+          </label>
+        )}
         {accounts.map((a) => (
           <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--rule)" }}>
             <span className="md-mono" style={{ flex: 1, fontSize: 12 }}>{a.address}</span>

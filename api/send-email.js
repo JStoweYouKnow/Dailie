@@ -10,7 +10,13 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails";
 export async function POST(request) {
   const gate = await requireHouseApiAuth(request);
   if (gate.error) return gate.error;
-  const limited = rateLimit({ key: `send-email:${gate.auth.userId}`, limit: 20, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({
+    bucket: "send-email",
+    key: `send-email:${gate.auth.userId}`,
+    limit: 20,
+    windowMs: 60 * 60 * 1000,
+    request,
+  });
   if (limited.error) return limited.error;
 
   const apiKey = process.env.RESEND_API_KEY;

@@ -60,7 +60,7 @@ function fallbackTitle(startedAt: number) {
   return `Meet call — ${when}`;
 }
 
-async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
+async function syncAll(ctx: ActionCtx, callerEmail?: string): Promise<SyncSummary> {
   const summary: SyncSummary = { accounts: 0, filed: 0, skipped: 0, tasks: 0, errors: [] };
 
   const secretKey = process.env.CLERK_SECRET_KEY;
@@ -71,7 +71,10 @@ async function syncAll(ctx: ActionCtx): Promise<SyncSummary> {
     return summary;
   }
 
-  const accounts = await ctx.runQuery(internal.syncState.accountsFor, { stateKey: MEET_STATE });
+  const accounts = await ctx.runQuery(internal.syncState.accountsFor, {
+    stateKey: MEET_STATE,
+    ...(callerEmail ? { callerEmail } : {}),
+  });
   if (accounts.length === 0) {
     console.log(
       "Meet transcripts: no account to read. Add the address under Sync Email → which account is this from, " +
@@ -213,6 +216,7 @@ export const syncTranscriptsNow = action({
     if (!isHouseEmail(identity.email)) {
       throw new Error("Only a studio account can run Meet sync.");
     }
-    return await syncAll(ctx);
+    await ctx.runMutation(internal.syncState.grantCallerConsent, { clerkId: identity.subject });
+    return await syncAll(ctx, identity.email);
   },
 });

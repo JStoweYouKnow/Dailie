@@ -1,5 +1,5 @@
 import { handleUpload } from "@vercel/blob/client";
-import { clientUploadAccess } from "../lib/blobStore.js";
+import { detectStoreAccess } from "../lib/blobStore.js";
 import { requireApiAuth } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
 import { ALLOWED_CONTENT_TYPES } from "../lib/allowedUploads.js";
@@ -17,7 +17,13 @@ const MAX_BYTES = 2 * 1024 * 1024 * 1024;
 export async function POST(request) {
   const gate = await requireApiAuth(request);
   if (gate.error) return gate.error;
-  const limited = rateLimit({ key: `blob-upload:${gate.auth.userId}`, limit: 40, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({
+    bucket: "blob-upload",
+    key: `blob-upload:${gate.auth.userId}`,
+    limit: 40,
+    windowMs: 60 * 60 * 1000,
+    request,
+  });
   if (limited.error) return limited.error;
 
   if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_OIDC_TOKEN) {
@@ -33,6 +39,7 @@ export async function POST(request) {
   }
 
   try {
+    const access = await detectStoreAccess();
     const result = await handleUpload({
       request,
       body,
@@ -43,7 +50,7 @@ export async function POST(request) {
           throw new Error("That upload path is not allowed.");
         }
         return {
-          access: clientUploadAccess(),
+          access,
           allowedContentTypes: ALLOWED_CONTENT_TYPES,
           maximumSizeInBytes: MAX_BYTES,
           addRandomSuffix: true,

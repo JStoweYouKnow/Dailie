@@ -63,6 +63,7 @@ export function useSharedBoard(account) {
   const touchMember = useMutation(api.board.touchMember);
   const inviteMember = useMutation(api.board.inviteMember);
   const removeMember = useMutation(api.board.removeMember);
+  const setGoogleSyncConsent = useMutation(api.board.setGoogleSyncConsent);
   const seed = useMutation(api.board.seed);
   const merge = useMutation(api.board.merge);
 
@@ -382,6 +383,7 @@ export function useSharedBoard(account) {
     patch, add, update, remove, updateSettings, updateProject,
     inviteMember: invite,
     removeMember: removeDirectoryMember,
+    setGoogleSyncConsent,
     setData: () => { /* the shared board is the source of truth */ },
     persist: () => {},
     reload: async () => data,

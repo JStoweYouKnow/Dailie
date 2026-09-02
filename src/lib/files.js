@@ -6,6 +6,7 @@
  */
 import { apiFetch, sessionHeaders } from "./sessionToken.js";
 import { blobPathFromUrl, isVercelBlobUrl, storedInlineUrl } from "./blobUrls.js";
+import { isAllowedContentType, isAllowedInlineDataUrl } from "../../lib/allowedUploads.js";
 
 /**
  * `asAttachment` refuses to keep a data URL longer than this, so that a stored record
@@ -29,12 +30,16 @@ export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 /** Anything above this skips the function entirely and streams straight to storage. */
 const DIRECT_THRESHOLD = 4 * 1024 * 1024;
 
+function hasUnsafeUrlChars(url) {
+  return /[\s"'()\\<>]/.test(String(url || ""));
+}
+
 export function fileSrc(record) {
   if (!record) return "";
   const path = record.filePath || blobPathFromUrl(record.fileUrl);
   if (path) return `/api/files?path=${encodeURIComponent(path)}`;
   const url = record.fileUrl || "";
-  if (url.startsWith("data:")) return url;
+  if (url.startsWith("data:")) return isAllowedInlineDataUrl(url) ? url : "";
   return "";
 }
 
@@ -154,9 +159,14 @@ export function imageSrc(record) {
   const path = record.imagePath || blobPathFromUrl(record.imageUrl);
   if (path) return `/api/files?path=${encodeURIComponent(path)}`;
   const url = record.imageUrl || "";
-  if (url.startsWith("data:")) return url;
+  if (url.startsWith("data:")) {
+    if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(url)) return "";
+    if (hasUnsafeUrlChars(url.slice(0, 64))) return "";
+    return url;
+  }
   if (isVercelBlobUrl(url)) return "";
-  return /^(https?:)/i.test(url) ? url : "";
+  if (!/^(https?:)/i.test(url) || hasUnsafeUrlChars(url)) return "";
+  return url;
 }
 
 function readAsDataUrl(file) {
@@ -190,8 +200,14 @@ export async function uploadFile(file, kind = "documents", onProgress) {
 
   // Used when the store simply is not there. Small files still attach, inline.
   const inline = async (reason) => {
+    if (!isAllowedContentType(file.type)) {
+      throw new Error(`${file.name} cannot be attached as that file type.`);
+    }
     if (file.size > INLINE_LIMIT) throw new Error(reason);
     const fileUrl = await readAsDataUrl(file);
+    if (!isAllowedInlineDataUrl(fileUrl)) {
+      throw new Error(`${file.name} cannot be attached as that file type.`);
+    }
     // Belt and braces: a file just under the byte limit whose data URL still comes out
     // too long would otherwise be stripped later and attach as a dead row.
     if (String(fileUrl).length >= INLINE_URL_MAX) throw new Error(reason);
@@ -205,14 +221,23 @@ export async function uploadFile(file, kind = "documents", onProgress) {
     try {
       const { upload } = await import("@vercel/blob/client");
       const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "-").slice(-60) || "upload";
-      const result = await upload(`${kind}/${safeName}`, file, {
-        access: import.meta.env.VITE_BLOB_ACCESS === "private" ? "private" : "public",
+      const preferred = import.meta.env.VITE_BLOB_ACCESS === "public" ? "public" : "private";
+      const headers = await sessionHeaders();
+      const send = (access) => upload(`${kind}/${safeName}`, file, {
+        access,
         handleUploadUrl: "/api/blob-upload",
-        headers: await sessionHeaders(),
+        headers,
         multipart: true,
         contentType: meta.fileType,
         onUploadProgress: onProgress ? ({ percentage }) => onProgress(percentage) : undefined,
       });
+      let result;
+      try {
+        result = await send(preferred);
+      } catch (firstErr) {
+        if (preferred === "private") result = await send("public");
+        else throw firstErr;
+      }
       return { ...meta, filePath: result.pathname, fileUrl: "" };
     } catch (err) {
       // Fall through only if the file could still go the buffered way.

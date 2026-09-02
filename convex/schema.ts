@@ -35,6 +35,7 @@ export default defineSchema({
     status: v.string(),
     firstSeenAt: v.number(),
     lastSeenAt: v.number(),
+    googleSyncConsent: v.optional(v.boolean()),
   })
     .index("by_clerk", ["clerkId"])
     .index("by_email", ["email"]),
@@ -44,5 +45,11 @@ export default defineSchema({
     key: v.string(),
     value: v.any(),
     updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  /** Per-user API windows. Vercel isolates cannot share memory, so spendy /api routes call consume. */
+  rateLimits: defineTable({
+    key: v.string(),
+    hits: v.array(v.number()),
   }).index("by_key", ["key"]),
 });

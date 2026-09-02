@@ -14,6 +14,7 @@ import type * as crons from "../crons.js";
 import type * as driveNotes from "../driveNotes.js";
 import type * as gmail from "../gmail.js";
 import type * as meet from "../meet.js";
+import type * as rateLimit from "../rateLimit.js";
 import type * as syncState from "../syncState.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   driveNotes: typeof driveNotes;
   gmail: typeof gmail;
   meet: typeof meet;
+  rateLimit: typeof rateLimit;
   syncState: typeof syncState;
 }>;
 

@@ -51,7 +51,7 @@ function ProjectCard({ project, onOpen, memberName, companyName }) {
         onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
         style={{ cursor: "pointer" }}>
         {image && (
-          <div style={{ height: 92, background: `var(--panel-raised) url(${image}) center/cover no-repeat` }} />
+          <img src={image} alt="" style={{ width: "100%", height: 92, objectFit: "cover", display: "block" }} />
         )}
         <div style={{ padding: "13px 13px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6, minWidth: 0 }}>
@@ -237,7 +237,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     { key: "title", label: "PROJECT", cellStyle: { minWidth: 210 }, render: (p) => (
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {imageSrc(p) ? (
-          <div style={{ width: 34, height: 24, borderRadius: 4, background: `var(--panel-raised) url(${imageSrc(p)}) center/cover`, flexShrink: 0 }} />
+          <img src={imageSrc(p)} alt="" style={{ width: 34, height: 24, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
         ) : (
           <div style={{ width: 34, height: 24, borderRadius: 4, background: "var(--panel-raised)", flexShrink: 0 }} />
         )}

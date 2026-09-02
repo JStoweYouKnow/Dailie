@@ -21,6 +21,11 @@ export function canWriteCollection(collection, { isHouse } = {}) {
   return !HOUSE_ONLY_COLLECTIONS.includes(collection);
 }
 
+/** Same list as writes: contractors must not read mail, legal, or finance. */
+export function canReadCollection(collection, { isHouse } = {}) {
+  return canWriteCollection(collection, { isHouse });
+}
+
 /** Placeholder clerkId on a directory row that has been invited but has not signed in. */
 export function pendingClerkId(email) {
   return `pending:${String(email || "").trim().toLowerCase()}`;
@@ -32,9 +37,9 @@ export function isUnboundClerkId(clerkId) {
 }
 
 export function emailLooksVerified(emailVerified) {
-  // Clerk's Convex JWT sometimes omits the claim. Treat missing as verified;
-  // only refuse when the token explicitly says the address is not verified.
-  return emailVerified !== false;
+  // Existing members still get in via byClerk when the claim is missing.
+  // House auto-join and invite bind require an explicit true.
+  return emailVerified === true;
 }
 
 /**
@@ -113,4 +118,23 @@ export function memberBindPlan({ clerkId, identityEmail, emailVerified, byClerk,
     return { action: "refuse", reason: "Verify your studio email to join." };
   }
   return { action: "refuse", reason: "This workspace is invite-only." };
+}
+
+/**
+ * Whose declared mailboxes a cron or on-demand sync may actually read.
+ * Cron requires googleSyncConsent on the member row. On-demand (callerEmail set)
+ * only reads that person's mailbox — pressing sync is consent for yourself.
+ */
+export function mailboxSyncTargets(members, { declaredEmails, callerEmail } = {}) {
+  const declared = declaredEmails instanceof Set
+    ? declaredEmails
+    : new Set((declaredEmails || []).map((e) => String(e || "").trim().toLowerCase()).filter(Boolean));
+  const caller = String(callerEmail || "").trim().toLowerCase();
+  return (members || []).filter((m) => {
+    if (!m || m.status !== "active" || !m.clerkId || !m.email) return false;
+    const email = String(m.email).trim().toLowerCase();
+    if (!declared.has(email)) return false;
+    if (caller) return email === caller;
+    return m.googleSyncConsent === true;
+  });
 }
