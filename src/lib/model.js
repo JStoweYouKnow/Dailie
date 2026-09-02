@@ -1329,6 +1329,100 @@ export function mandateLabel(mandate, companies) {
   return (company && company.name) || mandate.name || "Untitled";
 }
 
+const MANDATE_SECTION_HEADINGS = [
+  { key: "objective", re: /^objective\b/i },
+  { key: "audience", re: /^(target audience|audience)\b/i },
+  { key: "genres", re: /^genres?\b/i },
+  { key: "formats", re: /^(storytelling formats|formats?)\b/i },
+  { key: "why", re: /^why\b/i },
+  { key: "about", re: /^about\b/i },
+];
+
+function cleanMandateLine(line) {
+  return String(line || "")
+    .replace(/^#+\s*/, "")
+    .replace(/^\*\*(.+)\*\*$/, "$1")
+    .replace(/^[-*•]\s+/, "")
+    .trim();
+}
+
+function clampCopy(text, max) {
+  const value = String(text || "").replace(/\s+/g, " ").trim();
+  if (!value || value.length <= max) return value;
+  return `${value.slice(0, max).replace(/\s+\S*$/, "")}…`;
+}
+
+function firstSentences(text, count) {
+  const parts = String(text || "").replace(/\n+/g, " ").match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+  return parts.slice(0, count).join(" ").trim();
+}
+
+/**
+ * A pasted buyer brief is often a full document. The slate card should show
+ * the headline, what they want, who it is for, and the genres — not the wall of text.
+ */
+export function summarizeMandate(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!raw) {
+    return { long: false, headline: "", objective: "", audience: "", genres: [], formats: "" };
+  }
+
+  const lines = raw.split("\n").map(cleanMandateLine);
+  const sections = new Map();
+  const lead = [];
+  let current = "lead";
+
+  for (const line of lines) {
+    if (!line) continue;
+    let matched = null;
+    for (const heading of MANDATE_SECTION_HEADINGS) {
+      const hit = line.match(heading.re);
+      if (hit) {
+        matched = heading;
+        current = heading.key;
+        if (!sections.has(current)) sections.set(current, []);
+        const rest = line.slice(hit[0].length).replace(/^[:.\s-]+/, "").trim();
+        if (rest) sections.get(current).push(rest);
+        break;
+      }
+    }
+    if (matched) continue;
+    if (current === "lead") lead.push(line);
+    else sections.get(current).push(line);
+  }
+
+  const headline = lead[0] || "";
+  const leadBody = lead.slice(1).join(" ").trim();
+  const objective = (sections.get("objective") || []).join(" ").trim()
+    || leadBody
+    || (raw.length <= 320 ? raw.replace(/\n+/g, " ").trim() : firstSentences(raw, 2));
+
+  const audience = (sections.get("audience") || []).join(" ").replace(/^primary:\s*/i, "").trim();
+
+  const genres = [];
+  for (const line of (sections.get("genres") || [])) {
+    if (line.length > 90 && /[.!?]$/.test(line)) continue;
+    if (line.includes(",") && line.length > 48) {
+      line.split(/\s*,\s*/).forEach((bit) => {
+        const item = bit.trim();
+        if (item && item.length <= 48) genres.push(item);
+      });
+    } else if (line.length <= 70) {
+      genres.push(line);
+    }
+  }
+
+  const headingCount = [...sections.keys()].filter((key) => (sections.get(key) || []).length).length;
+  return {
+    long: raw.length > 280 || raw.split("\n").filter(Boolean).length > 6 || headingCount >= 2,
+    headline,
+    objective: clampCopy(objective, 280),
+    audience: clampCopy(audience, 140),
+    genres: [...new Set(genres)].slice(0, 10),
+    formats: clampCopy((sections.get("formats") || []).join(" "), 180),
+  };
+}
+
 export function pitchLabel(pitch, companies, mandates) {
   if (!pitch) return "";
   if (pitch.companyId) {

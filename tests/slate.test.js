@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   normalizeData, makeSlatePackage, makeMandate, makePitch,
   SLATE_STATUSES, resolvedSlateStatus, mandateLabel, pitchLabel, mandateFitReason,
+  summarizeMandate,
 } from "../src/lib/model.js";
 import { isSharedCollection } from "../src/lib/sharedBoard.js";
 import { isAllowedContentType } from "../lib/allowedUploads.js";
@@ -73,6 +74,42 @@ test("mandate fit reason needs overlapping words from the IP and the mandate", (
   const hit = mandateFitReason(mandate, { title: "Chomper Romp", description: "Family animation about a bright character" }, null);
   assert.match(hit, /mandate/);
   assert.equal(mandateFitReason(mandate, { title: "Obsidian Echo", description: "Deep sea thriller" }, null), null);
+});
+
+test("a long mandate brief collapses to a summary card", () => {
+  const brief = `Roku | AI Gen Mandate | Long Form | 2026
+
+About Roku
+Roku is a leading TV streaming platform.
+
+Objective
+Develop series (~10 min) and films (~30 min) leveraging AI to fill a creative void.
+
+Target Audience
+Primary: Broad Adult and Teen audiences.
+
+Genres of Interest (High-Concept & World-Building)
+Fantasy & Romantasy
+Anime + YA Animation
+Sci-Fi
+Westerns
+
+Storytelling Formats That Lean Into AI's Innovation
+AI-Native formats and quick-turn documentaries.
+`;
+  const summary = summarizeMandate(brief);
+  assert.equal(summary.long, true);
+  assert.match(summary.headline, /Roku/);
+  assert.match(summary.objective, /series/);
+  assert.match(summary.audience, /Adult/);
+  assert.ok(summary.genres.includes("Sci-Fi"));
+  assert.ok(summary.genres.includes("Fantasy & Romantasy"));
+  assert.match(summary.formats, /AI-Native/);
+
+  const short = summarizeMandate("Family animation shorts with a toyetic hook.");
+  assert.equal(short.long, false);
+  assert.match(short.objective, /Family animation/);
+  assert.deepEqual(short.genres, []);
 });
 
 test("mandates keep uploaded files", () => {

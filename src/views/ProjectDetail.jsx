@@ -6,7 +6,7 @@ import {
   CONTRACT_STATUSES, INVOICE_STATUSES, SLATE_STATUSES, SOCIAL_STATUSES, EVENT_KINDS, EVENT_STATUSES,
   PITCH_SOURCES, PITCH_STATUSES, MANDATE_KINDS, lookupLabel, lookupColor, makeTask, makePitch,
   makeProjectDate, PROJECT_DATE_SUGGESTIONS, projectOwnerIds, withProjectOwners, normalizeProjectDates,
-  pitchLabel, mandateLabel, projectPitchSuggestions, resolvedSlateStatus,
+  pitchLabel, mandateLabel, projectPitchSuggestions, resolvedSlateStatus, summarizeMandate,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile, deleteFile, listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment, SLATE_FILE_ACCEPT } from "../lib/files";
@@ -645,7 +645,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
               {mandate && mandate.mandate ? (
                 <div style={{ fontSize: 12, color: "var(--dim-2)", marginTop: 6, lineHeight: 1.5 }}>
                   <span className="md-mono" style={{ fontSize: 10, letterSpacing: ".1em" }}>THEIR MANDATE · </span>
-                  {mandate.mandate}
+                  {summarizeMandate(mandate.mandate).objective || mandate.mandate}
                 </div>
               ) : null}
             </div>
@@ -667,7 +667,9 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
                   </div>
                   <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 4, lineHeight: 1.5 }}>{reason}</div>
                   {mandate.mandate ? (
-                    <div style={{ fontSize: 12, color: "var(--dim-2)", marginTop: 4, lineHeight: 1.5 }}>{mandate.mandate}</div>
+                    <div style={{ fontSize: 12, color: "var(--dim-2)", marginTop: 4, lineHeight: 1.5 }}>
+                      {summarizeMandate(mandate.mandate).objective || mandate.mandate}
+                    </div>
                   ) : null}
                 </div>
                 <button className="md-btn" style={{ flexShrink: 0, fontSize: 12 }}

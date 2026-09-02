@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Plus, Presentation, ExternalLink, Radio, Send } from "lucide-react";
+import { Plus, Presentation, ExternalLink, Radio, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   SLATE_STATUSES, MANDATE_KINDS, PITCH_SOURCES, PITCH_STATUSES,
   lookupColor, lookupLabel, makeSlatePackage, makeMandate, makePitch,
   mandateLabel, pitchLabel, mandateFitReason, suggestMandateFits, resolvedSlateStatus,
-  stageInfo,
+  stageInfo, summarizeMandate, HUE,
 } from "../lib/model";
 import {
   listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment,
@@ -333,33 +333,100 @@ function NewPitchModal({ onClose, defaultProjectId }) {
 
 function MandateCard({ mandate }) {
   const { data, update, remove } = useStore();
+  const [briefOpen, setBriefOpen] = useState(false);
   const label = mandateLabel(mandate, data.companies);
   const files = listAttachments(mandate);
+  const summary = summarizeMandate(mandate.mandate);
+  const name = (mandate.name || "").trim() || label;
+  const headlineBits = (summary.headline || "").split("|").map((bit) => bit.trim()).filter(Boolean);
+  const subtitle = headlineBits.length > 1
+    ? headlineBits.filter((bit) => bit.toLowerCase() !== name.toLowerCase()).join(" · ")
+    : "";
 
   return (
-    <div style={{ padding: 16, border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 12 }}>
+    <div className="md-card" style={{ padding: 16, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
         <Radio size={14} color="var(--accent)" style={{ marginTop: 4, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <InlineText value={mandate.name} style={{ fontSize: 16, fontWeight: 700 }} placeholder={label || "Add a name"}
             onCommit={(v) => update("mandates", mandate.id, { name: v })} />
-          {mandate.companyId && (
+          {subtitle ? (
+            <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", marginTop: 4, letterSpacing: ".02em" }}>{subtitle}</div>
+          ) : mandate.companyId ? (
             <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 3 }}>
               {((data.companies.find((c) => c.id === mandate.companyId) || {}).name) || "Company"}
             </div>
-          )}
+          ) : null}
         </div>
         <InlineSelect fit value={mandate.kind} options={MANDATE_KINDS} color={lookupColor(MANDATE_KINDS, mandate.kind)}
           onCommit={(v) => update("mandates", mandate.id, { kind: v })} />
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("mandates", mandate.id)} />
       </div>
+
+      {summary.objective ? (
+        <div style={{ marginBottom: 14 }}>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>WHAT THEY WANT</div>
+          {summary.long ? (
+            <div style={{ fontSize: 13, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+              {summary.objective}
+            </div>
+          ) : (
+            <InlineText value={mandate.mandate} multiline placeholder="What they are looking for…"
+              onCommit={(v) => update("mandates", mandate.id, { mandate: v })} />
+          )}
+        </div>
+      ) : null}
+
+      {(summary.audience || summary.genres.length > 0) ? (
+        <div style={{ display: "grid", gridTemplateColumns: summary.audience && summary.genres.length ? "minmax(0, 1fr) minmax(0, 1.4fr)" : "1fr", gap: 14, marginBottom: 14 }}>
+          {summary.audience ? (
+            <div>
+              <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>AUDIENCE</div>
+              <div style={{ fontSize: 13, lineHeight: 1.4 }}>{summary.audience}</div>
+            </div>
+          ) : null}
+          {summary.genres.length > 0 ? (
+            <div>
+              <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>GENRES</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {summary.genres.map((genre) => (
+                  <Badge key={genre} label={genre} color={HUE.sand} solid />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {summary.formats ? (
+        <div style={{ marginBottom: 14 }}>
+          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>FORMATS</div>
+          <div style={{ fontSize: 13, lineHeight: 1.45, color: "var(--dim-2)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {summary.formats}
+          </div>
+        </div>
+      ) : null}
+
+      {summary.long && mandate.mandate ? (
+        <button className="md-btn md-btn-ghost" style={{ fontSize: 12, marginBottom: briefOpen ? 10 : 14 }}
+          onClick={() => setBriefOpen((open) => !open)}>
+          {briefOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          {briefOpen ? "Hide brief" : "View brief"}
+        </button>
+      ) : null}
+      {(briefOpen || !mandate.mandate) && (
+        <div style={{ marginBottom: 14 }}>
+          {!mandate.mandate && (
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>MANDATE</div>
+          )}
+          <InlineText boxed multiline value={mandate.mandate} placeholder="What they are looking for…"
+            onCommit={(v) => update("mandates", mandate.id, { mandate: v })} />
+        </div>
+      )}
+
       <Field label="COMPANY ON THE BOARD">
         <CompanySelect native value={mandate.companyId || ""} placeholder="Not on the board"
           onCommit={(id) => update("mandates", mandate.id, { companyId: id || null })} />
-      </Field>
-      <Field label="MANDATE">
-        <InlineText value={mandate.mandate} multiline placeholder="What they are looking for…"
-          onCommit={(v) => update("mandates", mandate.id, { mandate: v })} />
       </Field>
       <Field label="NOTES">
         <InlineText value={mandate.notes} multiline placeholder="Who we heard it from…"
