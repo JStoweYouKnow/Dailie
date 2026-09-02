@@ -298,7 +298,7 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, wr
   );
 }
 
-export function InlineSelect({ value, options, onCommit, placeholder = "—", color }) {
+export function InlineSelect({ value, options, onCommit, placeholder = "—", color, fit }) {
   const selected = options.find((o) => o.key === value || String(o.key) === String(value));
   const label = selected ? selected.label : placeholder;
   return (
@@ -308,11 +308,13 @@ export function InlineSelect({ value, options, onCommit, placeholder = "—", co
       onChange={(e) => onCommit(e.target.value || null)}
       onClick={(e) => e.stopPropagation()}
       title={typeof label === "string" ? label : undefined}
-      // Stay inside the cell: native selects size to the selected option, which is
-      // how long project names used to spill into the next field.
+      // Table cells need width 100% so a long option cannot spill the next column.
+      // Card headers sit in a flex row with a title — size to the label or the
+      // select paints over the name.
       style={{
         padding: "4px 22px 4px 7px", fontSize: 12, display: "block",
-        width: "100%", maxWidth: "100%", minWidth: 0, cursor: "pointer",
+        width: fit ? "auto" : "100%", maxWidth: "100%", minWidth: 0, cursor: "pointer",
+        flex: fit ? "0 0 auto" : undefined, alignSelf: fit ? "center" : undefined,
         background: "transparent", border: "1px solid transparent", borderRadius: 6,
         color: color || "var(--bone)", fontWeight: 500,
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",

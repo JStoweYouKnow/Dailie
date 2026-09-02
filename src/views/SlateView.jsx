@@ -334,7 +334,7 @@ function MandateCard({ mandate }) {
             </div>
           )}
         </div>
-        <InlineSelect value={mandate.kind} options={MANDATE_KINDS} color={lookupColor(MANDATE_KINDS, mandate.kind)}
+        <InlineSelect fit value={mandate.kind} options={MANDATE_KINDS} color={lookupColor(MANDATE_KINDS, mandate.kind)}
           onCommit={(v) => update("mandates", mandate.id, { kind: v })} />
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("mandates", mandate.id)} />
       </div>
@@ -376,7 +376,7 @@ function PitchRow({ pitch }) {
             ) : null}
           </div>
         </div>
-        <InlineSelect value={pitch.status} options={PITCH_STATUSES} color={lookupColor(PITCH_STATUSES, pitch.status)}
+        <InlineSelect fit value={pitch.status} options={PITCH_STATUSES} color={lookupColor(PITCH_STATUSES, pitch.status)}
           onCommit={(v) => update("pitches", pitch.id, {
             status: v,
             pitchedAt: v === "pitched" && !pitch.pitchedAt ? Date.now() : pitch.pitchedAt,
@@ -418,7 +418,7 @@ function PackageCard({ pkg, projectTitle }) {
             <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 3 }}>{projectTitle}</div>
           )}
         </div>
-        <InlineSelect value={status} options={SLATE_STATUSES} color={lookupColor(SLATE_STATUSES, status)}
+        <InlineSelect fit value={status} options={SLATE_STATUSES} color={lookupColor(SLATE_STATUSES, status)}
           onCommit={(v) => update("slate", pkg.id, { status: v })} />
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("slate", pkg.id)} />
       </div>
