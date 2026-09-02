@@ -745,10 +745,10 @@ export default function SlateView({ searchQuery }) {
           </div>
 
           <div style={{ marginBottom: 28 }}>
-            <BucketHeading>PITCH PACKAGE</BucketHeading>
+            <BucketHeading>Create New Pitch Package</BucketHeading>
             {groups.unlinked.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--dim)", padding: "8px 0 4px" }}>
-                Uploaded packages that are not linked to a project land here — labelled Pitch package, not Sent.
+                Uploaded packages that are not linked to a project land here — labelled Create New Pitch Package, not Sent.
               </div>
             ) : groups.unlinked.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
           </div>

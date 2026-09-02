@@ -467,7 +467,7 @@ export function InfoModal({ onClose }) {
   const items = [
     ["Home", "Every person's task list side by side, your projects, and the meetings coming out of Google Calendar."],
     ["Deals", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Add start, delivery, a Google Drive folder, an external link, and any extra dates (wrap, premiere, a pitch) so they show on the calendar. Everything on a deal is editable in place: owner, team, image, next step, custom fields."],
-    ["Slate", "Mandates from streamers and studios, pitch packages (title, log line, synopsis, deck, trailer, Drive folder, rights notes), and who each IP has been pitched to — including whether the fit came from their mandate, an AI assessment, or both. Uploaded packages that are not linked to a project sit under Pitch package, not Sent."],
+    ["Slate", "Mandates from streamers and studios, pitch packages (title, log line, synopsis, deck, trailer, Drive folder, rights notes), and who each IP has been pitched to — including whether the fit came from their mandate, an AI assessment, or both. Uploaded packages that are not linked to a project sit under Create New Pitch Package, not Sent."],
     ["Social", "Posts and public dates on one calendar — Instagram, TikTok, a premiere, a live — so the week ahead is not a thread of DMs."],
     ["Events", "Keynotes, panels, hosting and pitches. Click a row to open the full event — date, venue, who's speaking, the linked project."],
     ["Tasks & Notes", "Shared, assignable tasks and notes. Call and meeting action items land here automatically."],
