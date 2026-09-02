@@ -18,6 +18,7 @@ import { blobPathFromUrl, redactRecordBlobUrls, storedInlineUrl } from "../src/l
 import { isSharedCollection } from "../src/lib/sharedBoard.js";
 import { isAllowedContentType, isAllowedInlineDataUrl, resolveUploadType } from "../lib/allowedUploads.js";
 import { calendarRedirectTarget, isAllowedCalendarHost } from "../lib/calendarProxy.js";
+import { jwtFromClerkResponse, convexJwtForRequest } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
 import { MAX_RECIPIENTS, normalizeRecipients, normalizeSubject } from "../lib/outboundMail.js";
 
@@ -324,4 +325,44 @@ test("calendar redirects stay on the allowlist", () => {
     "https://169.254.169.254/latest/meta-data/"
   );
   assert.match(hop.error, /allowed hosts/);
+});
+
+test("jwtFromClerkResponse reads Clerk template tokens", () => {
+  assert.equal(jwtFromClerkResponse(" eyJ.x.y "), "eyJ.x.y");
+  assert.equal(jwtFromClerkResponse({ jwt: "eyJ.a.b" }), "eyJ.a.b");
+  assert.equal(jwtFromClerkResponse({ token: "eyJ.c.d" }), "eyJ.c.d");
+  assert.equal(jwtFromClerkResponse(null), "");
+});
+
+test("convexJwtForRequest mints a Convex JWT from the cookie session", async () => {
+  const clerk = {
+    sessions: {
+      getToken: async (sessionId, template) => {
+        assert.equal(sessionId, "sess_cookie_img");
+        assert.equal(template, "convex");
+        return { jwt: "minted.convex.jwt" };
+      },
+    },
+  };
+  const request = new Request("https://example.test/api/files?path=images%2Fstill.jpg");
+  const token = await convexJwtForRequest(request, clerk, { sessionId: "sess_cookie_img" });
+  assert.equal(token, "minted.convex.jwt");
+});
+
+test("convexJwtForRequest falls back to Bearer when minting is unavailable", async () => {
+  const request = new Request("https://example.test/api/files", {
+    headers: { authorization: "Bearer from-header" },
+  });
+  const token = await convexJwtForRequest(request, null, {});
+  assert.equal(token, "from-header");
+
+  const throwing = {
+    sessions: {
+      getToken: async () => {
+        throw new Error("template missing");
+      },
+    },
+  };
+  const fallback = await convexJwtForRequest(request, throwing, { sessionId: "sess_mint_fail" });
+  assert.equal(fallback, "from-header");
 });
