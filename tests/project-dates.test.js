@@ -35,6 +35,18 @@ test("normalize fills an empty dates list without wiping other project fields", 
   assert.equal(data.projects[0].nextStep, "Call the agent");
   assert.equal(data.projects[0].driveUrl, "");
   assert.equal(data.projects[0].externalUrl, "");
+  assert.deepEqual(data.projects[0].attachments, []);
+});
+
+test("a project keeps uploaded files", () => {
+  const data = normalizeData({
+    projects: [{
+      id: "proj-x",
+      title: "Echo",
+      attachments: [{ fileName: "treatment.pdf" }],
+    }],
+  });
+  assert.equal(data.projects[0].attachments[0].fileName, "treatment.pdf");
 });
 
 test("a project keeps a Drive folder and an external link", () => {

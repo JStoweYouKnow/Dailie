@@ -266,7 +266,10 @@ export function CommandPalette({ onClose, onSelect }) {
     });
     (data.pitches || []).forEach((p) => {
       const who = pitchLabel(p, data.companies, data.mandates);
-      if (q && hit(p.name, p.reason, who)) push("slate", p.id, who || "Pitched to", "Pitched to", p, "pitch");
+      const projectTitle = ((data.projects || []).find((x) => x.id === p.projectId) || {}).title || "";
+      if (q && hit(p.name, p.reason, who, projectTitle)) {
+        push("slate", p.id, projectTitle ? `${projectTitle} → ${who || "Pitched to"}` : (who || "Pitched to"), "Pitch", p, "pitch");
+      }
     });
     (data.social || []).forEach((s) => { if (q && hit(s.title, s.copy, s.venue, s.notes)) push("social", s.id, s.title || "Social", s.kind === "event" ? "Social event" : "Social post", s); });
     (data.legal || []).forEach((l) => {
@@ -287,7 +290,7 @@ export function CommandPalette({ onClose, onSelect }) {
     (data.notes || []).forEach((n) => { if (hit(n.title, n.body)) push("tasks", n.id, n.title || "Note", "Note", n, "note"); });
 
     const tabs = [
-      ["home", "Home dashboard"], ["projects", "Projects"], ["slate", "Slate"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
+      ["home", "Home dashboard"], ["projects", "Deals"], ["slate", "Slate"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
       ["meetings", "Meetings"], ["calls", "Calls"], ["events", "Events & Speaking"], ["emails", "Emails"], ["companies", "Companies"],
       ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"],
       ["press", "Press & PR"], ["social", "Social calendar"], ["contracts", "NDAs & Contracts"],
@@ -463,7 +466,7 @@ export function AIAssistantDrawer({ isOpen, onClose }) {
 export function InfoModal({ onClose }) {
   const items = [
     ["Home", "Every person's task list side by side, your projects, and the meetings coming out of Google Calendar."],
-    ["Projects", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Add start, delivery, a Google Drive folder, an external link, and any extra dates (wrap, premiere, a pitch) so they show on the calendar. Everything on a project is editable in place: owner, team, image, next step, custom fields."],
+    ["Deals", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Add start, delivery, a Google Drive folder, an external link, and any extra dates (wrap, premiere, a pitch) so they show on the calendar. Everything on a deal is editable in place: owner, team, image, next step, custom fields."],
     ["Slate", "Mandates from streamers and studios, pitch packages (title, log line, synopsis, deck, trailer, Drive folder, rights notes), and who each IP has been pitched to — including whether the fit came from their mandate, an AI assessment, or both. Uploaded packages that are not linked to a project sit under Pitch package, not Sent."],
     ["Social", "Posts and public dates on one calendar — Instagram, TikTok, a premiere, a live — so the week ahead is not a thread of DMs."],
     ["Events", "Keynotes, panels, hosting and pitches. Click a row to open the full event — date, venue, who's speaking, the linked project."],

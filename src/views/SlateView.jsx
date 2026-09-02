@@ -5,6 +5,7 @@ import {
   SLATE_STATUSES, MANDATE_KINDS, PITCH_SOURCES, PITCH_STATUSES,
   lookupColor, lookupLabel, makeSlatePackage, makeMandate, makePitch,
   mandateLabel, pitchLabel, mandateFitReason, suggestMandateFits, resolvedSlateStatus,
+  stageInfo,
 } from "../lib/model";
 import {
   listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment,
@@ -67,7 +68,9 @@ function LinkField({ label, value, onCommit, placeholder }) {
 
 function NewMandateModal({ onClose }) {
   const { data, add, currentUser } = useStore();
+  const drafts = useDraftUploads();
   const [form, setForm] = useState({ kind: "streamer", name: "", companyId: "", mandate: "", notes: "" });
+  const [files, setFiles] = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = () => {
@@ -81,7 +84,9 @@ function NewMandateModal({ onClose }) {
       mandate: form.mandate.trim(),
       notes: form.notes.trim(),
       ownerId: (currentUser && currentUser.id) || null,
+      attachments: files,
     }));
+    drafts.markSaved();
     onClose();
   };
 
@@ -109,6 +114,15 @@ function NewMandateModal({ onClose }) {
       </Field>
       <Field label="NOTES">
         <textarea className="md-textarea" rows={3} value={form.notes} onChange={set("notes")} placeholder="Who we heard it from, expiry, anything else." />
+      </Field>
+      <Field label="FILES" hint="PDF of the brief, a deck they sent, an email export.">
+        <AttachmentList
+          items={files}
+          accept={SLATE_FILE_ACCEPT}
+          label="Add files"
+          onAdd={(file) => { if (drafts.keep(file)) setFiles((list) => [...list, file]); }}
+          onRemove={(item) => { drafts.drop(item); setFiles((list) => list.filter((f) => f.id !== item.id)); }}
+        />
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Save mandate</button>
     </ModalShell>
@@ -160,7 +174,7 @@ function NewPackageModal({ onClose, defaultProjectId }) {
   };
 
   return (
-    <ModalShell wide title="New pitch package" subtitle="Title, log line, synopsis, deck, trailer, Drive folder, and rights notes — so anyone can send it." onClose={onClose}>
+    <ModalShell wide title="Create New Pitch" subtitle="Title, log line, synopsis, deck, trailer, Drive folder, and rights notes — so anyone can send it." onClose={onClose}>
       <Field label="PROJECT">
         <select className="md-select" value={form.projectId} onChange={set("projectId")}>
           <option value="">No project yet</option>
@@ -320,6 +334,7 @@ function NewPitchModal({ onClose, defaultProjectId }) {
 function MandateCard({ mandate }) {
   const { data, update, remove } = useStore();
   const label = mandateLabel(mandate, data.companies);
+  const files = listAttachments(mandate);
 
   return (
     <div style={{ padding: 16, border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 12 }}>
@@ -350,29 +365,63 @@ function MandateCard({ mandate }) {
         <InlineText value={mandate.notes} multiline placeholder="Who we heard it from…"
           onCommit={(v) => update("mandates", mandate.id, { notes: v })} />
       </Field>
+      <Field label="FILES" hint={files.length ? undefined : "PDF of the brief, a deck they sent, an email export."} style={{ marginBottom: 0 }}>
+        <AttachmentList
+          record={mandate}
+          accept={SLATE_FILE_ACCEPT}
+          label="Add file"
+          onAdd={(file) => update("mandates", mandate.id, (row) => addAttachment(row, file))}
+          onRemove={(item) => update("mandates", mandate.id, (row) => removeAttachment(row, item))}
+          onRestore={(item) => update("mandates", mandate.id, (row) => undoRemove(row, item))}
+          onPurge={async (item) => {
+            const next = await purge(mandate, item);
+            update("mandates", mandate.id, next);
+          }}
+        />
+      </Field>
     </div>
   );
 }
 
-function PitchRow({ pitch }) {
+function projectStage(project, pipelines) {
+  if (!project) return null;
+  const cols = (pipelines && pipelines[project.recordType]) || [];
+  const col = cols.find((c) => c.key === project.pipelineStage);
+  if (col) return col;
+  return stageInfo(project.stage);
+}
+
+function PitchCard({ pitch }) {
   const { data, update, remove } = useStore();
-  const label = pitchLabel(pitch, data.companies, data.mandates);
+  const project = (data.projects || []).find((p) => p.id === pitch.projectId);
+  const who = pitchLabel(pitch, data.companies, data.mandates);
   const mandate = (data.mandates || []).find((m) => m.id === pitch.mandateId);
+  const stage = projectStage(project, data.pipelines);
 
   return (
-    <div style={{ padding: 12, border: "1px solid var(--rule)", borderRadius: 10, background: "var(--panel-raised)", marginBottom: 8 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <Send size={13} color="var(--accent)" style={{ marginTop: 4, flexShrink: 0 }} />
+    <div className="md-card" style={{ padding: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14 }}>
+        <Send size={14} color="var(--accent)" style={{ marginTop: 4, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <InlineText value={pitch.name} style={{ fontSize: 14, fontWeight: 700 }} placeholder={label || "Who we pitched"}
-            onCommit={(v) => update("pitches", pitch.id, { name: v })} />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-            <Badge label={lookupLabel(PITCH_SOURCES, pitch.source)} color={lookupColor(PITCH_SOURCES, pitch.source)} />
-            {mandate && (
-              <Badge label={mandateLabel(mandate, data.companies)} color={lookupColor(MANDATE_KINDS, mandate.kind)} />
-            )}
+          <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.3 }}>
+            {project ? project.title : "No project linked"}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginTop: 10 }}>
+            <div>
+              <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 4 }}>STAGE</div>
+              {stage ? <Badge label={stage.label} color={stage.color} /> : (
+                <span style={{ fontSize: 13, color: "var(--dim)" }}>No stage</span>
+              )}
+            </div>
+            <div>
+              <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 4 }}>PITCHED TO</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{who || "Add who we pitched"}</div>
+            </div>
             {pitch.pitchedAt ? (
-              <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)", alignSelf: "center" }}>{formatShort(pitch.pitchedAt)}</span>
+              <div>
+                <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 4 }}>SENT</div>
+                <div className="md-mono" style={{ fontSize: 12, color: "var(--dim)" }}>{formatShort(pitch.pitchedAt)}</div>
+              </div>
             ) : null}
           </div>
         </div>
@@ -383,7 +432,19 @@ function PitchRow({ pitch }) {
           })} />
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("pitches", pitch.id)} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+
+      <Field label="PROJECT">
+        <select className="md-select" value={pitch.projectId || ""}
+          onChange={(e) => update("pitches", pitch.id, { projectId: e.target.value || null })}>
+          <option value="">No project</option>
+          {(data.projects || []).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+        </select>
+      </Field>
+      <Field label="PITCHED TO">
+        <InlineText value={pitch.name} style={{ fontSize: 14, fontWeight: 600 }} placeholder={who || "Who we pitched"}
+          onCommit={(v) => update("pitches", pitch.id, { name: v })} />
+      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
         <CompanySelect native value={pitch.companyId || ""} placeholder="Not on the board"
           onCommit={(id) => update("pitches", pitch.id, { companyId: id || null })} />
         <select className="md-select" value={pitch.mandateId || ""} onChange={(e) => update("pitches", pitch.id, { mandateId: e.target.value || null })}>
@@ -391,10 +452,14 @@ function PitchRow({ pitch }) {
           {(data.mandates || []).map((m) => <option key={m.id} value={m.id}>{mandateLabel(m, data.companies)}</option>)}
         </select>
       </div>
-      <div style={{ marginTop: 8 }}>
-        <InlineSelect value={pitch.source} options={PITCH_SOURCES} color={lookupColor(PITCH_SOURCES, pitch.source)}
-          onCommit={(v) => update("pitches", pitch.id, { source: v })} />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+        <Badge label={lookupLabel(PITCH_SOURCES, pitch.source)} color={lookupColor(PITCH_SOURCES, pitch.source)} />
+        {mandate && (
+          <Badge label={mandateLabel(mandate, data.companies)} color={lookupColor(MANDATE_KINDS, mandate.kind)} />
+        )}
       </div>
+      <InlineSelect value={pitch.source} options={PITCH_SOURCES} color={lookupColor(PITCH_SOURCES, pitch.source)}
+        onCommit={(v) => update("pitches", pitch.id, { source: v })} />
       <div style={{ marginTop: 8 }}>
         <InlineText value={pitch.reason} multiline placeholder="Why this is a fit — from their mandate, an AI assessment, or both."
           onCommit={(v) => update("pitches", pitch.id, { reason: v })} />
@@ -488,7 +553,8 @@ export default function SlateView({ searchQuery }) {
         (m.name || "").toLowerCase().includes(q) ||
         (m.mandate || "").toLowerCase().includes(q) ||
         (m.notes || "").toLowerCase().includes(q) ||
-        mandateLabel(m, data.companies).toLowerCase().includes(q));
+        mandateLabel(m, data.companies).toLowerCase().includes(q) ||
+        listAttachments(m).some((a) => (a.fileName || "").toLowerCase().includes(q)));
     }
     return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [mandates, q, data.companies]);
@@ -510,13 +576,16 @@ export default function SlateView({ searchQuery }) {
     let list = [...pitches];
     if (projectFilter !== "all") list = list.filter((p) => p.projectId === projectFilter);
     if (q) {
-      list = list.filter((p) =>
-        pitchLabel(p, data.companies, mandates).toLowerCase().includes(q) ||
-        (p.reason || "").toLowerCase().includes(q) ||
-        (p.name || "").toLowerCase().includes(q));
+      list = list.filter((p) => {
+        const projectTitle = ((projects.find((x) => x.id === p.projectId) || {}).title || "");
+        return pitchLabel(p, data.companies, mandates).toLowerCase().includes(q) ||
+          (p.reason || "").toLowerCase().includes(q) ||
+          (p.name || "").toLowerCase().includes(q) ||
+          projectTitle.toLowerCase().includes(q);
+      });
     }
-    return list;
-  }, [pitches, projectFilter, q, data.companies, mandates]);
+    return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }, [pitches, projectFilter, q, data.companies, mandates, projects]);
 
   const projectName = (id) => ((projects.find((p) => p.id === id) || {}).title) || "";
   const withPackage = new Set(all.map((s) => s.projectId).filter(Boolean));
@@ -535,24 +604,19 @@ export default function SlateView({ searchQuery }) {
       if (!byProject.has(pkg.projectId)) byProject.set(pkg.projectId, []);
       byProject.get(pkg.projectId).push(pkg);
     });
-    visiblePitches.forEach((pitch) => {
-      if (pitch.projectId && !byProject.has(pitch.projectId)) byProject.set(pitch.projectId, []);
-    });
     const ordered = projects
       .filter((p) => byProject.has(p.id))
       .map((p) => ({
         project: p,
         packages: byProject.get(p.id) || [],
-        pitches: visiblePitches.filter((x) => x.projectId === p.id),
       }));
     const leftover = [...byProject.keys()].filter((id) => !projects.some((p) => p.id === id));
     leftover.forEach((id) => ordered.push({
       project: { id, title: "Unknown project" },
       packages: byProject.get(id) || [],
-      pitches: visiblePitches.filter((x) => x.projectId === id),
     }));
     return { ordered, unlinked };
-  }, [rows, projects, visiblePitches]);
+  }, [rows, projects]);
 
   const filterOptions = projects
     .filter((p) => withPackage.has(p.id) || withPitch.has(p.id))
@@ -569,7 +633,7 @@ export default function SlateView({ searchQuery }) {
       <ViewHeader count={all.length + mandates.length + pitches.length} label="SLATE">
         <button className="md-btn" onClick={() => setShowMandate(true)}><Radio size={14} /> New mandate</button>
         <button className="md-btn" onClick={() => setShowPitch(true)}><Send size={14} /> Who we pitched</button>
-        <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> New pitch package</button>
+        <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> Create New Pitch</button>
       </ViewHeader>
 
       <div style={{ display: "flex", gap: 34, flexWrap: "wrap", padding: "13px 18px", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 20 }}>
@@ -593,7 +657,8 @@ export default function SlateView({ searchQuery }) {
           action={(
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
               <button className="md-btn" onClick={() => setShowMandate(true)}><Radio size={14} /> New mandate</button>
-              <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Presentation size={14} /> New pitch package</button>
+              <button className="md-btn" onClick={() => setShowPitch(true)}><Send size={14} /> Who we pitched</button>
+              <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Presentation size={14} /> Create New Pitch</button>
             </div>
           )}
         />
@@ -621,10 +686,23 @@ export default function SlateView({ searchQuery }) {
             ) : groups.unlinked.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
           </div>
 
+          <div style={{ marginBottom: 28 }}>
+            <BucketHeading right={
+              <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowPitch(true)}>
+                <Plus size={12} /> Who we pitched
+              </button>
+            }>PITCHES</BucketHeading>
+            {visiblePitches.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--dim)", padding: "8px 0 4px" }}>
+                Each pitch is a card: the project, its stage, and who it was sent to.
+              </div>
+            ) : visiblePitches.map((pitch) => <PitchCard key={pitch.id} pitch={pitch} />)}
+          </div>
+
           {groups.ordered.length > 0 && (
             <div style={{ marginBottom: 22 }}>
               <BucketHeading>PROJECTS</BucketHeading>
-              {groups.ordered.map(({ project, packages, pitches: projectPitches }) => (
+              {groups.ordered.map(({ project, packages }) => (
                 <div key={project.id} style={{ marginBottom: 22 }}>
                   <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em", marginBottom: 8 }}>
                     {project.title.toUpperCase()}
@@ -632,19 +710,9 @@ export default function SlateView({ searchQuery }) {
                   {packages.map((pkg) => (
                     <PackageCard key={pkg.id} pkg={pkg} projectTitle={packages.length > 1 ? projectName(pkg.projectId) : ""} />
                   ))}
-                  <div style={{ marginTop: packages.length ? 4 : 0 }}>
-                    <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>
-                      PITCHED TO{projectPitches.length ? ` · ${projectPitches.length}` : ""}
-                    </div>
-                    {projectPitches.length === 0 ? (
-                      <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 8 }}>
-                        Nobody on the board yet. Add a streamer or studio this IP was sent to, and whether the fit came from their mandate or an AI assessment.
-                      </div>
-                    ) : projectPitches.map((pitch) => <PitchRow key={pitch.id} pitch={pitch} />)}
-                    <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowPitch(project.id)}>
-                      <Plus size={12} /> Who we pitched
-                    </button>
-                  </div>
+                  <button className="md-btn md-btn-ghost" style={{ fontSize: 12, marginTop: 4 }} onClick={() => setShowPitch(project.id)}>
+                    <Plus size={12} /> Who we pitched
+                  </button>
                 </div>
               ))}
             </div>

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useStore } from "../lib/store";
 import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, withProjectOwners } from "../lib/model";
-import { ModalShell, Field, FileAttachButton, AttachmentRow, MemberPicker } from "../ui/kit";
+import { ModalShell, Field, FileAttachButton, AttachmentRow, AttachmentList, MemberPicker } from "../ui/kit";
 import { CompanySelect } from "../ui/CompanySelect";
 import { useDraftUploads } from "../lib/draftUploads";
 import { storedInlineUrl } from "../lib/blobUrls.js";
+import { SLATE_FILE_ACCEPT } from "../lib/files";
 
 export default function NewProjectModal({ onClose, initialTitle = "", initialDesc = "", onCreated }) {
   const { data, add, currentUser, showToast, memberName } = useStore();
@@ -26,13 +27,14 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
     nextStep: "",
   });
   const [image, setImage] = useState(null);
+  const [files, setFiles] = useState([]);
   const [error, setError] = useState("");
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const pipeline = data.pipelines[form.recordType] || [];
 
   const submit = () => {
-    if (!form.title.trim()) { setError("Give the project a title."); return; }
+    if (!form.title.trim()) { setError("Give the deal a title."); return; }
     const now = Date.now();
     const owners = withProjectOwners(form.ownerIds);
     const ownerNames = (owners.ownerIds || []).map(memberName).filter(Boolean);
@@ -54,6 +56,7 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
       paymentStatus: "na",
       imagePath: image ? image.filePath : "",
       imageUrl: image ? storedInlineUrl(image.fileUrl) : "",
+      attachments: files,
       customFields: {},
       createdAt: now,
       updatedAt: now,
@@ -72,14 +75,14 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
   };
 
   return (
-    <ModalShell title="New Project" onClose={onClose}>
-      <Field label="TITLE"><input className="md-input" autoFocus value={form.title} onChange={set("title")} placeholder="Project title" /></Field>
+    <ModalShell title="New Deal" onClose={onClose}>
+      <Field label="TITLE"><input className="md-input" autoFocus value={form.title} onChange={set("title")} placeholder="Deal title" /></Field>
       <Field label="TYPE" hint={recordTypeInfo(form.recordType).description}>
         <select className="md-select" value={form.recordType} onChange={(e) => setForm((f) => ({ ...f, recordType: e.target.value, pipelineStage: "" }))}>
           {RECORD_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
         </select>
       </Field>
-      <Field label="LOGLINE / DESCRIPTION"><textarea className="md-textarea" rows={3} value={form.description} onChange={set("description")} placeholder="What is this project about?" /></Field>
+      <Field label="LOGLINE / DESCRIPTION"><textarea className="md-textarea" rows={3} value={form.description} onChange={set("description")} placeholder="What is this deal about?" /></Field>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="PIPELINE STAGE">
           <select className="md-select" value={form.pipelineStage || (pipeline[0] || {}).key || ""} onChange={set("pipelineStage")}>
@@ -132,6 +135,15 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
         </Field>
       </div>
       <Field label="NEXT STEP"><input className="md-input" value={form.nextStep} onChange={set("nextStep")} placeholder="Immediate action item" /></Field>
+      <Field label="FILES" hint="Deck, one-sheet, treatment, budget.">
+        <AttachmentList
+          items={files}
+          accept={SLATE_FILE_ACCEPT}
+          label="Add files"
+          onAdd={(file) => { if (drafts.keep(file)) setFiles((list) => [...list, file]); }}
+          onRemove={(item) => { drafts.drop(item); setFiles((list) => list.filter((f) => f.id !== item.id)); }}
+        />
+      </Field>
       <Field label="PROJECT IMAGE">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <FileAttachButton kind="images" label="Upload key art or still" accept="image/*"

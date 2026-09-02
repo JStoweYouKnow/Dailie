@@ -9,10 +9,11 @@ import {
   pitchLabel, mandateLabel, projectPitchSuggestions, resolvedSlateStatus,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
-import { imageSrc, uploadFile, deleteFile } from "../lib/files";
+import { imageSrc, uploadFile, deleteFile, listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment, SLATE_FILE_ACCEPT } from "../lib/files";
 import { storedInlineUrl } from "../lib/blobUrls.js";
 import {
   ModalShell, Field, Section, Badge, InlineText, InlineSelect, MemberPicker, ConfirmButton, Avatar,
+  AttachmentList,
 } from "../ui/kit";
 import { CompanySelect } from "../ui/CompanySelect";
 import { visibleMeetings } from "../lib/calendarExclusions";
@@ -95,6 +96,22 @@ function ImageHeader({ project, onChange }) {
       )}
     </div>
   );
+}
+
+function addAttachment(row, file) {
+  return { attachments: [...allAttachments(row), file] };
+}
+
+function removeAttachment(row, item) {
+  return { attachments: trashAttachment(row, item) };
+}
+
+function undoRemove(row, item) {
+  return { attachments: restoreAttachment(row, item) };
+}
+
+function purgeProjectFile(row, item) {
+  return purgeAttachment(row, item).then((attachments) => ({ attachments }));
 }
 
 
@@ -291,6 +308,21 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
       onClose={onClose}
     >
       <ImageHeader project={project} onChange={(changes) => patchProject(changes, undefined, project.imageUrl || project.imagePath ? "edited" : "saved")} />
+
+      <Field label="FILES" hint={listAttachments(project).length ? undefined : "Deck, one-sheet, treatment, budget."}>
+        <AttachmentList
+          record={project}
+          accept={SLATE_FILE_ACCEPT}
+          label="Add file"
+          onAdd={(file) => patchProject(addAttachment(project, file))}
+          onRemove={(item) => patchProject(removeAttachment(project, item))}
+          onRestore={(item) => patchProject(undoRemove(project, item))}
+          onPurge={async (item) => {
+            const next = await purgeProjectFile(project, item);
+            patchProject(next);
+          }}
+        />
+      </Field>
 
       <Field label="TITLE">
         <InlineText value={project.title} style={{ fontSize: 18, fontWeight: 700 }} onCommit={(v) => v.trim() && patchProject({ title: v.trim() }, `Renamed to ${v.trim()}`)} />

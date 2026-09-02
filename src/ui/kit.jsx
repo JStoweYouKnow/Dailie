@@ -650,6 +650,10 @@ export function KanbanBoard({ columns, items, columnOf, onMove, renderCard, onAd
   };
 
   const startDrag = (e, id) => {
+    if (e.target && e.target.closest && e.target.closest("button, a, input, textarea, select, label, [role='button']")) {
+      e.preventDefault();
+      return;
+    }
     setDragId(id);
     setPayload(e, id);
   };

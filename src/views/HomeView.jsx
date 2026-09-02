@@ -181,7 +181,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
       <div style={{ display: "flex", gap: 36, flexWrap: "wrap", padding: "16px 18px", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 26 }}>
         <Stat label="MY OPEN TASKS" value={myOpen.length} onClick={() => onOpenTab("tasks")} />
         <Stat label="MY OVERDUE" value={overdue.length} accent={overdue.length ? "var(--red)" : undefined} onClick={() => onOpenTab("tasks")} />
-        <Stat label="MY PROJECTS" value={myProjects.length} onClick={() => onOpenTab("projects")} />
+        <Stat label="MY DEALS" value={myProjects.length} onClick={() => onOpenTab("projects")} />
         <Stat label="NEEDS FOLLOW-UP" value={stale.length} accent={stale.length ? "var(--red)" : undefined} onClick={() => onOpenTab("emails")} />
         <Stat label="PAPERWORK ALERTS" value={alerts.length} accent={alerts.length ? "var(--warn)" : undefined} onClick={() => onOpenTab("contracts")} />
       </div>
@@ -194,11 +194,11 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
             <TeamTaskColumns onOpenTab={onOpenTab} />
           </Section>
 
-          <Section title="MY PROJECTS" right={
-            <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenTab("projects")}>All projects <ArrowRight size={12} /></button>
+          <Section title="MY DEALS" right={
+            <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenTab("projects")}>All deals <ArrowRight size={12} /></button>
           }>
             {myProjects.length === 0 ? (
-              <EmptyState title="Nothing assigned to you" subtitle="Projects where you are an owner or a team member show up here." />
+              <EmptyState title="Nothing assigned to you" subtitle="Deals where you are an owner or a team member show up here." />
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 }}>
                 {myProjects.map((p) => {

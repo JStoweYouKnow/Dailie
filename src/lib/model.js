@@ -73,7 +73,7 @@ export function isProjectOwner(project, userId) {
   return !!userId && projectOwnerIds(project).includes(userId);
 }
 
-/** Owner or assigned team member — what "My Projects" matches. */
+/** Owner or assigned team member — what "My Deals" matches. */
 export function isOnProject(project, userId) {
   if (!userId || !project) return false;
   return isProjectOwner(project, userId) || (project.teamIds || []).includes(userId);
@@ -821,6 +821,7 @@ function migrateProjects(raw, team, companies) {
       pipelineStage: p.pipelineStage || pipeline[0].key,
       stage: p.stage || "development",
       dates: normalizeProjectDates(p.dates),
+      attachments: ensureArray(p.attachments).filter((a) => a && a.fileName),
       createdAt: p.createdAt || Date.now(),
       updatedAt: p.updatedAt || Date.now(),
       history: ensureArray(p.history),
@@ -998,6 +999,7 @@ export function normalizeData(raw) {
       ...makeMandate({}),
       ...m,
       id: m.id || uid(),
+      attachments: ensureArray(m.attachments).filter((a) => a && a.fileName),
     })),
     pitches: ensureArray(input.pitches).map((p) => ({
       ...makePitch({}),
@@ -1287,6 +1289,7 @@ export function makeMandate(fields) {
     mandate: "",
     notes: "",
     ownerId: null,
+    attachments: [],
     createdAt: Date.now(),
     ...fields,
   };

@@ -7,53 +7,96 @@ import {
   projectOwnerIds, withProjectOwners, isOnProject,
 } from "../lib/model";
 import { formatShort, uid } from "../lib/format";
-import { imageSrc } from "../lib/files";
+import {
+  imageSrc, listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment,
+  SLATE_FILE_ACCEPT,
+} from "../lib/files";
 import {
   ViewHeader, FilterChips, EmptyState, DataTable, KanbanBoard, Badge, Avatar, AvatarStack,
-  InlineText, InlineSelect, MemberPicker, ExportMenu,
+  InlineText, InlineSelect, MemberPicker, ExportMenu, AttachmentList,
 } from "../ui/kit";
 
-/** Owner + every assigned team member — the set the MY PROJECTS filter matches against. */
+/** Owner + every assigned team member — the set the MY DEALS filter matches against. */
 export function isMine(project, userId) {
   return isOnProject(project, userId);
 }
 
+function addAttachment(row, file) {
+  return { attachments: [...allAttachments(row), file] };
+}
+
+function removeAttachment(row, item) {
+  return { attachments: trashAttachment(row, item) };
+}
+
+function undoRemove(row, item) {
+  return { attachments: restoreAttachment(row, item) };
+}
+
+function purge(row, item) {
+  return purgeAttachment(row, item).then((attachments) => ({ attachments }));
+}
+
 function ProjectCard({ project, onOpen, memberName, companyName }) {
+  const { update } = useStore();
   const type = recordTypeInfo(project.recordType);
   const image = imageSrc(project);
   const ownerNames = projectOwnerIds(project).map(memberName).filter(Boolean);
   const teamNames = (project.teamIds || []).map(memberName).filter((n) => n && !ownerNames.includes(n));
+  const files = listAttachments(project);
   return (
-    <div className="md-card" onClick={onOpen} role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
-      style={{ marginBottom: 12, cursor: "pointer", borderLeft: `3px solid ${type.color}`, overflow: "hidden" }}>
-      {image && (
-        <div style={{ height: 92, background: `var(--panel-raised) url(${image}) center/cover no-repeat` }} />
-      )}
-      <div style={{ padding: 13 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6, minWidth: 0 }}>
-          <div title={project.title} style={{ fontSize: 14, fontWeight: 700, color: "var(--bone)", lineHeight: 1.35, minWidth: 0, wordBreak: "break-word", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{project.title}</div>
-          {project.priority === "HIGH" && <Badge label="HIGH" color="var(--red)" />}
-        </div>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 9 }}>
-          <Badge label={type.short} color={type.color} />
-          {project.paymentStatus && project.paymentStatus !== "na" && (
-            <Badge label={lookupLabel(PAYMENT_STATUSES, project.paymentStatus)} color={lookupColor(PAYMENT_STATUSES, project.paymentStatus)} />
-          )}
-        </div>
-        {project.companyId && (
-          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>{companyName(project.companyId).toUpperCase()}</div>
+    <div className="md-card"
+      style={{ marginBottom: 12, borderLeft: `3px solid ${type.color}`, overflow: "hidden" }}>
+      <div onClick={onOpen} role="button" tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
+        style={{ cursor: "pointer" }}>
+        {image && (
+          <div style={{ height: 92, background: `var(--panel-raised) url(${image}) center/cover no-repeat` }} />
         )}
-        {project.budget && <div className="md-mono" style={{ fontSize: 11, color: "var(--accent)", marginBottom: 7 }}>{project.budget}</div>}
-        {project.nextStep && (
-          <div style={{ fontSize: 12, color: "var(--bone)", opacity: 0.85, marginBottom: 10, lineHeight: 1.4 }}>
-            <span className="md-mono" style={{ fontSize: 9, color: "var(--dim)", letterSpacing: ".1em" }}>NEXT · </span>{project.nextStep}
+        <div style={{ padding: "13px 13px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6, minWidth: 0 }}>
+            <div title={project.title} style={{ fontSize: 14, fontWeight: 700, color: "var(--bone)", lineHeight: 1.35, minWidth: 0, wordBreak: "break-word", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{project.title}</div>
+            {project.priority === "HIGH" && <Badge label="HIGH" color="var(--red)" />}
           </div>
-        )}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <AvatarStack names={[...ownerNames, ...teamNames]} size={22} max={4} />
-          <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{formatShort(project.updatedAt)}</span>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 9 }}>
+            <Badge label={type.short} color={type.color} />
+            {project.paymentStatus && project.paymentStatus !== "na" && (
+              <Badge label={lookupLabel(PAYMENT_STATUSES, project.paymentStatus)} color={lookupColor(PAYMENT_STATUSES, project.paymentStatus)} />
+            )}
+          </div>
+          {project.companyId && (
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginBottom: 5 }}>{companyName(project.companyId).toUpperCase()}</div>
+          )}
+          {project.budget && <div className="md-mono" style={{ fontSize: 11, color: "var(--accent)", marginBottom: 7 }}>{project.budget}</div>}
+          {project.nextStep && (
+            <div style={{ fontSize: 12, color: "var(--bone)", opacity: 0.85, marginBottom: 10, lineHeight: 1.4 }}>
+              <span className="md-mono" style={{ fontSize: 9, color: "var(--dim)", letterSpacing: ".1em" }}>NEXT · </span>{project.nextStep}
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
+            <AvatarStack names={[...ownerNames, ...teamNames]} size={22} max={4} />
+            <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{formatShort(project.updatedAt)}</span>
+          </div>
         </div>
+      </div>
+      <div style={{ padding: "0 13px 13px" }}
+        onMouseDown={(e) => e.stopPropagation()}>
+        <AttachmentList
+          record={project}
+          compact
+          accept={SLATE_FILE_ACCEPT}
+          label="Add file"
+          onAdd={(file) => update("projects", project.id, (row) => addAttachment(row, file))}
+          onRemove={(item) => update("projects", project.id, (row) => removeAttachment(row, item))}
+          onRestore={(item) => update("projects", project.id, (row) => undoRemove(row, item))}
+          onPurge={async (item) => {
+            const next = await purge(project, item);
+            update("projects", project.id, next);
+          }}
+        />
+        {!files.length && (
+          <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 5 }}>Deck, one-sheet, treatment, budget.</div>
+        )}
       </div>
     </div>
   );
@@ -139,7 +182,7 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail }) {
         onRenameColumn={renameColumn}
         onRemoveColumn={pipeline.length > 1 ? removeColumn : undefined}
         onReorderColumns={reorderColumns}
-        emptyHint="Drag a project here"
+        emptyHint="Drag a deal here"
         renderCard={(p) => <ProjectCard project={p} onOpen={() => onOpenDetail(p)} memberName={memberName} companyName={companyName} />}
       />
     </div>
@@ -166,7 +209,8 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         projectOwnerIds(p).some((id) => memberName(id).toLowerCase().includes(q)) ||
         (p.contactName || "").toLowerCase().includes(q) ||
         (p.contactEmail || "").toLowerCase().includes(q) ||
-        (p.contactPhone || "").toLowerCase().includes(q));
+        (p.contactPhone || "").toLowerCase().includes(q) ||
+        listAttachments(p).some((a) => (a.fileName || "").toLowerCase().includes(q)));
     }
     return list;
   }, [data.projects, typeFilter, mineOnly, searchQuery, currentUser, memberName]);
@@ -279,18 +323,18 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
 
   return (
     <div>
-      <ViewHeader count={projects.length} label={`PROJECT${projects.length === 1 ? "" : "S"}${mineOnly ? " ASSIGNED TO ME" : ""}`}>
+      <ViewHeader count={projects.length} label={`DEAL${projects.length === 1 ? "" : "S"}${mineOnly ? " ASSIGNED TO ME" : ""}`}>
         <button className="md-chip" onClick={() => setMineOnly((m) => !m)}
           style={mineOnly ? { background: "var(--accent)", borderColor: "var(--accent)", color: "var(--ink)" } : undefined}>
-          <Star size={11} style={{ marginRight: 5, verticalAlign: -1 }} /> My Projects
+          <Star size={11} style={{ marginRight: 5, verticalAlign: -1 }} /> My Deals
         </button>
         <div style={{ display: "flex", background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 6, padding: 2 }}>
           {modeButton("pipeline", LayoutGrid, "Deal pipeline board")}
           {modeButton("gallery", ImageIcon, "Gallery view")}
           {modeButton("table", TableIcon, "Table view")}
         </div>
-        <ExportMenu title="Projects" columns={columns} rows={projects} />
-        <button className="md-btn md-btn-primary" onClick={onOpenNew}><Plus size={14} /> New Project</button>
+        <ExportMenu title="Deals" columns={columns} rows={projects} />
+        <button className="md-btn md-btn-primary" onClick={onOpenNew}><Plus size={14} /> New Deal</button>
       </ViewHeader>
 
       <div style={{ marginBottom: 18 }}>
@@ -299,8 +343,8 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
 
       {projects.length === 0 ? (
         <EmptyState
-          title={mineOnly ? "Nothing assigned to you yet" : "No projects match this filter"}
-          subtitle={mineOnly ? "Projects where you are the owner or a team member land here." : "Change the type filter, clear your search, or add a project."}
+          title={mineOnly ? "Nothing assigned to you yet" : "No deals match this filter"}
+          subtitle={mineOnly ? "Deals where you are the owner or a team member land here." : "Change the type filter, clear your search, or add a deal."}
         />
       ) : viewMode === "table" ? (
         <DataTable columns={columns} rows={projects} onRowClick={onOpenDetail} onReorderColumns={reorderTableColumns} hideExport />

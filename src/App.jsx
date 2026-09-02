@@ -65,7 +65,7 @@ const NAV = [
   {
     group: "Work",
     items: [
-      { key: "projects", label: "Projects", icon: Clapperboard },
+      { key: "projects", label: "Deals", icon: Clapperboard },
       { key: "slate", label: "Slate", icon: Presentation },
       { key: "tasks", label: "Tasks & Notes", icon: CheckSquare },
       { key: "calendar", label: "Calendar", icon: CalendarIcon },

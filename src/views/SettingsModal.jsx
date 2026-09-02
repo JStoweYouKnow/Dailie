@@ -136,7 +136,7 @@ export default function SettingsModal({ onClose }) {
             ? (shared
               ? "Studio accounts join on their own. Invite a contractor by email so their sign-in can bind to this row."
               : "Everyone who can be assigned work. Your own row is set by whoever you signed in as.")
-            : "This drives \"My Projects\", \"My Tasks\" and who new records are assigned to."}
+            : "This drives \"My Deals\", \"My Tasks\" and who new records are assigned to."}
         </div>
         {data.team.map((m) => (
           <div key={m.id || m.email} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--rule)" }}>

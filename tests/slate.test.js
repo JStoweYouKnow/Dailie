@@ -75,6 +75,19 @@ test("mandate fit reason needs overlapping words from the IP and the mandate", (
   assert.equal(mandateFitReason(mandate, { title: "Obsidian Echo", description: "Deep sea thriller" }, null), null);
 });
 
+test("mandates keep uploaded files", () => {
+  const made = makeMandate({ name: "Roku", attachments: [{ fileName: "brief.pdf" }] });
+  assert.equal(made.attachments[0].fileName, "brief.pdf");
+
+  const data = normalizeData({
+    mandates: [{ id: "man-1", name: "Roku", attachments: [{ fileName: "brief.pdf" }] }],
+  });
+  assert.equal(data.mandates[0].attachments[0].fileName, "brief.pdf");
+
+  const empty = normalizeData({ mandates: [{ id: "man-2", name: "Netflix" }] });
+  assert.deepEqual(empty.mandates[0].attachments, []);
+});
+
 test("pitch decks in PowerPoint are an allowed upload", () => {
   assert.equal(isAllowedContentType("application/vnd.openxmlformats-officedocument.presentationml.presentation"), true);
   assert.equal(isAllowedContentType("video/mp4"), true);
