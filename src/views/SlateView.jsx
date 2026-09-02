@@ -18,6 +18,7 @@ import {
   InlineText, InlineSelect, ModalShell, Field, ConfirmButton,
   AttachmentList,
 } from "../ui/kit";
+import { CompanySelect } from "../ui/CompanySelect";
 
 function addAttachment(row, file) {
   return { attachments: [...allAttachments(row), file] };
@@ -49,9 +50,11 @@ function LinkField({ label, value, onCommit, placeholder }) {
   return (
     <div>
       <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <InlineText value={value} mono style={{ color: "var(--accent)", fontSize: 12, flex: 1 }} placeholder={placeholder}
-          onCommit={onCommit} />
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <InlineText value={value} wrap mono style={{ color: "var(--accent)", fontSize: 12 }} placeholder={placeholder}
+            onCommit={onCommit} />
+        </div>
         {href && (
           <a href={href} target="_blank" rel="noreferrer" className="md-btn md-btn-ghost" style={{ padding: 6, textDecoration: "none" }}>
             <ExternalLink size={12} />
@@ -89,11 +92,13 @@ function NewMandateModal({ onClose }) {
           {MANDATE_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
         </select>
       </Field>
-      <Field label="COMPANY ON THE BOARD" hint="Optional — pick one if they are already in Companies.">
-        <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-          <option value="">Not on the board yet</option>
-          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+      <Field label="COMPANY ON THE BOARD" hint="Optional — pick one if they are already in Companies, or add them here.">
+        <CompanySelect native value={form.companyId} placeholder="Not on the board yet"
+          onCommit={(id, company) => setForm((f) => ({
+            ...f,
+            companyId: id || "",
+            name: f.name || (company && company.name) || "",
+          }))} />
       </Field>
       <Field label="NAME" hint="e.g. Roku, OpenArt — used when they are not a company on the board.">
         <input className="md-input" autoFocus value={form.name} onChange={set("name")} placeholder="Streamer / studio name" />
@@ -281,10 +286,12 @@ function NewPitchModal({ onClose, defaultProjectId }) {
         </select>
       </Field>
       <Field label="COMPANY ON THE BOARD">
-        <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-          <option value="">Not on the board</option>
-          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CompanySelect native value={form.companyId} placeholder="Not on the board"
+          onCommit={(id, company) => setForm((f) => ({
+            ...f,
+            companyId: id || "",
+            name: f.name || (company && company.name) || "",
+          }))} />
       </Field>
       <Field label="NAME" hint="e.g. Roku, OpenArt — when they are not a company on the board.">
         <input className="md-input" value={form.name} onChange={set("name")} placeholder="Who we pitched" />
@@ -332,10 +339,8 @@ function MandateCard({ mandate }) {
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("mandates", mandate.id)} />
       </div>
       <Field label="COMPANY ON THE BOARD">
-        <select className="md-select" value={mandate.companyId || ""} onChange={(e) => update("mandates", mandate.id, { companyId: e.target.value || null })}>
-          <option value="">Not on the board</option>
-          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CompanySelect native value={mandate.companyId || ""} placeholder="Not on the board"
+          onCommit={(id) => update("mandates", mandate.id, { companyId: id || null })} />
       </Field>
       <Field label="MANDATE">
         <InlineText value={mandate.mandate} multiline placeholder="What they are looking for…"
@@ -379,10 +384,8 @@ function PitchRow({ pitch }) {
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("pitches", pitch.id)} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-        <select className="md-select" value={pitch.companyId || ""} onChange={(e) => update("pitches", pitch.id, { companyId: e.target.value || null })}>
-          <option value="">Not on the board</option>
-          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CompanySelect native value={pitch.companyId || ""} placeholder="Not on the board"
+          onCommit={(id) => update("pitches", pitch.id, { companyId: id || null })} />
         <select className="md-select" value={pitch.mandateId || ""} onChange={(e) => update("pitches", pitch.id, { mandateId: e.target.value || null })}>
           <option value="">No mandate</option>
           {(data.mandates || []).map((m) => <option key={m.id} value={m.id}>{mandateLabel(m, data.companies)}</option>)}

@@ -8,6 +8,7 @@ import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat,
   InlineText, InlineSelect, InlineDate, ModalShell, Field, ConfirmButton, MemberPicker,
 } from "../ui/kit";
+import { CompanySelect } from "../ui/CompanySelect";
 
 function EventDetail({ event, onClose }) {
   const { data, update, remove, memberName } = useStore();
@@ -71,7 +72,7 @@ function EventDetail({ event, onClose }) {
             onCommit={(v) => patch({ projectId: v })} />
         </Field>
         <Field label="COMPANY">
-          <InlineSelect value={live.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="No company"
+          <CompanySelect value={live.companyId} placeholder="No company"
             onCommit={(v) => patch({ companyId: v })} />
         </Field>
       </div>
@@ -101,7 +102,7 @@ function EventDetail({ event, onClose }) {
 
 function NewEventModal({ onClose, onCreated }) {
   const { data, add, currentUser } = useStore();
-  const [form, setForm] = useState({ name: "", kind: "panel", status: "invited", venue: "", location: "", url: "", projectId: "" });
+  const [form, setForm] = useState({ name: "", kind: "panel", status: "invited", venue: "", location: "", url: "", projectId: "", companyId: "" });
   const [date, setDate] = useState("");
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -117,7 +118,7 @@ function NewEventModal({ onClose, onCreated }) {
       date: tsFromDateInput(date),
       speakerIds: currentUser ? [currentUser.id] : [],
       projectId: form.projectId || null,
-      companyId: null,
+      companyId: form.companyId || null,
       notes: "",
       cost: "",
     });
@@ -153,6 +154,10 @@ function NewEventModal({ onClose, onCreated }) {
           <option value="">No project</option>
           {data.projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
         </select>
+      </Field>
+      <Field label="COMPANY">
+        <CompanySelect native value={form.companyId} placeholder="No company"
+          onCommit={(id) => setForm((f) => ({ ...f, companyId: id || "" }))} />
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Add Event</button>
     </ModalShell>

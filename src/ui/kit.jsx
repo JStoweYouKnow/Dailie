@@ -39,9 +39,9 @@ export function EmptyState({ title, subtitle, action }) {
   );
 }
 
-export function ModalShell({ title, subtitle, status, onClose, children, wide }) {
+export function ModalShell({ title, subtitle, status, onClose, children, wide, zIndex }) {
   return (
-    <div className="md-overlay" onClick={onClose}>
+    <div className="md-overlay" onClick={onClose} style={zIndex ? { zIndex } : undefined}>
       <div className="md-modal" onClick={(e) => e.stopPropagation()} style={wide ? { maxWidth: 860 } : undefined}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 20px", borderBottom: "1px solid var(--rule)", position: "sticky", top: 0, background: "var(--panel)", zIndex: 2, borderRadius: "16px 16px 0 0" }}>
           <div style={{ minWidth: 0 }}>
@@ -218,7 +218,7 @@ export function AvatarStack({ names, size = 24, max = 4 }) {
  * Inline editors — everything on a record is editable in place.
  * ------------------------------------------------------------------ */
 
-export function InlineText({ value, onCommit, placeholder = "—", multiline, style, mono, markdown }) {
+export function InlineText({ value, onCommit, placeholder = "—", multiline, wrap, style, mono, markdown }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
   // Take the incoming value only while idle. On a shared board someone else's edit
@@ -244,7 +244,7 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, st
           if (e.key === "Enter" && !multiline) commit();
           if (e.key === "Escape") { setDraft(value || ""); setEditing(false); }
         }}
-        style={{ fontSize: 13, ...style }}
+        style={{ fontSize: 13, width: wrap && !multiline ? "100%" : undefined, minWidth: 0, ...style }}
       />
     );
   }
@@ -252,6 +252,7 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, st
   // Imported documents can keep their formatting, so a note that carries Markdown is
   // rendered rather than shown as raw syntax — until you click into it to edit.
   const showRendered = markdown && multiline && value && looksLikeMarkdown(value);
+  const wrapping = multiline || wrap;
 
   return (
     <div
@@ -268,8 +269,11 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, st
       style={{
         cursor: "text", borderRadius: 6, padding: "3px 6px", margin: "-3px -6px",
         minHeight: 22, color: value ? "var(--bone)" : "var(--dim-2)",
-        whiteSpace: multiline ? "pre-wrap" : "nowrap",
-        overflow: multiline ? "visible" : "hidden", textOverflow: "ellipsis",
+        whiteSpace: wrapping ? (multiline ? "pre-wrap" : "normal") : "nowrap",
+        overflow: wrapping ? "visible" : "hidden",
+        textOverflow: wrapping ? "clip" : "ellipsis",
+        overflowWrap: wrap ? "anywhere" : undefined,
+        wordBreak: wrap ? "break-word" : undefined,
         transition: "background .15s", fontSize: 13, ...style,
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = "var(--panel-hover)"; }}

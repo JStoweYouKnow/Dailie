@@ -8,6 +8,7 @@ import {
   ModalShell, Field, FileAttachButton, AttachmentRow, SingleAttachmentCell, ConfirmButton,
 } from "../ui/kit";
 import { useDraftUploads } from "../lib/draftUploads";
+import { CompanySelect } from "../ui/CompanySelect";
 
 function NewInvoiceModal({ onClose, defaultDirection }) {
   const { data, add } = useStore();
@@ -53,10 +54,8 @@ function NewInvoiceModal({ onClose, defaultDirection }) {
       </div>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="COMPANY">
-          <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-            <option value="">No company</option>
-            {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CompanySelect native value={form.companyId} placeholder="No company"
+            onCommit={(id) => setForm((f) => ({ ...f, companyId: id || "" }))} />
         </Field>
         <Field label="PROJECT">
           <select className="md-select" value={form.projectId} onChange={set("projectId")}>
@@ -91,8 +90,6 @@ function NewPaymentModal({ onClose }) {
   const [form, setForm] = useState({ companyId: "", projectId: "", invoiceId: "", amount: "", dueAt: "", method: "Wire", notes: "" });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const vendors = data.companies.filter((c) => c.type === "vendor" || c.type === "ai-tool" || c.type === "agency");
-
   const submit = () => {
     if (!form.amount.trim()) return;
     add("payments", {
@@ -113,10 +110,8 @@ function NewPaymentModal({ onClose }) {
   return (
     <ModalShell title="New Vendor Payment" onClose={onClose}>
       <Field label="VENDOR">
-        <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-          <option value="">Select vendor</option>
-          {(vendors.length ? vendors : data.companies).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CompanySelect native value={form.companyId} placeholder="Select vendor" defaultType="vendor"
+          onCommit={(id) => setForm((f) => ({ ...f, companyId: id || "" }))} />
       </Field>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="AMOUNT"><input className="md-input" autoFocus value={form.amount} onChange={set("amount")} placeholder="60000" /></Field>
@@ -184,7 +179,7 @@ export default function FinanceView({ searchQuery }) {
       <InlineText value={i.number} mono style={{ fontWeight: 700 }} placeholder="Add number" onCommit={(v) => update("invoices", i.id, { number: v })} />
     ) },
     { key: "company", label: "COMPANY", stopClick: true, render: (i) => (
-      <InlineSelect value={i.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="—"
+      <CompanySelect value={i.companyId} placeholder="—"
         onCommit={(v) => update("invoices", i.id, { companyId: v })} />
     ) },
     { key: "project", label: "PROJECT", stopClick: true, render: (i) => (
@@ -217,7 +212,7 @@ export default function FinanceView({ searchQuery }) {
 
   const paymentColumns = [
     { key: "vendor", label: "VENDOR", stopClick: true, render: (p) => (
-      <InlineSelect value={p.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="—"
+      <CompanySelect value={p.companyId} placeholder="—" defaultType="vendor"
         onCommit={(v) => update("payments", p.id, { companyId: v })} />
     ) },
     { key: "amount", label: "AMOUNT OUT", stopClick: true, render: (p) => (

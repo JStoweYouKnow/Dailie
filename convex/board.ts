@@ -11,7 +11,7 @@ import {
   pendingClerkId,
 } from "../src/lib/houseAccess.js";
 import { redactRecordBlobUrls } from "../src/lib/blobUrls.js";
-import { isSharedCollection } from "../src/lib/sharedBoard.js";
+import { isSharedCollection, isSeedRecordId } from "../src/lib/sharedBoard.js";
 
 /** Writes stay gated. Reads return null when there is no session so the client can wait. */
 async function requireIdentity(ctx) {
@@ -22,8 +22,13 @@ async function requireIdentity(ctx) {
 
 function assertSharedCollection(collection: string) {
   if (!isSharedCollection(collection)) {
-    throw new Error("Unknown collection.");
+    throw new Error(`Unknown collection "${collection}".`);
   }
+}
+
+/** Convex documents cannot contain `undefined`; drop those keys before writing. */
+function asConvexData(value) {
+  return JSON.parse(JSON.stringify(value ?? null));
 }
 
 function assertCanWriteCollection(identity, collection: string) {
@@ -160,7 +165,7 @@ export const put = mutation({
       .withIndex("by_doc", (q) => q.eq("collection", collection).eq("docId", docId))
       .unique();
 
-    const patch = { collection, docId, data, updatedAt: Date.now(), updatedBy: identity.subject };
+    const patch = { collection, docId, data: asConvexData(data), updatedAt: Date.now(), updatedBy: identity.subject };
     if (existing) await ctx.db.patch(existing._id, patch);
     else await ctx.db.insert("records", patch);
     return null;
@@ -207,10 +212,11 @@ export const putMany = mutation({
         // Rewriting an unchanged record costs a write and risks the transaction's
         // limits for nothing. "Populate from email" re-sends every message it has
         // seen, and almost none of them differ.
-        if (JSON.stringify(prior.data) === JSON.stringify(record)) continue;
-        await ctx.db.patch(prior._id, { data: record, updatedAt: now, updatedBy: identity.subject });
+        const payload = asConvexData(record);
+        if (JSON.stringify(prior.data) === JSON.stringify(payload)) continue;
+        await ctx.db.patch(prior._id, { data: payload, updatedAt: now, updatedBy: identity.subject });
       } else {
-        await ctx.db.insert("records", { collection, docId, data: record, updatedAt: now, updatedBy: identity.subject });
+        await ctx.db.insert("records", { collection, docId, data: asConvexData(record), updatedAt: now, updatedBy: identity.subject });
       }
       written += 1;
     }
@@ -425,6 +431,7 @@ export const merge = mutation({
 
       for (const record of records) {
         if (!record || !record.id) continue;
+        if (isSeedRecordId(record.id)) { skipped += 1; continue; }
         const docId = String(record.id);
         if (known.has(docId)) { skipped += 1; continue; }
         await ctx.db.insert("records", {
@@ -469,6 +476,7 @@ export const seed = mutation({
       if (!isSharedCollection(collection) || !Array.isArray(records)) continue;
       for (const record of records) {
         if (!record || !record.id) continue;
+        if (isSeedRecordId(record.id)) continue;
         await ctx.db.insert("records", {
           collection,
           docId: String(record.id),
@@ -479,6 +487,7 @@ export const seed = mutation({
         count += 1;
       }
     }
+    if (!count) return { seeded: false, reason: "Nothing to seed besides sample data." };
     if (settings) {
       const seeded = lockSharedSettings(settings, {
         isHouse: true,

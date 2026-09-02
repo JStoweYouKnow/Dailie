@@ -11,6 +11,7 @@ import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Avatar,
   InlineText, InlineSelect, ModalShell, Field, Section, ConfirmButton,
 } from "../ui/kit";
+import { CompanySelect } from "../ui/CompanySelect";
 
 /**
  * One view backs Legal and Representation — same contact records, split by kind
@@ -70,10 +71,8 @@ function NewCounselModal({ onClose, representation }) {
         </Field>
       </div>
       <Field label="COMPANY" hint="If they act for one of the companies on the board.">
-        <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-          <option value="">Not linked</option>
-          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CompanySelect native value={form.companyId} placeholder="Not linked"
+          onCommit={(id) => setForm((f) => ({ ...f, companyId: id || "" }))} />
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>
         {representation ? "Save Representation" : "Save Contact"}
@@ -156,7 +155,7 @@ function CounselDetail({ contact, onClose, onOpenTab, representation }) {
             onCommit={(v) => patch({ projectId: v })} />
         </Field>
         <Field label="COMPANY">
-          <InlineSelect value={live.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="Not linked"
+          <CompanySelect value={live.companyId} placeholder="Not linked"
             onCommit={(v) => patch({ companyId: v })} />
         </Field>
         <Field label="LAST CONTACT">
@@ -320,7 +319,7 @@ export default function LegalView({ searchQuery, scope = "legal", onOpenTab }) {
         onCommit={(v) => update("legal", l.id, { projectId: v })} />
     ) },
     { key: "company", label: "COMPANY", stopClick: true, render: (l) => (
-      <InlineSelect value={l.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="—"
+      <CompanySelect value={l.companyId} placeholder="—"
         onCommit={(v) => update("legal", l.id, { companyId: v })} />
     ) },
     { key: "notes", label: "NOTES", cellStyle: { minWidth: 180 }, stopClick: true, render: (l) => (

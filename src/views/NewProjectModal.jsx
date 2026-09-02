@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../lib/store";
 import { RECORD_TYPES, STAGES, PRIORITIES, recordTypeInfo, withProjectOwners } from "../lib/model";
 import { ModalShell, Field, FileAttachButton, AttachmentRow, MemberPicker } from "../ui/kit";
+import { CompanySelect } from "../ui/CompanySelect";
 import { useDraftUploads } from "../lib/draftUploads";
 import { storedInlineUrl } from "../lib/blobUrls.js";
 
@@ -108,20 +109,14 @@ export default function NewProjectModal({ onClose, initialTitle = "", initialDes
         />
       </Field>
       <Field label="COMPANY">
-        <select className="md-select" value={form.companyId} onChange={(e) => {
-          const companyId = e.target.value;
-          const company = data.companies.find((c) => c.id === companyId);
-          setForm((f) => ({
+        <CompanySelect native value={form.companyId} placeholder="No company"
+          onCommit={(companyId, company) => setForm((f) => ({
             ...f,
-            companyId,
+            companyId: companyId || "",
             contactName: f.contactName || (company && company.contactName) || "",
             contactEmail: f.contactEmail || (company && company.contactEmail) || "",
             contactPhone: f.contactPhone || (company && company.contactPhone) || "",
-          }));
-        }}>
-          <option value="">No company</option>
-          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+          }))} />
       </Field>
       <Field label="CONTACT PERSON"><input className="md-input" value={form.contactName} onChange={set("contactName")} placeholder="Who we call" /></Field>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

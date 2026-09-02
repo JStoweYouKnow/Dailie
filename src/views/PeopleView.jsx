@@ -7,9 +7,10 @@ import {
   ViewHeader, DataTable, EmptyState, Badge, Avatar, InlineText, InlineSelect, ModalShell,
   Field, Section, ConfirmButton, MemberPicker,
 } from "../ui/kit";
+import { CompanySelect } from "../ui/CompanySelect";
 
 function PersonDetail({ person, onClose, onOpenTab }) {
-  const { data, update, remove, add, currentUser, memberName, companyName } = useStore();
+  const { data, update, remove, add, currentUser } = useStore();
   const [task, setTask] = useState("");
 
   const emails = data.emails.filter((e) => e.personId === person.id).sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
@@ -36,8 +37,8 @@ function PersonDetail({ person, onClose, onOpenTab }) {
         <Field label="EMAIL"><InlineText value={person.email} mono style={{ color: "var(--accent)" }} onCommit={(v) => update("people", person.id, { email: v })} /></Field>
         <Field label="PHONE"><InlineText value={person.phone} mono onCommit={(v) => update("people", person.id, { phone: v })} /></Field>
         <Field label="COMPANY">
-          <InlineSelect value={person.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="No company"
-            onCommit={(v) => update("people", person.id, { companyId: v, organization: companyName(v) })} />
+          <CompanySelect value={person.companyId} placeholder="No company"
+            onCommit={(v, company) => update("people", person.id, { companyId: v, organization: company ? company.name : "" })} />
         </Field>
         <Field label="RELATIONSHIP">
           <InlineSelect value={person.relationship || "new"} options={RELATIONSHIP_STAGES} onCommit={(v) => update("people", person.id, { relationship: v })} />
@@ -100,18 +101,17 @@ function PersonDetail({ person, onClose, onOpenTab }) {
 }
 
 export function NewPersonModal({ onClose }) {
-  const { data, add, currentUser } = useStore();
-  const [form, setForm] = useState({ name: "", role: "", companyId: "", email: "", phone: "" });
+  const { add, currentUser } = useStore();
+  const [form, setForm] = useState({ name: "", role: "", companyId: "", organization: "", email: "", phone: "" });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = () => {
     if (!form.name.trim()) return;
-    const company = data.companies.find((c) => c.id === form.companyId);
     add("people", {
       name: form.name.trim(),
       role: form.role.trim(),
       companyId: form.companyId || null,
-      organization: company ? company.name : "",
+      organization: form.organization,
       email: form.email.trim().toLowerCase(),
       phone: form.phone.trim(),
       projectIds: [],
@@ -128,10 +128,8 @@ export function NewPersonModal({ onClose }) {
       <Field label="FULL NAME"><input className="md-input" autoFocus value={form.name} onChange={set("name")} placeholder="e.g. David Sterling" /></Field>
       <Field label="ROLE / TITLE"><input className="md-input" value={form.role} onChange={set("role")} placeholder="e.g. VP Distribution" /></Field>
       <Field label="COMPANY">
-        <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-          <option value="">No company</option>
-          {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <CompanySelect native value={form.companyId} placeholder="No company"
+          onCommit={(id, company) => setForm((f) => ({ ...f, companyId: id || "", organization: company ? company.name : "" }))} />
       </Field>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="EMAIL"><input className="md-input" value={form.email} onChange={set("email")} placeholder="email@domain.com" /></Field>
@@ -143,7 +141,7 @@ export function NewPersonModal({ onClose }) {
 }
 
 export default function PeopleView({ searchQuery, onOpenTab }) {
-  const { data, update, companyName, memberName } = useStore();
+  const { data, update } = useStore();
   const [open, setOpen] = useState(null);
   const [showNew, setShowNew] = useState(false);
 
@@ -171,8 +169,8 @@ export default function PeopleView({ searchQuery, onOpenTab }) {
     ) },
     { key: "role", label: "ROLE", stopClick: true, render: (p) => <InlineText value={p.role} placeholder="Add role" onCommit={(v) => update("people", p.id, { role: v })} /> },
     { key: "company", label: "COMPANY", stopClick: true, render: (p) => (
-      <InlineSelect value={p.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder={p.organization || "—"}
-        onCommit={(v) => update("people", p.id, { companyId: v, organization: companyName(v) })} />
+      <CompanySelect value={p.companyId} placeholder={p.organization || "—"}
+        onCommit={(v, company) => update("people", p.id, { companyId: v, organization: company ? company.name : "" })} />
     ) },
     { key: "email", label: "EMAIL", stopClick: true, render: (p) => (
       <InlineText value={p.email} mono style={{ color: "var(--accent)", fontSize: 12 }} onCommit={(v) => update("people", p.id, { email: v })} />

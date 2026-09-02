@@ -8,6 +8,7 @@ import {
   ModalShell, Field, FileAttachButton, AttachmentRow, SingleAttachmentCell, ConfirmButton,
 } from "../ui/kit";
 import { useDraftUploads } from "../lib/draftUploads";
+import { CompanySelect } from "../ui/CompanySelect";
 
 function NewContractModal({ onClose, defaultKind }) {
   const { data, add, currentUser } = useStore();
@@ -53,10 +54,8 @@ function NewContractModal({ onClose, defaultKind }) {
       <Field label="TITLE"><input className="md-input" autoFocus value={form.title} onChange={set("title")} placeholder="e.g. A24 — Mutual NDA" /></Field>
       <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="COUNTERPARTY">
-          <select className="md-select" value={form.companyId} onChange={set("companyId")}>
-            <option value="">No company</option>
-            {data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <CompanySelect native value={form.companyId} placeholder="No company"
+            onCommit={(id) => setForm((f) => ({ ...f, companyId: id || "" }))} />
         </Field>
         <Field label="PROJECT">
           <select className="md-select" value={form.projectId} onChange={set("projectId")}>
@@ -124,7 +123,7 @@ export default function ContractsView({ searchQuery }) {
       c.talentId
         ? <InlineSelect value={c.talentId} options={(data.talent || []).map((t) => ({ key: t.id, label: t.name }))} placeholder="—"
             onCommit={(v) => update("contracts", c.id, { talentId: v })} />
-        : <InlineSelect value={c.companyId} options={data.companies.map((x) => ({ key: x.id, label: x.name }))} placeholder="—"
+        : <CompanySelect value={c.companyId} placeholder="—"
             onCommit={(v) => update("contracts", c.id, { companyId: v })} />
     ) },
     { key: "project", label: "PROJECT", stopClick: true, render: (c) => (

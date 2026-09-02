@@ -6,7 +6,7 @@ import { api } from "../../convex/_generated/api";
 import { normalizeData, SEED_DATA, assignmentNotices } from "./model";
 import { AUTH_ENABLED } from "./auth";
 import { uid } from "./format";
-import { fromSharedBoard, toSharedPayload, toRecordsPayload, hasLocalContent, SHARED_COLLECTIONS } from "./sharedBoard";
+import { fromSharedBoard, toSharedPayload, toRecordsPayload, hasLocalContent, withoutSeedRecords, pendingLocalContribution, SHARED_COLLECTIONS } from "./sharedBoard";
 import { loadStoredData } from "./store";
 import { canWriteCollection, isHouseEmail } from "./houseAccess";
 
@@ -26,6 +26,11 @@ export const CONVEX_URL = import.meta.env.VITE_CONVEX_URL || "";
 // A Convex mutation takes a bounded argument payload, and an imported mailbox is far
 // past it. Records are written in batches of this many.
 const CHUNK_SIZE = 200;
+
+/** Convex rejects `undefined` anywhere in a mutation argument. */
+function convexData(value) {
+  return JSON.parse(JSON.stringify(value ?? null));
+}
 
 /**
  * The shared board is only reachable with a session — every function requires an
@@ -142,7 +147,7 @@ export function useSharedBoard(account) {
     if (!empty) { seeded.current = true; return; }
     seeded.current = true;
     (async () => {
-      const local = await loadStoredData();
+      const local = withoutSeedRecords(await loadStoredData());
       if (!hasLocalContent(local)) return;
       const result = await seed(toSharedPayload(local)).catch(() => null);
       if (result && result.seeded && !announced.current) {
@@ -162,20 +167,13 @@ export function useSharedBoard(account) {
     let cancelled = false;
     (async () => {
       const local = await loadStoredData();
-      const counts = {};
-      for (const name of SHARED_COLLECTIONS) {
-        const shared = new Set(((liveBoard.collections && liveBoard.collections[name]) || []).map((r) => String(r.id)));
-        const missing = (local[name] || []).filter((r) => r && r.id && !shared.has(String(r.id)));
-        if (missing.length) counts[name] = missing.length;
-      }
-      const total = Object.values(counts).reduce((a, b) => a + b, 0);
-      if (!cancelled) setPendingLocal(total ? { counts, total } : null);
+      if (!cancelled) setPendingLocal(pendingLocalContribution(local, liveBoard.collections));
     })();
     return () => { cancelled = true; };
   }, [loading, denied, liveBoard]);
 
   const publishLocal = useCallback(async () => {
-    const local = await loadStoredData();
+    const local = withoutSeedRecords(await loadStoredData());
     try {
       const result = await merge(toRecordsPayload(local));
       setPendingLocal(null);
@@ -258,7 +256,7 @@ export function useSharedBoard(account) {
     notices.forEach((n) => {
       const item = { id: uid(), ...n };
       stage("notifications", String(item.id), item);
-      settle(put({ collection: "notifications", docId: String(item.id), data: item })).catch(() => {});
+      settle(put({ collection: "notifications", docId: String(item.id), data: convexData(item) })).catch(() => {});
     });
   }, [put]);
 
@@ -273,7 +271,7 @@ export function useSharedBoard(account) {
     if (!allowWrite(collection)) return null;
     const item = { id: uid(), createdAt: Date.now(), ...record };
     stage(collection, String(item.id), item);
-    settle(put({ collection, docId: String(item.id), data: item })).catch(() => {});
+    settle(put({ collection, docId: String(item.id), data: convexData(item) })).catch(() => {});
     emitNotices(assignmentNotices(collection, null, item, resolveActorId()));
     return item;
   }, [allowWrite, put, emitNotices, resolveActorId]);
@@ -285,7 +283,7 @@ export function useSharedBoard(account) {
     const delta = typeof changes === "function" ? changes(current) : changes;
     const next = { ...current, ...delta };
     stage(collection, String(id), next);
-    settle(put({ collection, docId: String(id), data: next })).catch(() => {});
+    settle(put({ collection, docId: String(id), data: convexData(next) })).catch(() => {});
     emitNotices(assignmentNotices(collection, current, next, resolveActorId()));
   }, [allowWrite, data, put, emitNotices, resolveActorId]);
 
@@ -306,7 +304,7 @@ export function useSharedBoard(account) {
     const history = note ? [...(current.history || []), { id: uid(), date: Date.now(), note }] : current.history;
     const next = { ...current, ...delta, updatedAt: Date.now(), history };
     stage("projects", String(id), next);
-    settle(put({ collection: "projects", docId: String(id), data: next })).catch(() => {});
+    settle(put({ collection: "projects", docId: String(id), data: convexData(next) })).catch(() => {});
     emitNotices(assignmentNotices("projects", current, next, resolveActorId()));
   }, [data.projects, put, emitNotices, resolveActorId]);
 

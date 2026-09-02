@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw, Presentation, Share2, Mic2 } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw, Presentation, Share2, Mic2, Send, Sparkles } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
   CONTRACT_STATUSES, INVOICE_STATUSES, SLATE_STATUSES, SOCIAL_STATUSES, EVENT_KINDS, EVENT_STATUSES,
-  PITCH_SOURCES, PITCH_STATUSES, lookupLabel, lookupColor, makeTask, makeProjectDate, PROJECT_DATE_SUGGESTIONS,
-  projectOwnerIds, withProjectOwners, normalizeProjectDates, pitchLabel, resolvedSlateStatus,
+  PITCH_SOURCES, PITCH_STATUSES, MANDATE_KINDS, lookupLabel, lookupColor, makeTask, makePitch,
+  makeProjectDate, PROJECT_DATE_SUGGESTIONS, projectOwnerIds, withProjectOwners, normalizeProjectDates,
+  pitchLabel, mandateLabel, projectPitchSuggestions, resolvedSlateStatus,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile, deleteFile } from "../lib/files";
@@ -13,6 +14,7 @@ import { storedInlineUrl } from "../lib/blobUrls.js";
 import {
   ModalShell, Field, Section, Badge, InlineText, InlineSelect, MemberPicker, ConfirmButton, Avatar,
 } from "../ui/kit";
+import { CompanySelect } from "../ui/CompanySelect";
 import { visibleMeetings } from "../lib/calendarExclusions";
 import { safeHref } from "../lib/safeUrl";
 
@@ -134,13 +136,13 @@ function LinkRow({ label, value, placeholder, onCommit }) {
   const href = safeHref(value);
   return (
     <Row label={label}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <InlineText value={value} mono placeholder={placeholder} style={{ color: "var(--accent)", fontSize: 12 }}
+          <InlineText value={value} wrap mono placeholder={placeholder} style={{ color: "var(--accent)", fontSize: 12 }}
             onCommit={(v) => onCommit(v.trim())} />
         </div>
         {href && (
-          <a href={href} target="_blank" rel="noreferrer" className="md-btn md-btn-ghost" style={{ padding: 4 }} title="Open link">
+          <a href={href} target="_blank" rel="noreferrer" className="md-btn md-btn-ghost" style={{ padding: 4, flexShrink: 0 }} title="Open link">
             <ExternalLink size={12} />
           </a>
         )}
@@ -179,6 +181,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const invoices = data.invoices.filter((i) => i.projectId === project.id);
   const packages = (data.slate || []).filter((s) => s.projectId === project.id);
   const pitches = (data.pitches || []).filter((p) => p.projectId === project.id);
+  const pitchIdeas = projectPitchSuggestions(data.mandates, project, packages, data.pitches);
   const social = (data.social || []).filter((s) => s.projectId === project.id);
   const meetings = visibleMeetings(data.meetings, data.settings).filter((m) => m.projectId === project.id);
   const history = [...(project.history || [])].sort((a, b) => b.date - a.date);
@@ -198,6 +201,23 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
       assigneeIds: projectOwnerIds(project),
     }, currentUser && currentUser.id));
     setNewTask("");
+    flashSave("saved");
+  };
+
+  // A suggestion is only an idea until someone acts on it: taking one writes a real
+  // pitch on the project, carrying the mandate and the reason it was flagged.
+  const addSuggestedPitch = ({ mandate, reason, packageId }) => {
+    add("pitches", makePitch({
+      projectId: project.id,
+      packageId: packageId || (packages[0] && packages[0].id) || null,
+      companyId: mandate.companyId || null,
+      mandateId: mandate.id,
+      name: mandate.companyId ? "" : (mandate.name || ""),
+      status: "suggested",
+      source: "both",
+      reason,
+      ownerId: (currentUser && currentUser.id) || null,
+    }));
     flashSave("saved");
   };
 
@@ -316,7 +336,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             onChange={(ids) => patchProject({ teamIds: ids.filter((id) => !projectOwnerIds(project).includes(id)) }, "Team updated")} />
         </Row>
         <Row label="COMPANY">
-          <InlineSelect value={project.companyId} options={data.companies.map((c) => ({ key: c.id, label: c.name }))} placeholder="No company"
+          <CompanySelect value={project.companyId} placeholder="No company"
             onCommit={(v) => patchProject({ companyId: v })} />
         </Row>
         <Row label="CONTACT PERSON">
@@ -383,21 +403,31 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             <button className="md-btn" onClick={() => addExtraDate()}><Plus size={13} /> Add date</button>
           </div>
         </div>
-        {Object.keys(customFields).map((name) => (
-          <Row key={name} label={name.toUpperCase()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <InlineText value={customFields[name]} placeholder="—" onCommit={(v) => patchProject({ customFields: { ...customFields, [name]: v } })} />
+        {Object.keys(customFields).map((name) => {
+          const href = safeHref(customFields[name]);
+          return (
+            <Row key={name} label={name.toUpperCase()}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <InlineText value={customFields[name]} wrap placeholder="—"
+                    style={href ? { color: "var(--accent)", fontSize: 12 } : undefined}
+                    onCommit={(v) => patchProject({ customFields: { ...customFields, [name]: v } })} />
+                </div>
+                {href && (
+                  <a href={href} target="_blank" rel="noreferrer" className="md-btn md-btn-ghost" style={{ padding: 4, flexShrink: 0 }} title="Open link">
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+                <button className="md-btn md-btn-ghost" style={{ padding: 4, flexShrink: 0 }} title="Remove field"
+                  onClick={() => {
+                    const next = { ...customFields };
+                    delete next[name];
+                    patchProject({ customFields: next });
+                  }}><X size={12} /></button>
               </div>
-              <button className="md-btn md-btn-ghost" style={{ padding: 4 }} title="Remove field"
-                onClick={() => {
-                  const next = { ...customFields };
-                  delete next[name];
-                  patchProject({ customFields: next });
-                }}><X size={12} /></button>
-            </div>
-          </Row>
-        ))}
+            </Row>
+          );
+        })}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <input className="md-input" placeholder="Add a custom field (e.g. Format, Territory, Delivery spec)" value={newFieldName}
             onChange={(e) => setNewFieldName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addCustomField(); }} />
@@ -542,28 +572,83 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
             </div>
           );
         })}
-        {pitches.length > 0 && (
-          <div style={{ marginTop: packages.length ? 10 : 0, marginBottom: 6 }}>
-            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>PITCHED TO</div>
-            {pitches.map((pitch) => (
-              <div key={pitch.id} onClick={() => onOpenRecord && onOpenRecord("slate")} role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter" && onOpenRecord) onOpenRecord("slate"); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6, cursor: "pointer" }}>
+        <button className="md-btn md-btn-ghost" style={{ marginTop: packages.length ? 6 : 0, fontSize: 12 }}
+          onClick={() => onOpenRecord && onOpenRecord("slate")}>
+          <Plus size={13} /> {packages.length ? "Open slate" : "Add a pitch package"}
+        </button>
+      </Section>
+
+      <Section title={`PITCHED TO · ${pitches.length}`}>
+        {pitches.map((pitch) => {
+          const mandate = (data.mandates || []).find((m) => m.id === pitch.mandateId);
+          return (
+            <div key={pitch.id}
+              style={{ padding: "10px 12px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Send size={14} color="var(--accent)" style={{ flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{pitchLabel(pitch, data.companies, data.mandates)}</div>
-                  {pitch.reason ? (
-                    <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pitch.reason}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+                    <Badge label={lookupLabel(PITCH_SOURCES, pitch.source)} color={lookupColor(PITCH_SOURCES, pitch.source)} />
+                    {mandate && (
+                      <Badge label={lookupLabel(MANDATE_KINDS, mandate.kind)} color={lookupColor(MANDATE_KINDS, mandate.kind)} />
+                    )}
+                    {pitch.pitchedAt ? (
+                      <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>{formatShort(pitch.pitchedAt)}</span>
+                    ) : null}
+                  </div>
+                </div>
+                <InlineSelect value={pitch.status} options={PITCH_STATUSES} color={lookupColor(PITCH_STATUSES, pitch.status)}
+                  onCommit={(v) => {
+                    update("pitches", pitch.id, {
+                      status: v,
+                      pitchedAt: v === "pitched" && !pitch.pitchedAt ? Date.now() : pitch.pitchedAt,
+                    });
+                    flashSave("edited");
+                  }} />
+              </div>
+              {pitch.reason ? (
+                <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 8, lineHeight: 1.5 }}>{pitch.reason}</div>
+              ) : null}
+              {mandate && mandate.mandate ? (
+                <div style={{ fontSize: 12, color: "var(--dim-2)", marginTop: 6, lineHeight: 1.5 }}>
+                  <span className="md-mono" style={{ fontSize: 10, letterSpacing: ".1em" }}>THEIR MANDATE · </span>
+                  {mandate.mandate}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+        {pitchIdeas.length > 0 && (
+          <div style={{ marginTop: pitches.length ? 12 : 0 }}>
+            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>
+              COULD BE A FIT · FROM THEIR MANDATE
+            </div>
+            {pitchIdeas.map(({ mandate, reason, packageId }) => (
+              <div key={mandate.id}
+                style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", border: "1px dashed var(--rule)", borderRadius: 8, marginBottom: 6 }}>
+                <Sparkles size={14} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{mandateLabel(mandate, data.companies)}</div>
+                    <Badge label={lookupLabel(MANDATE_KINDS, mandate.kind)} color={lookupColor(MANDATE_KINDS, mandate.kind)} />
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 4, lineHeight: 1.5 }}>{reason}</div>
+                  {mandate.mandate ? (
+                    <div style={{ fontSize: 12, color: "var(--dim-2)", marginTop: 4, lineHeight: 1.5 }}>{mandate.mandate}</div>
                   ) : null}
                 </div>
-                <Badge label={lookupLabel(PITCH_SOURCES, pitch.source)} color={lookupColor(PITCH_SOURCES, pitch.source)} />
-                <Badge label={lookupLabel(PITCH_STATUSES, pitch.status)} color={lookupColor(PITCH_STATUSES, pitch.status)} />
+                <button className="md-btn" style={{ flexShrink: 0, fontSize: 12 }}
+                  onClick={() => addSuggestedPitch({ mandate, reason, packageId })}>
+                  <Plus size={13} /> Pitch
+                </button>
               </div>
             ))}
           </div>
         )}
-        <button className="md-btn md-btn-ghost" style={{ marginTop: packages.length || pitches.length ? 6 : 0, fontSize: 12 }}
+        <button className="md-btn md-btn-ghost" style={{ marginTop: pitches.length || pitchIdeas.length ? 6 : 0, fontSize: 12 }}
           onClick={() => onOpenRecord && onOpenRecord("slate")}>
-          <Plus size={13} /> {packages.length || pitches.length ? "Open slate" : "Add a pitch package"}
+          <Plus size={13} /> {pitches.length ? "Open slate" : "Add who we pitched"}
         </button>
       </Section>
 

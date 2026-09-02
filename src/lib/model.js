@@ -1339,14 +1339,39 @@ export function pitchLabel(pitch, companies, mandates) {
   return "Untitled";
 }
 
+// Connective words carry no signal about what a buyer wants, and matching on them
+// would call everything a fit.
+const FIT_STOPWORDS = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "into", "over", "under", "about",
+  "their", "them", "they", "our", "its", "can", "could", "will", "would", "should", "must",
+  "are", "was", "were", "been", "being", "have", "has", "had", "not", "but", "out", "who",
+  "what", "when", "where", "how", "all", "any", "one", "two", "new", "then", "than", "also",
+  "more", "most", "some", "such", "very", "just", "want", "wants", "looking", "look", "need",
+  "needs", "there", "here", "something", "anything", "which", "while", "after", "before",
+]);
+
+/**
+ * Mandates are written in prose, so a buyer asking for "psychological sci-fi thrillers"
+ * has to match an IP billed as a "sci-fi psychological thriller". Split on punctuation
+ * (so hyphenated genres survive), keep three-letter words like "sci", and fold plurals
+ * to their singular so thriller and thrillers are the same word.
+ */
 function significantWords(text) {
-  return [...new Set(String(text || "").toLowerCase().match(/[a-z0-9]{4,}/g) || [])];
+  const words = String(text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+  return [...new Set(words.filter((w) => !FIT_STOPWORDS.has(w)).map(singularize))];
 }
 
-/** Why this IP might fit a buyer's mandate — overlap between the package and what they asked for. */
-export function mandateFitReason(mandate, project, pkg) {
+function singularize(word) {
+  if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 4 && /(?:ss|sh|ch|x|z)es$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+
+/** The words a buyer asked for that this IP actually delivers on. */
+function mandateFitHits(mandate, project, pkg) {
   const needles = significantWords(mandate && mandate.mandate);
-  if (!needles.length) return null;
+  if (!needles.length) return [];
   const hay = new Set(significantWords([
     project && project.title,
     project && project.description,
@@ -1354,7 +1379,12 @@ export function mandateFitReason(mandate, project, pkg) {
     pkg && pkg.logline,
     pkg && pkg.synopsis,
   ].filter(Boolean).join(" ")));
-  const hits = needles.filter((w) => hay.has(w));
+  return needles.filter((w) => hay.has(w));
+}
+
+/** Why this IP might fit a buyer's mandate — overlap between the package and what they asked for. */
+export function mandateFitReason(mandate, project, pkg) {
+  const hits = mandateFitHits(mandate, project, pkg);
   if (hits.length < 2) return null;
   return `Fits their mandate (${hits.slice(0, 6).join(", ")}).`;
 }
@@ -1363,6 +1393,34 @@ export function suggestMandateFits(mandates, project, pkg) {
   return (mandates || [])
     .map((mandate) => ({ mandate, reason: mandateFitReason(mandate, project, pkg) }))
     .filter((row) => row.reason);
+}
+
+/**
+ * Buyers this project could be a fit for: their mandate read against the project and
+ * every pitch package on it. Anyone already pitched — by mandate or by company — drops
+ * off, so the list is only who is left to send it to.
+ */
+export function projectPitchSuggestions(mandates, project, packages, pitches) {
+  if (!project) return [];
+  const mine = (pitches || []).filter((p) => p.projectId === project.id);
+  const pitchedMandates = new Set(mine.map((p) => p.mandateId).filter(Boolean));
+  const pitchedCompanies = new Set(mine.map((p) => p.companyId).filter(Boolean));
+  const candidates = (packages || []).length ? packages : [null];
+  return (mandates || [])
+    .filter((m) => !pitchedMandates.has(m.id) && !(m.companyId && pitchedCompanies.has(m.companyId)))
+    .map((mandate) => {
+      // A project can carry several packages; the strongest one is the case for the pitch.
+      let best = null;
+      for (const pkg of candidates) {
+        const hits = mandateFitHits(mandate, project, pkg);
+        if (hits.length >= 2 && (!best || hits.length > best.hits)) {
+          best = { mandate, reason: mandateFitReason(mandate, project, pkg), hits: hits.length, packageId: pkg ? pkg.id : null };
+        }
+      }
+      return best;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.hits - a.hits);
 }
 
 export function makeSocialItem(fields) {

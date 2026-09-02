@@ -2,7 +2,7 @@
  * Shape helpers for moving the board between the browser-local copy and the shared
  * one. Kept separate from the React layer so the mapping can be tested on its own.
  */
-import { normalizeData } from "./model.js";
+import { normalizeData, SEED_DATA } from "./model.js";
 
 /** Collections that live as rows in the shared board. */
 export const SHARED_COLLECTIONS = [
@@ -13,6 +13,54 @@ export const SHARED_COLLECTIONS = [
 
 export function isSharedCollection(name) {
   return SHARED_COLLECTIONS.includes(name);
+}
+
+/**
+ * The canned demo board every empty browser starts with (Obsidian Echo, A24, …).
+ * Sharing that with the team is never useful — it is sample data, not someone's work.
+ */
+const SEED_RECORD_IDS = (() => {
+  const ids = new Set();
+  for (const name of SHARED_COLLECTIONS) {
+    for (const record of SEED_DATA[name] || []) {
+      if (record && record.id) ids.add(String(record.id));
+    }
+  }
+  return ids;
+})();
+
+export function isSeedRecordId(id) {
+  return SEED_RECORD_IDS.has(String(id || ""));
+}
+
+/** Drop the canned demo rows so they cannot be lifted onto the shared board. */
+export function withoutSeedRecords(data) {
+  const next = { ...(data || {}) };
+  for (const name of SHARED_COLLECTIONS) {
+    const list = Array.isArray(data && data[name]) ? data[name] : [];
+    next[name] = list.filter((r) => r && r.id && !isSeedRecordId(r.id));
+  }
+  return next;
+}
+
+/**
+ * Records on this device that the shared board has never seen, excluding the canned
+ * demo. Used for the "Share with the team" banner so sample data cannot keep offering
+ * itself after every sign-in.
+ */
+export function pendingLocalContribution(local, sharedCollections) {
+  const counts = {};
+  for (const name of SHARED_COLLECTIONS) {
+    const shared = new Set(
+      ((sharedCollections && sharedCollections[name]) || []).map((r) => String(r && r.id))
+    );
+    const missing = (local[name] || []).filter(
+      (r) => r && r.id && !isSeedRecordId(r.id) && !shared.has(String(r.id))
+    );
+    if (missing.length) counts[name] = missing.length;
+  }
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  return total ? { counts, total } : null;
 }
 
 /**
@@ -58,7 +106,8 @@ export function fromSharedBoard(board, fallback) {
   return normalizeData(merged);
 }
 
-/** True when a local board holds anything worth lifting into the shared one. */
+/** True when a local board holds real work, not just the canned demo. */
 export function hasLocalContent(data) {
-  return SHARED_COLLECTIONS.some((name) => Array.isArray(data[name]) && data[name].length > 0);
+  const real = withoutSeedRecords(data);
+  return SHARED_COLLECTIONS.some((name) => Array.isArray(real[name]) && real[name].length > 0);
 }
