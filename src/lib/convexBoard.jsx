@@ -185,7 +185,7 @@ export function useSharedBoard(account) {
       );
       return result;
     } catch (err) {
-      // Publishing failed silently before this: the promise rejected, the banner
+      // Publishing failed silently before this: the promise rejected, Settings
       // stayed put, and the only sign was a console line nobody was watching.
       setSaveError(err && err.message ? err.message : "Could not share these records.");
       showToast("Could not share these records — see the message above.", "error");

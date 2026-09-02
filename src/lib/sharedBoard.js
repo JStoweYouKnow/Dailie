@@ -45,8 +45,8 @@ export function withoutSeedRecords(data) {
 
 /**
  * Records on this device that the shared board has never seen, excluding the canned
- * demo. Used for the "Share with the team" banner so sample data cannot keep offering
- * itself after every sign-in.
+ * demo. Used in Settings so leftover local records can still be shared without
+ * sample data offering itself after every sign-in.
  */
 export function pendingLocalContribution(local, sharedCollections) {
   const counts = {};
