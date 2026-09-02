@@ -59,9 +59,9 @@ export function ModalShell({ title, subtitle, status, onClose, children, wide, z
   );
 }
 
-export function Field({ label, children, hint }) {
+export function Field({ label, children, hint, style }) {
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 16, ...style }}>
       <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 6 }}>{label}</div>
       {children}
       {hint && <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 5 }}>{hint}</div>}
@@ -218,7 +218,7 @@ export function AvatarStack({ names, size = 24, max = 4 }) {
  * Inline editors — everything on a record is editable in place.
  * ------------------------------------------------------------------ */
 
-export function InlineText({ value, onCommit, placeholder = "—", multiline, wrap, style, mono, markdown }) {
+export function InlineText({ value, onCommit, placeholder = "—", multiline, wrap, boxed, rows, style, mono, markdown }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
   // Take the incoming value only while idle. On a shared board someone else's edit
@@ -236,7 +236,7 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, wr
       <Tag
         className={multiline ? "md-textarea" : "md-input"}
         autoFocus
-        rows={multiline ? 3 : undefined}
+        rows={multiline ? (rows || (boxed ? 4 : 3)) : undefined}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
@@ -244,7 +244,15 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, wr
           if (e.key === "Enter" && !multiline) commit();
           if (e.key === "Escape") { setDraft(value || ""); setEditing(false); }
         }}
-        style={{ fontSize: 13, width: wrap && !multiline ? "100%" : undefined, minWidth: 0, ...style }}
+        style={{
+          fontSize: 13,
+          width: boxed || (wrap && !multiline) ? "100%" : undefined,
+          minWidth: 0,
+          minHeight: boxed ? 88 : undefined,
+          boxSizing: boxed ? "border-box" : undefined,
+          resize: boxed ? "vertical" : undefined,
+          ...style,
+        }}
       />
     );
   }
@@ -267,17 +275,23 @@ export function InlineText({ value, onCommit, placeholder = "—", multiline, wr
       onKeyDown={(e) => { if (e.key === "Enter") setEditing(true); }}
       title="Click to edit"
       style={{
-        cursor: "text", borderRadius: 6, padding: "3px 6px", margin: "-3px -6px",
-        minHeight: 22, color: value ? "var(--bone)" : "var(--dim-2)",
+        cursor: "text",
+        borderRadius: boxed ? 8 : 6,
+        padding: boxed ? "10px 12px" : "3px 6px",
+        margin: boxed ? 0 : "-3px -6px",
+        minHeight: boxed ? 88 : 22,
+        color: value ? "var(--bone)" : "var(--dim-2)",
         whiteSpace: wrapping ? (multiline ? "pre-wrap" : "normal") : "nowrap",
         overflow: wrapping ? "visible" : "hidden",
         textOverflow: wrapping ? "clip" : "ellipsis",
         overflowWrap: wrap ? "anywhere" : undefined,
         wordBreak: wrap ? "break-word" : undefined,
+        border: boxed ? "1px solid var(--rule)" : undefined,
+        background: boxed ? "var(--panel-raised)" : undefined,
         transition: "background .15s", fontSize: 13, ...style,
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = "var(--panel-hover)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = boxed ? "var(--panel-raised)" : "transparent"; }}
     >
       {showRendered ? <Markdown source={value} compact /> : (value || placeholder)}
     </div>

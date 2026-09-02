@@ -409,7 +409,7 @@ function PackageCard({ pkg, projectTitle }) {
   const status = resolvedSlateStatus(pkg);
 
   return (
-    <div style={{ padding: 16, border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 12 }}>
+    <div style={{ padding: "16px 16px 24px", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 12, overflow: "visible" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <InlineText value={pkg.title} style={{ fontSize: 16, fontWeight: 700 }} placeholder="Add a title"
@@ -458,8 +458,10 @@ function PackageCard({ pkg, projectTitle }) {
         />
       </Field>
 
-      <Field label="RIGHTS & NOTES" hint="Option, life rights, underlying IP — whatever someone sending this needs to know.">
-        <InlineText value={pkg.notes} multiline placeholder="e.g. Still need to option the book / life rights…"
+      <Field label="RIGHTS & NOTES" style={{ marginBottom: 0 }}>
+        <InlineText boxed multiline
+          value={pkg.notes}
+          placeholder="Option, life rights, underlying IP — e.g. still need to option the book…"
           onCommit={(v) => update("slate", pkg.id, { notes: v })} />
       </Field>
     </div>
@@ -619,51 +621,35 @@ export default function SlateView({ searchQuery }) {
             ) : groups.unlinked.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
           </div>
 
-          <div style={{ marginBottom: 22 }}>
-            <BucketHeading>PROJECTS</BucketHeading>
-            {groups.ordered.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--dim)", padding: "8px 0 4px" }}>
-                Link a package to a project, or record who an IP was pitched to, and it shows here.
-              </div>
-            ) : groups.ordered.map(({ project, packages, pitches: projectPitches }) => (
-              <div key={project.id} style={{ marginBottom: 22 }}>
-                <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em", marginBottom: 8 }}>
-                  {project.title.toUpperCase()}
-                </div>
-                {packages.map((pkg) => (
-                  <PackageCard key={pkg.id} pkg={pkg} projectTitle={packages.length > 1 ? projectName(pkg.projectId) : ""} />
-                ))}
-                <div style={{ marginTop: packages.length ? 4 : 0 }}>
-                  <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>
-                    PITCHED TO{projectPitches.length ? ` · ${projectPitches.length}` : ""}
+          {groups.ordered.length > 0 && (
+            <div style={{ marginBottom: 22 }}>
+              <BucketHeading>PROJECTS</BucketHeading>
+              {groups.ordered.map(({ project, packages, pitches: projectPitches }) => (
+                <div key={project.id} style={{ marginBottom: 22 }}>
+                  <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em", marginBottom: 8 }}>
+                    {project.title.toUpperCase()}
                   </div>
-                  {projectPitches.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 8 }}>
-                      Nobody on the board yet. Add a streamer or studio this IP was sent to, and whether the fit came from their mandate or an AI assessment.
+                  {packages.map((pkg) => (
+                    <PackageCard key={pkg.id} pkg={pkg} projectTitle={packages.length > 1 ? projectName(pkg.projectId) : ""} />
+                  ))}
+                  <div style={{ marginTop: packages.length ? 4 : 0 }}>
+                    <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>
+                      PITCHED TO{projectPitches.length ? ` · ${projectPitches.length}` : ""}
                     </div>
-                  ) : projectPitches.map((pitch) => <PitchRow key={pitch.id} pitch={pitch} />)}
-                  <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowPitch(project.id)}>
-                    <Plus size={12} /> Who we pitched
-                  </button>
+                    {projectPitches.length === 0 ? (
+                      <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 8 }}>
+                        Nobody on the board yet. Add a streamer or studio this IP was sent to, and whether the fit came from their mandate or an AI assessment.
+                      </div>
+                    ) : projectPitches.map((pitch) => <PitchRow key={pitch.id} pitch={pitch} />)}
+                    <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowPitch(project.id)}>
+                      <Plus size={12} /> Who we pitched
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </>
-      )}
-
-      {missing.length > 0 && !empty && projectFilter === "all" && !searchQuery && (
-        <div style={{ marginTop: 8, padding: 14, border: "1px dashed var(--rule)", borderRadius: 12 }}>
-          <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".1em", marginBottom: 8 }}>NO PACKAGE YET</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {missing.map((p) => (
-              <button key={p.id} className="md-btn md-btn-ghost" style={{ fontSize: 12 }}
-                onClick={() => { setProjectFilter("all"); setShowNew(p.id); }}>
-                {p.title}
-              </button>
-            ))}
-          </div>
-        </div>
       )}
 
       {showMandate && <NewMandateModal onClose={() => setShowMandate(false)} />}
