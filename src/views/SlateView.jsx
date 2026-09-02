@@ -175,9 +175,9 @@ function NewPackageModal({ onClose, defaultProjectId }) {
 
   return (
     <ModalShell wide title="Create New Pitch" subtitle="Title, log line, synopsis, deck, trailer, Drive folder, and rights notes — so anyone can send it." onClose={onClose}>
-      <Field label="PROJECT">
+      <Field label="DEAL" hint="Optional. Leave empty and this lands in Not on a deal until you assign it.">
         <select className="md-select" value={form.projectId} onChange={set("projectId")}>
-          <option value="">No project yet</option>
+          <option value="">No deal yet</option>
           {data.projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
         </select>
       </Field>
@@ -471,7 +471,7 @@ function PitchCard({ pitch }) {
         <Send size={14} color="var(--accent)" style={{ marginTop: 4, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.3 }}>
-            {project ? project.title : "No project linked"}
+            {project ? project.title : "No deal linked"}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 18, marginTop: 10 }}>
             <div>
@@ -500,10 +500,10 @@ function PitchCard({ pitch }) {
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("pitches", pitch.id)} />
       </div>
 
-      <Field label="PROJECT">
+      <Field label="DEAL">
         <select className="md-select" value={pitch.projectId || ""}
           onChange={(e) => update("pitches", pitch.id, { projectId: e.target.value || null })}>
-          <option value="">No project</option>
+          <option value="">No deal</option>
           {(data.projects || []).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
         </select>
       </Field>
@@ -535,25 +535,41 @@ function PitchCard({ pitch }) {
   );
 }
 
-function PackageCard({ pkg, projectTitle }) {
-  const { update, remove } = useStore();
+function PackageCard({ pkg }) {
+  const { update, remove, data } = useStore();
   const files = listAttachments(pkg);
   const status = resolvedSlateStatus(pkg);
+  const linked = Boolean(pkg.projectId);
+  const projects = data.projects || [];
 
   return (
-    <div style={{ padding: "16px 16px 24px", border: "1px solid var(--rule)", borderRadius: 12, background: "var(--panel)", marginBottom: 12, overflow: "visible" }}>
+    <div style={{
+      padding: "16px 16px 24px",
+      border: linked ? "1px solid var(--rule)" : `1px dashed ${HUE.sand}99`,
+      borderLeft: linked ? "1px solid var(--rule)" : `3px solid ${HUE.sand}`,
+      borderRadius: 12,
+      background: "var(--panel)",
+      marginBottom: 12,
+      overflow: "visible",
+    }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <InlineText value={pkg.title} style={{ fontSize: 16, fontWeight: 700 }} placeholder="Add a title"
             onCommit={(v) => update("slate", pkg.id, { title: v })} />
-          {projectTitle && (
-            <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 3 }}>{projectTitle}</div>
-          )}
         </div>
+        {!linked && <Badge label="No deal" color={HUE.sand} solid />}
         <InlineSelect fit value={status} options={SLATE_STATUSES} color={lookupColor(SLATE_STATUSES, status)}
           onCommit={(v) => update("slate", pkg.id, { status: v })} />
         <ConfirmButton label="" confirmLabel="Remove?" onConfirm={() => remove("slate", pkg.id)} />
       </div>
+
+      <Field label="DEAL" hint={!linked ? "Assign this to a deal and it files under that title below." : undefined}>
+        <select className="md-select" value={pkg.projectId || ""}
+          onChange={(e) => update("slate", pkg.id, { projectId: e.target.value || null })}>
+          <option value="">No deal yet</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+        </select>
+      </Field>
 
       <Field label="LOG LINE">
         <InlineText value={pkg.logline} multiline placeholder="Add a log line"
@@ -654,7 +670,6 @@ export default function SlateView({ searchQuery }) {
     return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [pitches, projectFilter, q, data.companies, mandates, projects]);
 
-  const projectName = (id) => ((projects.find((p) => p.id === id) || {}).title) || "";
   const withPackage = new Set(all.map((s) => s.projectId).filter(Boolean));
   const withPitch = new Set(pitches.map((p) => p.projectId).filter(Boolean));
   const missing = projects.filter((p) => !withPackage.has(p.id) && !withPitch.has(p.id));
@@ -708,12 +723,12 @@ export default function SlateView({ searchQuery }) {
         <Stat label="PACKAGES" value={all.length} />
         <Stat label="PITCHED TO" value={pitches.length} />
         <Stat label="READY TO SEND" value={ready} accent={ready ? "var(--sage)" : undefined} />
-        <Stat label="PROJECTS MISSING A PACKAGE" value={missing.length} accent={missing.length ? "var(--warn)" : undefined} />
+        <Stat label="DEALS MISSING A PACKAGE" value={missing.length} accent={missing.length ? "var(--warn)" : undefined} />
       </div>
 
       {filterOptions.length > 1 && (
         <div style={{ marginBottom: 18 }}>
-          <FilterChips options={filterOptions} value={projectFilter} onChange={setProjectFilter} allLabel="Every project" />
+          <FilterChips options={filterOptions} value={projectFilter} onChange={setProjectFilter} allLabel="Every deal" />
         </div>
       )}
 
@@ -732,11 +747,7 @@ export default function SlateView({ searchQuery }) {
       ) : (
         <>
           <div style={{ marginBottom: 28 }}>
-            <BucketHeading right={
-              <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowMandate(true)}>
-                <Plus size={12} /> Mandate
-              </button>
-            }>MANDATES</BucketHeading>
+            <BucketHeading>MANDATES</BucketHeading>
             {visibleMandates.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--dim)", padding: "8px 0 4px" }}>
                 No streamer or studio mandates yet. Add who is looking, and what they want.
@@ -744,14 +755,30 @@ export default function SlateView({ searchQuery }) {
             ) : visibleMandates.map((m) => <MandateCard key={m.id} mandate={m} />)}
           </div>
 
-          <div style={{ marginBottom: 28 }}>
-            <BucketHeading>Create New Pitch Package</BucketHeading>
-            {groups.unlinked.length === 0 ? (
-              <div style={{ fontSize: 13, color: "var(--dim)", padding: "8px 0 4px" }}>
-                Uploaded packages that are not linked to a project land here — labelled Create New Pitch Package, not Sent.
-              </div>
-            ) : groups.unlinked.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
-          </div>
+          {(groups.unlinked.length > 0 || groups.ordered.length > 0) && (
+            <div style={{ marginBottom: 28 }}>
+              <BucketHeading>PITCH PACKAGES</BucketHeading>
+              {groups.unlinked.length > 0 && (
+                <div style={{ marginBottom: groups.ordered.length ? 22 : 0 }}>
+                  <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em", marginBottom: 8 }}>
+                    NOT ON A DEAL
+                  </div>
+                  {groups.unlinked.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
+                </div>
+              )}
+              {groups.ordered.map(({ project, packages }) => (
+                <div key={project.id} style={{ marginBottom: 22 }}>
+                  <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em", marginBottom: 8 }}>
+                    {project.title.toUpperCase()}
+                  </div>
+                  {packages.map((pkg) => <PackageCard key={pkg.id} pkg={pkg} />)}
+                  <button className="md-btn md-btn-ghost" style={{ fontSize: 12, marginTop: 4 }} onClick={() => setShowPitch(project.id)}>
+                    <Plus size={12} /> Who we pitched
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div style={{ marginBottom: 28 }}>
             <BucketHeading right={
@@ -761,29 +788,10 @@ export default function SlateView({ searchQuery }) {
             }>PITCHES</BucketHeading>
             {visiblePitches.length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--dim)", padding: "8px 0 4px" }}>
-                Each pitch is a card: the project, its stage, and who it was sent to.
+                Each pitch is a card: the deal, its stage, and who it was sent to.
               </div>
             ) : visiblePitches.map((pitch) => <PitchCard key={pitch.id} pitch={pitch} />)}
           </div>
-
-          {groups.ordered.length > 0 && (
-            <div style={{ marginBottom: 22 }}>
-              <BucketHeading>PROJECTS</BucketHeading>
-              {groups.ordered.map(({ project, packages }) => (
-                <div key={project.id} style={{ marginBottom: 22 }}>
-                  <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", letterSpacing: ".12em", marginBottom: 8 }}>
-                    {project.title.toUpperCase()}
-                  </div>
-                  {packages.map((pkg) => (
-                    <PackageCard key={pkg.id} pkg={pkg} projectTitle={packages.length > 1 ? projectName(pkg.projectId) : ""} />
-                  ))}
-                  <button className="md-btn md-btn-ghost" style={{ fontSize: 12, marginTop: 4 }} onClick={() => setShowPitch(project.id)}>
-                    <Plus size={12} /> Who we pitched
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
 
