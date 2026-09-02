@@ -347,6 +347,14 @@ test("convexJwtForRequest mints a Convex JWT from the cookie session", async () 
   const request = new Request("https://example.test/api/files?path=images%2Fstill.jpg");
   const token = await convexJwtForRequest(request, clerk, { sessionId: "sess_cookie_img" });
   assert.equal(token, "minted.convex.jwt");
+
+  const fromAuth = await convexJwtForRequest(request, null, {
+    getToken: async ({ template }) => {
+      assert.equal(template, "convex");
+      return { jwt: "from.auth.getToken" };
+    },
+  });
+  assert.equal(fromAuth, "from.auth.getToken");
 });
 
 test("convexJwtForRequest falls back to Bearer when minting is unavailable", async () => {
