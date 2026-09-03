@@ -112,7 +112,7 @@ function SignInScreen() {
           MATRIARCH STUDIOS · OPERATIONS
         </div>
         <p style={{ fontSize: 13, color: "var(--dim)", marginTop: 14, maxWidth: 330, lineHeight: 1.55 }}>
-          One sign-in covers the ops board and production tracking.
+          One sign-in covers the ops board and Interface.
         </p>
       </div>
       <SignIn routing="virtual" />

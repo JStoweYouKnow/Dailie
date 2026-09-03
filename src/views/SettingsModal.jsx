@@ -89,7 +89,7 @@ export default function SettingsModal({ onClose }) {
             )}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 9, lineHeight: 1.55 }}>
-            The same session covers <strong style={{ color: "var(--bone)" }}>production tracking</strong> — both apps sit on one domain, so signing in here signs you in there.
+            The same session covers <strong style={{ color: "var(--bone)" }}>Interface</strong> — both apps sit on one domain, so signing in here signs you in there.
           </div>
         </Section>
       )}

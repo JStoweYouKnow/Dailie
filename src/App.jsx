@@ -649,16 +649,16 @@ function Board({ store }) {
             {loading ? <LoadingState /> : renderTab()}
           </main>
 
-          <footer style={{ padding: "0 28px 28px", display: "flex", gap: 18, flexWrap: "wrap" }}>
+          <footer className="md-app-footer">
             {/* /production is Interface on this origin; Bench is a separate site. */}
-            <a href="/production" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim-2)", textDecoration: "none" }}>
-              Production tracking <ExternalLink size={11} />
+            <a className="md-btn" href="/production">
+              Interface <ExternalLink size={13} />
             </a>
-            <a href={BENCH_URL} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim-2)", textDecoration: "none" }}>
-              Bench <ExternalLink size={11} />
+            <a className="md-btn" href={BENCH_URL} target="_blank" rel="noreferrer">
+              Bench <ExternalLink size={13} />
             </a>
-            <a href={BUG_REPORT_URL} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim-2)", textDecoration: "none" }}>
-              Report a bug <ExternalLink size={11} />
+            <a className="md-btn" href={BUG_REPORT_URL} target="_blank" rel="noreferrer">
+              Report a bug <ExternalLink size={13} />
             </a>
           </footer>
         </div>
