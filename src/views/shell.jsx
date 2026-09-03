@@ -291,7 +291,7 @@ export function CommandPalette({ onClose, onSelect }) {
 
     const tabs = [
       ["home", "Home dashboard"], ["projects", "Deals"], ["slate", "Slate"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
-      ["meetings", "Meetings"], ["calls", "Calls"], ["events", "Events & Speaking"], ["emails", "Emails"], ["companies", "Companies"],
+      ["meetings", "Meetings"], ["calls", "Calls"], ["events", "Events"], ["emails", "Emails"], ["companies", "Companies"],
       ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"],
       ["press", "Press & PR"], ["social", "Social calendar"], ["contracts", "NDAs & Contracts"],
       ["representation", "Representation"], ["legal", "Legal & Counsel"],
@@ -469,7 +469,7 @@ export function InfoModal({ onClose }) {
     ["Deals", "Service Production, Original IP, Outside IP, Training / Consultancy, Events Production and Keynote / Presentation on one board — each with its own editable pipeline. Add start, delivery, a Google Drive folder, an external link, and any extra dates (wrap, premiere, a pitch) so they show on the calendar. Everything on a deal is editable in place: owner, team, image, next step, custom fields."],
     ["Slate", "Mandates from streamers and studios, pitch packages (title, log line, synopsis, deck, trailer, Drive folder, rights notes), and who each IP has been pitched to — including whether the fit came from their mandate, an AI assessment, or both. Packages with no deal sit under Not on a deal until you assign them."],
     ["Social", "Posts and public dates on one calendar — Instagram, TikTok, a premiere, a live — so the week ahead is not a thread of DMs."],
-    ["Events", "Keynotes, panels, hosting and pitches. Click a row to open the full event — date, venue, who's speaking, the linked project."],
+    ["Events", "Keynotes, panels, hosting and pitches — plus the industry circuit to keep an eye on (Cannes, TIFF, Sundance, HPA and the rest). Plan a staple onto the board when you need a date."],
     ["Tasks & Notes", "Shared, assignable tasks and notes. Call and meeting action items land here automatically."],
     ["Calls", "Record a Zoom or Meet tab with video, get a transcript, a summary, and suggested next steps that become tasks. Then draft a follow-up email and approve it before it sends."],
     ["Emails", "Paste from any Gmail account. Dailie logs the messages and flags relationships that have gone quiet."],

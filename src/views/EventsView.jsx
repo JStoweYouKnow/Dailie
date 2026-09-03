@@ -2,10 +2,19 @@ import { useMemo, useState } from "react";
 import { Plus, Mic2, ExternalLink } from "lucide-react";
 import { useStore } from "../lib/store";
 import { EVENT_KINDS, EVENT_STATUSES, lookupColor, lookupLabel } from "../lib/model";
+import {
+  INDUSTRY_EVENT_KINDS,
+  industryEventsMatching,
+  industryEventsUpcoming,
+  isIndustryEventSoon,
+  nextIndustryWindow,
+  planIndustryEvent,
+  plannedIndustryEvent,
+} from "../lib/industryEvents";
 import { tsFromDateInput, DAY, dateInputValue } from "../lib/format";
 import { safeHref } from "../lib/safeUrl";
 import {
-  ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat,
+  ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Section,
   InlineText, InlineSelect, InlineDate, ModalShell, Field, ConfirmButton, MemberPicker,
 } from "../ui/kit";
 import { CompanySelect } from "../ui/CompanySelect";
@@ -88,6 +97,12 @@ function EventDetail({ event, onClose }) {
         )}
       </Field>
 
+      {live.industryEventId && (
+        <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", marginBottom: 14 }}>
+          On the industry circuit — typical window, not a locked date. Update WHEN when this year's dates land.
+        </div>
+      )}
+
       <Field label="NOTES">
         <InlineText value={live.notes} multiline placeholder="What this date is, who to confirm, travel, the talk title…"
           onCommit={(v) => patch({ notes: v })} />
@@ -164,11 +179,105 @@ function NewEventModal({ onClose, onCreated }) {
   );
 }
 
+function IndustryCircuit({ searchQuery, onPlan, onOpenPlanned }) {
+  const { data } = useStore();
+  const [kind, setKind] = useState("all");
+
+  const rows = useMemo(() => {
+    let list = industryEventsMatching(searchQuery);
+    if (kind !== "all") list = list.filter((e) => e.kind === kind);
+    return industryEventsUpcoming(Date.now(), list);
+  }, [searchQuery, kind]);
+
+  if (searchQuery && rows.length === 0) return null;
+
+  return (
+    <Section
+      title="KEEP AN EYE ON"
+      style={{ marginTop: 28 }}
+      right={
+        <div style={{ fontSize: 12, color: "var(--dim)", maxWidth: 420, textAlign: "right", lineHeight: 1.4 }}>
+          Festivals, markets, tech and awards to plan around. Typical windows — confirm dates each year.
+        </div>
+      }
+    >
+      <div style={{ marginBottom: 14 }}>
+        <FilterChips
+          options={INDUSTRY_EVENT_KINDS.map((k) => ({
+            ...k,
+            count: industryEventsMatching(searchQuery).filter((e) => e.kind === k.key).length,
+          }))}
+          value={kind}
+          onChange={setKind}
+          allLabel="The circuit"
+        />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+        {rows.map((staple) => {
+          const next = nextIndustryWindow(staple);
+          const soon = isIndustryEventSoon(staple);
+          const planned = plannedIndustryEvent(data.events, staple.id);
+          const kindInfo = INDUSTRY_EVENT_KINDS.find((k) => k.key === staple.kind);
+          const href = safeHref(staple.url);
+          return (
+            <div key={staple.id} className="md-card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: "var(--bone)", fontSize: 14 }}>{staple.short}</div>
+                  {staple.short !== staple.name && (
+                    <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 2, lineHeight: 1.35 }}>{staple.name}</div>
+                  )}
+                </div>
+                <Badge label={kindInfo ? kindInfo.label : staple.kind} color={kindInfo && kindInfo.color} />
+              </div>
+              <div className="md-mono" style={{ fontSize: 11, color: "var(--dim)", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <span>{staple.typical} · {next.year}</span>
+                {soon && <Badge label="SOON" color="var(--warn)" />}
+                <span>{staple.location}</span>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--dim)", lineHeight: 1.45, flex: 1 }}>{staple.why}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+                {planned ? (
+                  <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }} onClick={() => onOpenPlanned(planned)}>
+                    On the board
+                  </button>
+                ) : (
+                  <button className="md-btn" style={{ fontSize: 12 }} onClick={() => onPlan(staple)}>
+                    Plan for {next.year}
+                  </button>
+                )}
+                {href && (
+                  <a href={href} target="_blank" rel="noreferrer" className="md-mono"
+                    style={{ fontSize: 11, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    Site <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
 export default function EventsView({ searchQuery }) {
-  const { data, update, remove } = useStore();
+  const { data, add, update, remove, showToast } = useStore();
   const [kindFilter, setKindFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
   const [open, setOpen] = useState(null);
+
+  const planStaple = (staple) => {
+    const existing = plannedIndustryEvent(data.events, staple.id);
+    if (existing) {
+      setOpen(existing);
+      return;
+    }
+    const event = add("events", planIndustryEvent(staple));
+    if (!event) return;
+    if (showToast) showToast(`Added ${event.name} — confirm the real dates when they're posted.`, "success");
+    setOpen(event);
+  };
 
   const rows = useMemo(() => {
     let list = [...(data.events || [])];
@@ -184,6 +293,8 @@ export default function EventsView({ searchQuery }) {
     // Soonest first, undated last.
     return list.sort((a, b) => (a.date || Infinity) - (b.date || Infinity));
   }, [data.events, kindFilter, searchQuery]);
+
+  const circuitHits = useMemo(() => industryEventsMatching(searchQuery), [searchQuery]);
 
   const upcoming = (data.events || []).filter((e) => e.date && e.date >= Date.now());
   const speaking = (data.events || []).filter((e) => ["keynote", "panel", "demo", "pitch"].includes(e.kind));
@@ -259,14 +370,18 @@ export default function EventsView({ searchQuery }) {
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState
-          title="No events yet"
-          subtitle="Track what the studio is hosting and where the team is speaking — keynotes, panels, demos and pitches — with who is on stage and when."
-          action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Mic2 size={14} /> New Event</button>}
-        />
+        searchQuery && circuitHits.length ? null : (
+          <EmptyState
+            title="No events yet"
+            subtitle="Track what the studio is hosting and where the team is speaking — keynotes, panels, demos and pitches — with who is on stage and when."
+            action={<button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Mic2 size={14} /> New Event</button>}
+          />
+        )
       ) : (
         <DataTable columns={columns} rows={rows} onRowClick={setOpen} exportTitle="Events" />
       )}
+
+      <IndustryCircuit searchQuery={searchQuery} onPlan={planStaple} onOpenPlanned={setOpen} />
 
       {showNew && <NewEventModal onClose={() => setShowNew(false)} onCreated={setOpen} />}
       {open && <EventDetail event={open} onClose={() => setOpen(null)} />}

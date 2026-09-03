@@ -964,6 +964,7 @@ export function normalizeData(raw) {
     events: ensureArray(input.events).map((e) => ({
       kind: "panel", status: "invited", name: "", venue: "", location: "",
       projectId: null, companyId: null, notes: "", url: "", cost: "",
+      industryEventId: null,
       ...e, id: e.id || uid(), speakerIds: ensureArray(e.speakerIds),
     })),
     press: ensureArray(input.press).map((r) => {
