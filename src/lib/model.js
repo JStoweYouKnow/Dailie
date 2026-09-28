@@ -210,6 +210,12 @@ export const TASK_STATUSES = [
 
 export const PRIORITIES = ["HIGH", "MEDIUM", "LOW"];
 
+export const TASK_PRIORITIES = [
+  { key: "HIGH", label: "High", color: HUE.clay },
+  { key: "MEDIUM", label: "Medium", color: HUE.sand },
+  { key: "LOW", label: "Low", color: HUE.stone },
+];
+
 /**
  * The roster: staff, freelancers and artists you are courting. Distinct from
  * `team` (the accounts tasks get assigned to) — someone can sit on the roster for

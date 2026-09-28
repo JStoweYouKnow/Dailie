@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Plus, CheckSquare, Square, MessageSquare, Send, Star, LayoutGrid, Table as TableIcon } from "lucide-react";
 import { useStore } from "../lib/store";
-import { TASK_STATUSES, PRIORITIES, makeTask, lookupColor } from "../lib/model";
+import { TASK_STATUSES, TASK_PRIORITIES, PRIORITIES, makeTask, lookupColor } from "../lib/model";
 import { formatShort, relativeDays, uid } from "../lib/format";
 import {
   ViewHeader, FilterChips, EmptyState, DataTable, KanbanBoard, Badge, Avatar, AvatarStack,
@@ -211,6 +211,7 @@ export default function TasksView({ searchQuery }) {
   const { data, add, update, remove, currentUser, memberName, projectName } = useStore();
   const [pane, setPane] = useState("tasks");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [mineOnly, setMineOnly] = useState(false);
   const [viewMode, setViewMode] = useState("board");
   const [openTask, setOpenTask] = useState(null);
@@ -219,13 +220,14 @@ export default function TasksView({ searchQuery }) {
   const tasks = useMemo(() => {
     let list = data.tasks;
     if (statusFilter !== "all") list = list.filter((t) => t.status === statusFilter);
+    if (priorityFilter !== "all") list = list.filter((t) => (t.priority || "MEDIUM") === priorityFilter);
     if (mineOnly) list = list.filter((t) => (t.assigneeIds || []).includes(currentUser && currentUser.id));
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.notes || "").toLowerCase().includes(q));
     }
     return [...list].sort((a, b) => (a.dueDate || Infinity) - (b.dueDate || Infinity));
-  }, [data.tasks, statusFilter, mineOnly, searchQuery, currentUser]);
+  }, [data.tasks, statusFilter, priorityFilter, mineOnly, searchQuery, currentUser]);
 
   const createTask = () => {
     if (!draft.trim()) return;
@@ -304,9 +306,13 @@ export default function TasksView({ searchQuery }) {
             <button className="md-btn md-btn-primary" onClick={createTask}><Plus size={14} /> Add Task</button>
           </div>
 
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 12 }}>
             <FilterChips options={TASK_STATUSES.map((s) => ({ ...s, count: data.tasks.filter((t) => t.status === s.key).length }))}
               value={statusFilter} onChange={setStatusFilter} allLabel="All" />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <FilterChips options={TASK_PRIORITIES.map((p) => ({ ...p, count: data.tasks.filter((t) => (t.priority || "MEDIUM") === p.key).length }))}
+              value={priorityFilter} onChange={setPriorityFilter} allLabel="All priorities" />
           </div>
 
           {tasks.length === 0 ? (
