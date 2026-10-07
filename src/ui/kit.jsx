@@ -8,7 +8,7 @@ import { canExportBoard, downloadTableCsv, downloadTablePdf, exportEmailFromSess
 import Markdown from "./Markdown";
 import {
   uploadFile, deleteFile, formatBytes, fileSrc, kindForFile, asAttachment,
-  listAttachments, trashedAttachments, PRESS_FILE_ACCEPT,
+  listAttachments, trashedAttachments, isPreviewableImage, PRESS_FILE_ACCEPT,
 } from "../lib/files";
 
 export function Stat({ label, value, accent, onClick }) {
@@ -874,20 +874,60 @@ export function AttachmentRow({ record, onRemove, onRestore, onPurge, trashed })
   );
 }
 
+function ImageTile({ record, onRemove, onBroken }) {
+  const src = fileSrc(record);
+  return (
+    <div style={{
+      position: "relative", width: 132, borderRadius: 8, overflow: "hidden",
+      border: "1px solid var(--rule)", background: "var(--panel-raised)",
+    }}>
+      <a href={src} target="_blank" rel="noreferrer" title={record.fileName} style={{ display: "block" }}>
+        <img src={src} alt={record.fileName} loading="lazy" onError={onBroken}
+          style={{ width: "100%", height: 100, objectFit: "cover", display: "block", background: "var(--panel)" }} />
+      </a>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 6px" }}>
+        <span style={{ flex: 1, fontSize: 10.5, color: "var(--dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {record.fileName}
+        </span>
+        {onRemove && (
+          <button className="md-btn md-btn-ghost" style={{ padding: 2, flexShrink: 0 }} onClick={onRemove} title="Remove">
+            <Trash2 size={11} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * `onRestore`/`onPurge` turn removal into a trash: without them the list behaves as it
  * always did and `onRemove` is final, which is what the unsaved modals want.
+ * `previews` draws images as thumbnails; anything the browser cannot render drops back to a row.
  */
 export function AttachmentList({
   record, items, onAdd, onRemove, onRestore, onPurge,
-  kind = "documents", accept = PRESS_FILE_ACCEPT, label = "Attach files", compact,
+  kind = "documents", accept = PRESS_FILE_ACCEPT, label = "Attach files", compact, previews,
 }) {
+  const [broken, setBroken] = useState({});
   const list = items || listAttachments(record);
   const trashed = onRestore || onPurge ? (record ? trashedAttachments(record) : []) : [];
+  const keyOf = (item) => item.id || item.filePath || item.fileName;
+  const asTile = (item) => previews && !broken[keyOf(item)] && isPreviewableImage(item);
+  const tiles = list.filter(asTile);
+  const rows = list.filter((item) => !asTile(item));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
-      {list.map((item) => (
-        <AttachmentRow key={item.id || item.filePath || item.fileName} record={item} onRemove={onRemove ? () => onRemove(item) : undefined} />
+      {tiles.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {tiles.map((item) => (
+            <ImageTile key={keyOf(item)} record={item}
+              onRemove={onRemove ? () => onRemove(item) : undefined}
+              onBroken={() => setBroken((b) => ({ ...b, [keyOf(item)]: true }))} />
+          ))}
+        </div>
+      )}
+      {rows.map((item) => (
+        <AttachmentRow key={keyOf(item)} record={item} onRemove={onRemove ? () => onRemove(item) : undefined} />
       ))}
       <FileAttachButton compact={compact} multiple kind={kind} label={label} accept={accept}
         onUploaded={(meta) => onAdd(asAttachment(meta))} />

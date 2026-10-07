@@ -125,9 +125,10 @@ function NewSocialModal({ onClose, defaultKind, defaultScheduledAt }) {
       <Field label="NOTES">
         <textarea className="md-textarea" rows={2} value={form.notes} onChange={set("notes")} placeholder="Assets still needed, approval, embargo…" />
       </Field>
-      <Field label="ASSETS" hint="Stills, cutdowns, captions. PNG, JPG, MP4, PDF, ZIP.">
+      <Field label="ASSETS" hint="Stills, cutdowns, captions. PNG, JPG, HEIC, MP4, PDF, ZIP.">
         <AttachmentList
           items={files}
+          previews
           accept={SOCIAL_FILE_ACCEPT}
           label="Add files"
           onAdd={(file) => { if (drafts.keep(file)) setFiles((list) => [...list, file]); }}
@@ -193,6 +194,7 @@ function SocialRow({ item, projectTitle }) {
       <Field label="ASSETS">
         <AttachmentList
           record={item}
+          previews
           accept={SOCIAL_FILE_ACCEPT}
           label="Add file"
           onAdd={(file) => update("social", item.id, (row) => addAttachment(row, file))}

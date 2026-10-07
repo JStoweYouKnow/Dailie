@@ -972,6 +972,7 @@ export function normalizeData(raw) {
       projectId: null, companyId: null, notes: "", url: "", cost: "",
       industryEventId: null,
       ...e, id: e.id || uid(), speakerIds: ensureArray(e.speakerIds),
+      attachments: ensureArray(e.attachments).filter((a) => a && a.fileName),
     })),
     press: ensureArray(input.press).map((r) => {
       const id = r.id || uid();

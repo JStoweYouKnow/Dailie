@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
-import { Plus, Mic2, ExternalLink } from "lucide-react";
+import { Plus, Mic2, ExternalLink, Paperclip } from "lucide-react";
 import { useStore } from "../lib/store";
 import { EVENT_KINDS, EVENT_STATUSES, lookupColor, lookupLabel } from "../lib/model";
+import {
+  allAttachments, listAttachments, trashAttachment, restoreAttachment, purgeAttachment,
+  SOCIAL_FILE_ACCEPT,
+} from "../lib/files";
+import { useDraftUploads } from "../lib/draftUploads";
 import {
   INDUSTRY_EVENT_KINDS,
   industryEventsMatching,
@@ -16,8 +21,11 @@ import { safeHref } from "../lib/safeUrl";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, Stat, Section,
   InlineText, InlineSelect, InlineDate, ModalShell, Field, ConfirmButton, MemberPicker,
+  AttachmentList,
 } from "../ui/kit";
 import { CompanySelect } from "../ui/CompanySelect";
+
+const ASSETS_HINT = "Social assets, stills, cutdowns, decks. PNG, JPG, HEIC, MP4, MOV, PDF, ZIP.";
 
 function EventDetail({ event, onClose }) {
   const { data, update, remove, memberName } = useStore();
@@ -108,6 +116,22 @@ function EventDetail({ event, onClose }) {
           onCommit={(v) => patch({ notes: v })} />
       </Field>
 
+      <Field label="ASSETS" hint={ASSETS_HINT}>
+        <AttachmentList
+          record={live}
+          previews
+          accept={SOCIAL_FILE_ACCEPT}
+          label="Add files"
+          onAdd={(file) => update("events", live.id, (row) => ({ attachments: [...allAttachments(row), file] }))}
+          onRemove={(file) => update("events", live.id, (row) => ({ attachments: trashAttachment(row, file) }))}
+          onRestore={(file) => update("events", live.id, (row) => ({ attachments: restoreAttachment(row, file) }))}
+          onPurge={async (file) => {
+            const attachments = await purgeAttachment(live, file);
+            update("events", live.id, { attachments });
+          }}
+        />
+      </Field>
+
       <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
         <ConfirmButton label="Remove event" confirmLabel="Yes, remove" onConfirm={() => { remove("events", live.id); onClose(); }} />
       </div>
@@ -117,8 +141,10 @@ function EventDetail({ event, onClose }) {
 
 function NewEventModal({ onClose, onCreated }) {
   const { data, add, currentUser } = useStore();
+  const drafts = useDraftUploads();
   const [form, setForm] = useState({ name: "", kind: "panel", status: "invited", venue: "", location: "", url: "", projectId: "", companyId: "" });
   const [date, setDate] = useState("");
+  const [files, setFiles] = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = () => {
@@ -136,7 +162,9 @@ function NewEventModal({ onClose, onCreated }) {
       companyId: form.companyId || null,
       notes: "",
       cost: "",
+      attachments: files,
     });
+    drafts.markSaved();
     if (onCreated) onCreated(event);
     onClose();
   };
@@ -173,6 +201,16 @@ function NewEventModal({ onClose, onCreated }) {
       <Field label="COMPANY">
         <CompanySelect native value={form.companyId} placeholder="No company"
           onCommit={(id) => setForm((f) => ({ ...f, companyId: id || "" }))} />
+      </Field>
+      <Field label="ASSETS" hint={ASSETS_HINT}>
+        <AttachmentList
+          items={files}
+          previews
+          accept={SOCIAL_FILE_ACCEPT}
+          label="Add files"
+          onAdd={(file) => { if (drafts.keep(file)) setFiles((list) => [...list, file]); }}
+          onRemove={(item) => { drafts.drop(item); setFiles((list) => list.filter((f) => f.id !== item.id)); }}
+        />
       </Field>
       <button className="md-btn md-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submit}>Add Event</button>
     </ModalShell>
@@ -302,18 +340,29 @@ export default function EventsView({ searchQuery }) {
   const needsAnswer = (data.events || []).filter((e) => e.status === "invited" || e.status === "submitted");
 
   const columns = [
-    { key: "name", label: "EVENT", cellStyle: { minWidth: 230 }, render: (e) => (
-      <div>
-        <div style={{ fontWeight: 700, color: "var(--bone)" }}>{e.name}</div>
-        {safeHref(e.url) && (
-          <a href={safeHref(e.url)} target="_blank" rel="noreferrer" className="md-mono"
-            onClick={(ev) => ev.stopPropagation()}
-            style={{ fontSize: 10, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
-            link <ExternalLink size={9} />
-          </a>
-        )}
-      </div>
-    ) },
+    { key: "name", label: "EVENT", cellStyle: { minWidth: 230 }, render: (e) => {
+      const fileCount = listAttachments(e).length;
+      return (
+        <div>
+          <div style={{ fontWeight: 700, color: "var(--bone)" }}>{e.name}</div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {safeHref(e.url) && (
+              <a href={safeHref(e.url)} target="_blank" rel="noreferrer" className="md-mono"
+                onClick={(ev) => ev.stopPropagation()}
+                style={{ fontSize: 10, color: "var(--accent)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                link <ExternalLink size={9} />
+              </a>
+            )}
+            {fileCount > 0 && (
+              <span className="md-mono" title={`${fileCount} attached file${fileCount === 1 ? "" : "s"}`}
+                style={{ fontSize: 10, color: "var(--dim)", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <Paperclip size={9} /> {fileCount}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    } },
     { key: "kind", label: "OUR ROLE", stopClick: true, render: (e) => (
       <InlineSelect value={e.kind} options={EVENT_KINDS} color={lookupColor(EVENT_KINDS, e.kind)}
         onCommit={(v) => update("events", e.id, { kind: v })} />

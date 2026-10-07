@@ -53,8 +53,8 @@ export const PRESS_FILE_ACCEPT = [
 
 /** Stills, cutdowns, captions — images, video, PDF, ZIP. */
 export const SOCIAL_FILE_ACCEPT = [
-  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/*",
-  ".png", ".jpg", ".jpeg", ".webp", ".gif",
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/heic", "image/heif", "image/*",
+  ".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif",
   ".pdf", ".zip",
   ".mp4", ".webm", ".mov",
   "application/pdf", "application/zip", "application/x-zip-compressed",
@@ -152,6 +152,14 @@ export async function purgeAttachment(record, item) {
     return allAttachments(record);
   }
   return allAttachments(record).filter((a) => a.id !== item.id);
+}
+
+/** An attachment the browser can likely draw in an <img>. HEIC is included; non-Safari browsers fail and fall back to a row. */
+export function isPreviewableImage(record) {
+  if (!record || !fileSrc(record)) return false;
+  const type = String(record.fileType || "").toLowerCase();
+  if (type.startsWith("image/")) return !type.includes("svg");
+  return /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(record.fileName || "");
 }
 
 export function imageSrc(record) {
