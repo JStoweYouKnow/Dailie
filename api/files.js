@@ -1,6 +1,6 @@
 import { del } from "@vercel/blob";
 import { putOnStore, getFromStore, redirectToBlob } from "../lib/blobStore.js";
-import { requireApiAuth, requireHouseApiAuth, requireBoardMember } from "../lib/requireApiAuth.js";
+import { requireBoardMember, requireHouseApiAuth } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
 import { resolveUploadType } from "../lib/allowedUploads.js";
 
@@ -20,7 +20,7 @@ function extensionFor(name, contentType) {
 }
 
 export async function POST(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
   const limited = await rateLimit({
     bucket: "files",
@@ -28,6 +28,7 @@ export async function POST(request) {
     limit: 80,
     windowMs: 60 * 60 * 1000,
     request,
+    token: gate.convexJwt,
   });
   if (limited.error) return limited.error;
 
@@ -81,6 +82,13 @@ export async function POST(request) {
 export async function GET(request) {
   const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
+  const limited = await rateLimit({
+    bucket: "files-get",
+    key: `files-get:${gate.auth.userId}`,
+    request,
+    token: gate.convexJwt,
+  });
+  if (limited.error) return limited.error;
 
   const path = new URL(request.url).searchParams.get("path") || "";
 

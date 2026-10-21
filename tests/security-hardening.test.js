@@ -2,9 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isHouseEmail,
+  isHouseMember,
+  isHouseViewer,
+  nextMemberRole,
+  HOUSE_ROLE,
+  CONTRACTOR_ROLE,
   lockMailboxSettings,
   lockSharedSettings,
   memberBindPlan,
+  memberDisplayFromIdentity,
+  pictureUrlFromIdentity,
   redactSettingsForViewer,
   canWriteCollection,
   canReadCollection,
@@ -15,6 +22,8 @@ import {
 import { safeHref } from "../src/lib/safeUrl.js";
 import { fileSrc, imageSrc, asAttachment } from "../src/lib/files.js";
 import { blobPathFromUrl, redactRecordBlobUrls, storedInlineUrl } from "../src/lib/blobUrls.js";
+import { prepareRecordWrite, MAX_PUT_MANY } from "../src/lib/boardWrite.js";
+import { allowPublicBlobFallback } from "../lib/blobStore.js";
 import { isSharedCollection } from "../src/lib/sharedBoard.js";
 import { isAllowedContentType, isAllowedInlineDataUrl, resolveUploadType } from "../lib/allowedUploads.js";
 import { calendarRedirectTarget, isAllowedCalendarHost } from "../lib/calendarProxy.js";
@@ -31,22 +40,62 @@ test("isHouseEmail allows studio domains and subdomains only", () => {
   assert.equal(isHouseEmail(""), false);
 });
 
-test("lockSharedSettings keeps contractor writes from changing mailboxes and iCal feeds", () => {
+test("nextMemberRole persists house from a verified studio email and will not demote when the claim is missing", () => {
+  assert.equal(nextMemberRole({ currentRole: "", email: "elena@matriarch-studios.com", emailVerified: true }), HOUSE_ROLE);
+  assert.equal(nextMemberRole({ currentRole: HOUSE_ROLE, email: "guest@gmail.com", emailVerified: true }), CONTRACTOR_ROLE);
+  assert.equal(nextMemberRole({ currentRole: HOUSE_ROLE, email: "elena@matriarch-studios.com", emailVerified: undefined }), HOUSE_ROLE);
+  assert.equal(nextMemberRole({ currentRole: "", email: "elena@matriarch-studios.com", emailVerified: undefined }), HOUSE_ROLE);
+  assert.equal(nextMemberRole({ currentRole: CONTRACTOR_ROLE, email: "guest@gmail.com", emailVerified: true }), CONTRACTOR_ROLE);
+  assert.equal(nextMemberRole({ currentRole: CONTRACTOR_ROLE, email: "elena@matriarch-studios.com", emailVerified: true }), HOUSE_ROLE);
+});
+
+test("isHouseMember uses stored role, not an unverified JWT email", () => {
+  assert.equal(isHouseMember({ role: HOUSE_ROLE, email: "elena@matriarch-studios.com" }, { email: "elena@matriarch-studios.com", emailVerified: false }), true);
+  assert.equal(isHouseMember({ role: CONTRACTOR_ROLE, email: "guest@gmail.com" }, { email: "guest@gmail.com", emailVerified: true }), false);
+  assert.equal(isHouseMember({ role: CONTRACTOR_ROLE, email: "guest@gmail.com" }, { email: "spoof@matriarch-studios.com", emailVerified: true }), false);
+  assert.equal(isHouseMember(null, { email: "elena@matriarch-studios.com", emailVerified: true }), true);
+  assert.equal(isHouseMember(null, { email: "elena@matriarch-studios.com", emailVerified: false }), false);
+  assert.equal(isHouseMember({ role: "", email: "elena@matriarch-studios.com" }, { emailVerified: undefined }), true);
+});
+
+test("isHouseViewer prefers the members row over a house-looking email", () => {
+  assert.equal(isHouseViewer({ authEnabled: false, email: "guest@gmail.com" }), true);
+  assert.equal(isHouseViewer({ role: HOUSE_ROLE, email: "guest@gmail.com" }), true);
+  assert.equal(isHouseViewer({ role: CONTRACTOR_ROLE, email: "elena@matriarch-studios.com" }), false);
+  assert.equal(isHouseViewer({ email: "elena@matriarch-studios.com" }), true);
+});
+
+test("lockSharedSettings keeps contractor writes from changing org settings", () => {
   const prior = {
+    followUpDays: 14,
+    currentUserId: "user_house",
+    googleCalendars: [{ id: "primary", summary: "Ops" }],
     emailAccounts: [{ id: "acct-1", address: "elena@matriarch-studios.com" }],
     calendarFeeds: [{ id: "feed-1", label: "Ops", url: "https://calendar.google.com/calendar/ical/secret/private-abc/basic.ics" }],
+    autoArmRecording: false,
+    projectColumnOrder: ["a", "b"],
   };
   const locked = lockSharedSettings(
     {
       followUpDays: 21,
+      currentUserId: "user_guest",
+      googleCalendars: [{ id: "x", summary: "Stolen" }],
       emailAccounts: [{ id: "x", address: "victim@other.com" }],
       calendarFeeds: [{ id: "x", label: "Stolen", url: "https://evil.example/feed" }],
+      autoArmRecording: true,
+      projectColumnOrder: ["b", "a"],
+      extraHostileKey: true,
     },
     { isHouse: false, prior }
   );
-  assert.equal(locked.followUpDays, 21);
+  assert.equal(locked.followUpDays, 14);
+  assert.equal(locked.currentUserId, "user_house");
+  assert.deepEqual(locked.googleCalendars, prior.googleCalendars);
   assert.deepEqual(locked.emailAccounts, prior.emailAccounts);
   assert.deepEqual(locked.calendarFeeds, prior.calendarFeeds);
+  assert.equal(locked.autoArmRecording, true);
+  assert.deepEqual(locked.projectColumnOrder, ["b", "a"]);
+  assert.equal(locked.extraHostileKey, undefined);
 });
 
 test("redactSettingsForViewer strips iCal URLs for non-house readers", () => {
@@ -173,7 +222,7 @@ test("lockMailboxSettings keeps contractor writes from changing synced inboxes",
     { followUpDays: 21, emailAccounts: [{ id: "x", address: "victim@other.com" }] },
     { isHouse: false, priorAccounts: prior }
   );
-  assert.equal(locked.followUpDays, 21);
+  assert.equal(locked.followUpDays, undefined);
   assert.deepEqual(locked.emailAccounts, prior);
 
   const house = lockMailboxSettings(
@@ -373,4 +422,46 @@ test("convexJwtForRequest falls back to Bearer when minting is unavailable", asy
   };
   const fallback = await convexJwtForRequest(request, throwing, { sessionId: "sess_mint_fail" });
   assert.equal(fallback, "from-header");
+});
+
+test("memberDisplayFromIdentity ignores client name and non-Clerk photos", () => {
+  const display = memberDisplayFromIdentity(
+    { name: "Elena Voss", email: "elena@matriarch-studios.com", pictureUrl: "https://img.clerk.com/abc" },
+    { name: "Spoofed", imageUrl: "https://evil.example/x.png" }
+  );
+  assert.equal(display.name, "Elena Voss");
+  assert.equal(display.imageUrl, "https://img.clerk.com/abc");
+  assert.equal(pictureUrlFromIdentity({ pictureUrl: "https://evil.example/me.png" }), "");
+  assert.equal(pictureUrlFromIdentity({ pictureUrl: "javascript:alert(1)" }), "");
+  assert.equal(
+    memberDisplayFromIdentity({ email: "guest@gmail.com" }, { name: "Invited Guest" }).name,
+    "Invited Guest"
+  );
+});
+
+test("prepareRecordWrite redacts blob URLs, drops javascript links, and caps size", () => {
+  const stored = prepareRecordWrite({
+    id: "p1",
+    fileUrl: "https://abc.public.blob.vercel-storage.com/documents/nda.pdf",
+    website: "javascript:alert(1)",
+    link: "https://a24films.com",
+  });
+  assert.equal(stored.fileUrl, "");
+  assert.equal(stored.filePath, "documents/nda.pdf");
+  assert.equal(stored.website, "");
+  assert.equal(stored.link, "https://a24films.com");
+  assert.throws(() => prepareRecordWrite(["not-an-object"]));
+  assert.equal(MAX_PUT_MANY, 200);
+});
+
+test("allowPublicBlobFallback fails closed when BLOB_ACCESS is private", () => {
+  const prev = process.env.BLOB_ACCESS;
+  process.env.BLOB_ACCESS = "private";
+  assert.equal(allowPublicBlobFallback(), false);
+  process.env.BLOB_ACCESS = "public";
+  assert.equal(allowPublicBlobFallback(), true);
+  delete process.env.BLOB_ACCESS;
+  assert.equal(allowPublicBlobFallback(), true);
+  if (prev === undefined) delete process.env.BLOB_ACCESS;
+  else process.env.BLOB_ACCESS = prev;
 });

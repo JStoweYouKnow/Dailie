@@ -73,7 +73,11 @@ function TokenBinder() {
 export function AuthProvider({ children }) {
   if (!AUTH_ENABLED) return children;
   return (
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY} appearance={appearance} afterSignOutUrl="/">
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY}
+      appearance={appearance}
+      afterSignOutUrl="/"
+    >
       <TokenBinder />
       {children}
     </ClerkProvider>

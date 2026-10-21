@@ -72,22 +72,6 @@ export const accountsFor = internalQuery({
   },
 });
 
-/** Pressing on-demand sync is consent for the caller's own mailbox. */
-export const grantCallerConsent = internalMutation({
-  args: { clerkId: v.string() },
-  returns: v.null(),
-  handler: async (ctx, { clerkId }) => {
-    const member = await ctx.db
-      .query("members")
-      .withIndex("by_clerk", (q) => q.eq("clerkId", clerkId))
-      .unique();
-    if (member && member.googleSyncConsent !== true) {
-      await ctx.db.patch(member._id, { googleSyncConsent: true });
-    }
-    return null;
-  },
-});
-
 /**
  * Remembers where an account got to. A failed run deliberately leaves `lastRunAt`
  * alone, so the window it could not read is retried rather than skipped.

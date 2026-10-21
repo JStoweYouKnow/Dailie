@@ -9,6 +9,7 @@ export const SHARED_COLLECTIONS = [
   "companies", "people", "projects", "tasks", "notes", "meetings",
   "calls", "emails", "contracts", "invoices", "payments", "talent",
   "events", "press", "slate", "social", "legal", "mandates", "pitches", "logs", "notifications",
+  "dealUpdates", "opportunities",
 ];
 
 export function isSharedCollection(name) {

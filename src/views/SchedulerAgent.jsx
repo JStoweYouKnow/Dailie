@@ -4,7 +4,7 @@ import { useStore } from "../lib/store";
 import { makeTask } from "../lib/model";
 import { uid, formatFull, formatClock, dateInputValue } from "../lib/format";
 import { ModalShell, Field, Avatar, Badge } from "../ui/kit";
-import { visibleMeetings } from "../lib/calendarExclusions";
+import { meetingsForViewer } from "../lib/calendarExclusions";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -104,7 +104,8 @@ export default function SchedulerAgent({ onClose, onScheduled }) {
     advance(4, "Checking the calendar for clashes…", 3);
     const when = resolveWhen(text);
     const duration = pickDuration(text);
-    const clash = visibleMeetings(data.meetings, data.settings).find((m) => Math.abs(m.date - when) < duration * 60000);
+    const clash = meetingsForViewer(data.meetings, data.settings, currentUser, data.team, { includeBusy: true })
+      .find((m) => Math.abs(m.date - when) < duration * 60000);
     await new Promise((r) => setTimeout(r, 450));
 
     setSteps((prev) => [...prev.map((s) => (s.id === 4 ? { ...s, status: "done" } : s)),

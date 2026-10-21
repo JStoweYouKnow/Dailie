@@ -8,6 +8,7 @@ import { staleFollowUps, alertsFor, recordTypeInfo, makeTask, isBusyOn, ndaFor, 
 import { formatShort, formatClock, relativeDays, daysSince, formatMoney } from "../lib/format";
 import { ModalShell, Badge, Avatar, EmptyState, Section } from "../ui/kit";
 import { safeHref } from "../lib/safeUrl";
+import { meetingsForViewer } from "../lib/calendarExclusions";
 
 export function DailieBrandLogo({ size = 36 }) {
   return (
@@ -243,7 +244,7 @@ export function LiveCallBanner({ onRecord, onDismiss, meeting }) {
 }
 
 export function CommandPalette({ onClose, onSelect }) {
-  const { data, companyName } = useStore();
+  const { data, companyName, currentUser } = useStore();
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => {
@@ -253,6 +254,11 @@ export function CommandPalette({ onClose, onSelect }) {
     const hit = (...fields) => q && fields.some((f) => String(f || "").toLowerCase().includes(q));
 
     data.projects.forEach((p) => { if (!q || hit(p.title, p.contactName, p.contactEmail, p.contactPhone, p.driveUrl, p.externalUrl)) push("project", p.id, p.title, recordTypeInfo(p.recordType).short, p); });
+    (data.opportunities || []).forEach((o) => {
+      if (!q || hit(o.title, o.summary, o.contactName, o.contactEmail, o.nextStep, ...(o.conversations || []).map((c) => c.note))) {
+        push("opportunities", o.id, o.title || "Opportunity", "Opportunity", o);
+      }
+    });
     data.people.forEach((p) => { if (q && (p.name.toLowerCase().includes(q) || (p.email || "").includes(q))) push("people", p.id, p.name, p.organization || p.email, p); });
     data.companies.forEach((c) => { if (q && hit(c.name, c.domain, c.contactName, c.contactEmail, c.contactPhone)) push("companies", c.id, c.name, c.contactName || c.domain, c); });
     data.tasks.forEach((t) => { if (q && t.title.toLowerCase().includes(q)) push("tasks", t.id, t.title, "Task", t); });
@@ -281,7 +287,7 @@ export function CommandPalette({ onClose, onSelect }) {
 
     // These live on tabs whose key differs from the collection name, so the tab key is
     // what goes in `type` and the badge is set separately.
-    data.meetings.forEach((m) => { if (hit(m.title)) push("meetings", m.id, m.title, "Meeting", m); });
+    meetingsForViewer(data.meetings, data.settings, currentUser, data.team).forEach((m) => { if (hit(m.title)) push("meetings", m.id, m.title, "Meeting", m); });
     (data.calls || []).forEach((c) => { if (hit(c.title)) push("calls", c.id, c.title, "Call", c); });
     data.emails.forEach((e) => { if (hit(e.subject, e.from, e.fromName)) push("emails", e.id, e.subject || "(no subject)", e.from || "Email", e); });
     data.contracts.forEach((c) => { if (hit(c.title)) push("contracts", c.id, c.title, companyName(c.companyId) || "Agreement", c); });
@@ -290,7 +296,7 @@ export function CommandPalette({ onClose, onSelect }) {
     (data.notes || []).forEach((n) => { if (hit(n.title, n.body)) push("tasks", n.id, n.title || "Note", "Note", n, "note"); });
 
     const tabs = [
-      ["home", "Home dashboard"], ["projects", "Deals"], ["slate", "Slate"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
+      ["home", "Home dashboard"], ["opportunities", "Opportunities"], ["projects", "Deals"], ["slate", "Slate"], ["tasks", "Tasks & Notes"], ["calendar", "Calendar"],
       ["meetings", "Meetings"], ["calls", "Calls"], ["events", "Events"], ["emails", "Emails"], ["companies", "Companies"],
       ["people", "People"], ["team", "Team & Roster"], ["vendors", "Vendors"], ["aitools", "AI Tools"],
       ["press", "Press & PR"], ["social", "Social calendar"], ["contracts", "NDAs & Contracts"],
@@ -300,7 +306,7 @@ export function CommandPalette({ onClose, onSelect }) {
     tabs.forEach(([key, label]) => { if (!q || label.toLowerCase().includes(q)) push("tab", key, `Go to ${label}`, "Navigation", null); });
 
     return out.slice(0, 12);
-  }, [query, data, companyName]);
+  }, [query, data, companyName, currentUser]);
 
   return (
     <div className="md-overlay" onClick={onClose} style={{ alignItems: "flex-start", paddingTop: "12vh" }}>

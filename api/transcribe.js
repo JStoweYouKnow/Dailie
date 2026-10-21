@@ -1,7 +1,7 @@
 import { transcribe, generateText, Output } from "ai";
 import { putOnStore } from "../lib/blobStore.js";
 import { z } from "zod";
-import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { requireBoardMember } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
 import { summarizeTranscript, DEFAULT_SUMMARY_MODEL } from "../lib/summarize.js";
 
@@ -79,7 +79,7 @@ ${numbered}`;
 }
 
 export async function POST(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
   const limited = await rateLimit({
     bucket: "transcribe",

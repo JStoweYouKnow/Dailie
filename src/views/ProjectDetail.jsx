@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw, Presentation, Share2, Mic2, Send, Sparkles } from "lucide-react";
+import { Plus, Trash2, Image as ImageIcon, CheckSquare, Square, FileText, Receipt, X, CheckCircle2, Clapperboard, ExternalLink, RotateCcw, Presentation, Share2, Mic2, Send, Sparkles, Mail, Archive, ArchiveRestore } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES, PAYMENT_STATUSES,
@@ -7,6 +7,7 @@ import {
   PITCH_SOURCES, PITCH_STATUSES, MANDATE_KINDS, lookupLabel, lookupColor, makeTask, makePitch,
   makeProjectDate, PROJECT_DATE_SUGGESTIONS, projectOwnerIds, withProjectOwners, normalizeProjectDates,
   pitchLabel, mandateLabel, projectPitchSuggestions, resolvedSlateStatus, summarizeMandate,
+  isArchivedProject, archiveChange, restoreChange,
 } from "../lib/model";
 import { formatShort, formatFull, formatMoney, uid, dateInputValue, tsFromDateInput } from "../lib/format";
 import { imageSrc, uploadFile, deleteFile, listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment, SLATE_FILE_ACCEPT } from "../lib/files";
@@ -16,7 +17,7 @@ import {
   AttachmentList,
 } from "../ui/kit";
 import { CompanySelect } from "../ui/CompanySelect";
-import { visibleMeetings } from "../lib/calendarExclusions";
+import { meetingsForViewer } from "../lib/calendarExclusions";
 import { safeHref } from "../lib/safeUrl";
 
 function ImageHeader({ project, onChange }) {
@@ -172,6 +173,47 @@ function LinkRow({ label, value, placeholder, onCommit }) {
   );
 }
 
+/** One exchange read off the deal's mail: what it said, what it changed, what it suggests. */
+function EmailUpdateRow({ update, pipeline, onAccept, onDismiss }) {
+  const s = update.stageSuggestion;
+  const applied = update.applied || {};
+  const changes = [
+    applied.nextStep && "next step",
+    applied.dates && applied.dates.length && `${applied.dates.length} date${applied.dates.length === 1 ? "" : "s"}`,
+    applied.taskIds && applied.taskIds.length && `${applied.taskIds.length} task${applied.taskIds.length === 1 ? "" : "s"}`,
+  ].filter(Boolean);
+  return (
+    <div style={{ padding: "8px 10px", border: "1px solid var(--rule)", borderRadius: 8, marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Mail size={13} color="var(--accent)" />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {update.subject || "Email thread"}
+        </span>
+        <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)", flexShrink: 0 }}>{formatShort(update.emailAt || update.at)}</span>
+      </div>
+      {update.summary && <div style={{ fontSize: 12, color: "var(--bone)", marginTop: 4 }}>{update.summary}</div>}
+      {changes.length > 0 && (
+        <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 4 }}>Updated {changes.join(" · ")}</div>
+      )}
+      {s && s.status === "pending" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, padding: "6px 8px", background: "var(--panel-raised)", borderRadius: 6 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
+            Move to <strong>{lookupLabel(pipeline, s.to) || s.toLabel}</strong>?
+            {s.reason && <span style={{ color: "var(--dim)" }}> {s.reason}</span>}
+          </div>
+          <button className="md-btn md-btn-primary" style={{ fontSize: 11, padding: "3px 10px" }} onClick={onAccept}>Accept</button>
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, padding: "3px 8px" }} onClick={onDismiss}>Dismiss</button>
+        </div>
+      )}
+      {s && s.status !== "pending" && (
+        <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 4 }}>
+          Stage suggestion ({lookupLabel(pipeline, s.to) || s.toLabel}) {s.status}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const { data, update, updateProject, remove, add, currentUser, memberName } = useStore();
   const [newTask, setNewTask] = useState("");
@@ -204,7 +246,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const pitches = (data.pitches || []).filter((p) => p.projectId === project.id);
   const pitchIdeas = projectPitchSuggestions(data.mandates, project, packages, data.pitches);
   const social = (data.social || []).filter((s) => s.projectId === project.id);
-  const meetings = visibleMeetings(data.meetings, data.settings).filter((m) => m.projectId === project.id);
+  const meetings = meetingsForViewer(data.meetings, data.settings, currentUser, data.team).filter((m) => m.projectId === project.id);
   const history = [...(project.history || [])].sort((a, b) => b.date - a.date);
   const booked = (data.talent || [])
     .map((t) => ({ talent: t, assignment: (t.assignments || []).find((a) => a.projectId === project.id) }))
@@ -213,6 +255,20 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
   const extraDates = normalizeProjectDates(project.dates);
   const linkedEvents = (data.events || []).filter((e) => e.projectId === project.id)
     .sort((a, b) => (a.date || Infinity) - (b.date || Infinity));
+  // House-only: the board never sends this collection to a contractor.
+  const emailUpdates = (data.dealUpdates || []).filter((u) => u.projectId === project.id)
+    .sort((a, b) => (b.emailAt || b.at || 0) - (a.emailAt || a.at || 0));
+
+  const decideSuggestion = (u, accept) => {
+    const s = u.stageSuggestion;
+    if (!s || s.status !== "pending") return;
+    if (accept) {
+      patchProject({ pipelineStage: s.to }, `Moved to ${lookupLabel(pipeline, s.to)} (from email)`);
+    }
+    update("dealUpdates", u.id, {
+      stageSuggestion: { ...s, status: accept ? "accepted" : "dismissed", decidedAt: Date.now(), decidedBy: (currentUser && currentUser.id) || null },
+    });
+  };
 
   const addTask = () => {
     if (!newTask.trim()) return;
@@ -342,6 +398,15 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
         </div>
       </Section>
 
+      {emailUpdates.length > 0 && (
+        <Section title={`FROM EMAIL · ${emailUpdates.length}`}>
+          {emailUpdates.slice(0, 5).map((u) => (
+            <EmailUpdateRow key={u.id} update={u} pipeline={pipeline}
+              onAccept={() => decideSuggestion(u, true)} onDismiss={() => decideSuggestion(u, false)} />
+          ))}
+        </Section>
+      )}
+
       <Section title="RECORD">
         <Row label="TYPE">
           <InlineSelect value={project.recordType} options={RECORD_TYPES.map((t) => ({ key: t.key, label: t.label }))} color={type.color} onCommit={changeType} />
@@ -378,6 +443,11 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
         <Row label="CONTACT PERSON">
           <InlineText value={project.contactName} placeholder="Who we call" onCommit={(v) => patchProject({ contactName: v.trim() })} />
         </Row>
+        {project.lastContactAt && (
+          <Row label="LAST CONTACT">
+            <span className="md-mono" style={{ fontSize: 12, color: "var(--bone)" }}>{formatFull(project.lastContactAt)}</span>
+          </Row>
+        )}
         <Row label="CONTACT EMAIL">
           <InlineText value={project.contactEmail} mono placeholder="name@company.com" style={{ color: "var(--accent)" }}
             onCommit={(v) => patchProject({ contactEmail: v.trim().toLowerCase() })} />
@@ -760,7 +830,22 @@ export default function ProjectDetail({ project, onClose, onOpenRecord }) {
         </div>
       </Section>
 
-      <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
+      <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {isArchivedProject(project) ? (
+          <button className="md-btn" onClick={() => {
+            const change = restoreChange();
+            patchProject(change.patch, change.note, "saved");
+          }}>
+            <ArchiveRestore size={13} /> Restore to board
+          </button>
+        ) : (
+          <button className="md-btn md-btn-ghost" onClick={() => {
+            const change = archiveChange(project, { pipelines: data.pipelines });
+            patchProject(change.patch, change.note, "saved");
+          }}>
+            <Archive size={13} /> Archive
+          </button>
+        )}
         <ConfirmButton label="Remove project" confirmLabel="Yes, remove it" icon={<Trash2 size={13} />}
           onConfirm={() => { remove("projects", project.id); onClose(); }} />
       </div>

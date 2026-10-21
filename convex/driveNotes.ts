@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import {
   GOOGLE_SCOPES,
@@ -11,7 +11,6 @@ import {
   hasScope,
 } from "../lib/googleWorkspace.js";
 import { summarizeTranscript } from "../lib/summarize.js";
-import { isHouseEmail } from "../src/lib/houseAccess.js";
 
 /**
  * Meeting notes shared in from someone else's Workspace.
@@ -176,10 +175,10 @@ export const syncNotesNow = action({
   handler: async (ctx): Promise<SyncSummary> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not signed in.");
-    if (!isHouseEmail(identity.email)) {
+    const access = await ctx.runQuery(api.board.viewerAccess, {});
+    if (!access.allow || !access.isHouse) {
       throw new Error("Only a studio account can run Drive notes sync.");
     }
-    await ctx.runMutation(internal.syncState.grantCallerConsent, { clerkId: identity.subject });
     return await syncAll(ctx, identity.email);
   },
 });

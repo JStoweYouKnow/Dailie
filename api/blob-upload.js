@@ -1,6 +1,6 @@
 import { handleUpload } from "@vercel/blob/client";
 import { detectStoreAccess } from "../lib/blobStore.js";
-import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { requireBoardMember } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
 import { ALLOWED_CONTENT_TYPES } from "../lib/allowedUploads.js";
 
@@ -15,7 +15,7 @@ const ALLOWED_PREFIX = /^(video|recordings|documents|images)\//;
 const MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
 export async function POST(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
   const limited = await rateLimit({
     bucket: "blob-upload",

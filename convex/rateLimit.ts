@@ -1,14 +1,18 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { RATE_LIMIT_BUCKETS } from "../lib/rateLimitBuckets.js";
+import { requireMember } from "./lib/access.js";
 
 const bucketValidator = v.union(
   v.literal("files"),
+  v.literal("files-get"),
   v.literal("blob-upload"),
   v.literal("transcribe"),
   v.literal("send-email"),
   v.literal("draft-email"),
-  v.literal("google-sync")
+  v.literal("google-sync"),
+  v.literal("calendar"),
+  v.literal("recording-get")
 );
 
 /**
@@ -19,8 +23,7 @@ export const consume = mutation({
   args: { bucket: bucketValidator },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, { bucket }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const { identity } = await requireMember(ctx);
 
     const spec = RATE_LIMIT_BUCKETS[bucket];
     const now = Date.now();

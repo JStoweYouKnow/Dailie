@@ -1,4 +1,5 @@
-import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { requireBoardMember } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
 import {
   ALLOWED_CALENDAR_HOSTS,
   fetchCalendarFeed,
@@ -34,8 +35,15 @@ function feedHint(status, target) {
 }
 
 export async function GET(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
+  const limited = await rateLimit({
+    bucket: "calendar",
+    key: `calendar:${gate.auth.userId}`,
+    request,
+    token: gate.convexJwt,
+  });
+  if (limited.error) return limited.error;
 
   const raw = new URL(request.url).searchParams.get("url") || "";
   const normalized = raw.replace(/^webcal:\/\//i, "https://");

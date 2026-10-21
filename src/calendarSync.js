@@ -33,6 +33,7 @@ export function parseICSFeed(icsData) {
   const lines = unfoldICS(icsData).split(/\r\n|\n|\r/);
   let currentEvent = null;
   let attendees = [];
+  let attendeeEmails = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -41,18 +42,26 @@ export function parseICSFeed(icsData) {
     if (line === "BEGIN:VEVENT") {
       currentEvent = { id: "ics-" + Math.random().toString(36).slice(2, 9), followUps: [] };
       attendees = [];
+      attendeeEmails = [];
     } else if (line === "END:VEVENT") {
       if (currentEvent && currentEvent.title) {
-        if (currentEvent.uid) currentEvent.id = `ics-${currentEvent.uid}`;
+        if (currentEvent.uid) {
+          currentEvent.iCalUID = currentEvent.uid;
+          const when = Number.isFinite(currentEvent.date) ? currentEvent.date : 0;
+          // The date keeps each occurrence of a repeating event as its own record.
+          currentEvent.id = `ics-${currentEvent.uid}-${when}`.slice(0, 200);
+        }
         if (!Number.isFinite(currentEvent.date)) currentEvent.date = Date.now();
         if (!currentEvent.meetingLink) {
           currentEvent.meetingLink = extractMeetingLink(`${currentEvent.location || ""}\n${currentEvent.notes || ""}`);
         }
         if (attendees.length) currentEvent.attendees = attendees.join(", ").slice(0, 180);
+        if (attendeeEmails.length) currentEvent.attendeeEmails = attendeeEmails;
         events.push(currentEvent);
       }
       currentEvent = null;
       attendees = [];
+      attendeeEmails = [];
     } else if (currentEvent && prop) {
       if (prop.name === "SUMMARY") {
         currentEvent.title = unescapeICS(prop.value).trim();
@@ -62,6 +71,11 @@ export function parseICSFeed(icsData) {
         currentEvent.location = unescapeICS(prop.value).trim();
       } else if (prop.name === "DTSTART") {
         currentEvent.date = parseICSDate(prop.value);
+        if (!String(prop.value).includes("T")) currentEvent.allDay = true;
+      } else if (prop.name === "DTEND") {
+        const dateOnly = !String(prop.value).includes("T");
+        currentEvent.end = parseICSDate(prop.value, { midnight: dateOnly });
+        if (dateOnly) currentEvent.allDay = true;
       } else if (prop.name === "UID") {
         // Stable across re-syncs, so a repeated pull updates events instead of duplicating them.
         currentEvent.uid = String(prop.value || "").trim();
@@ -70,6 +84,8 @@ export function parseICSFeed(icsData) {
       } else if (prop.name === "ORGANIZER" || prop.name === "ATTENDEE") {
         const person = contactFromICS(prop);
         if (person && !attendees.includes(person)) attendees.push(person);
+        const email = String(prop.value || "").replace(/^mailto:/i, "").trim().toLowerCase();
+        if (email && !attendeeEmails.includes(email)) attendeeEmails.push(email);
       }
     }
   }
@@ -85,14 +101,14 @@ function unescapeICS(value) {
     .replace(/\\\\/g, "\\");
 }
 
-function parseICSDate(dtStr) {
+function parseICSDate(dtStr, { midnight = false } = {}) {
   try {
     const clean = dtStr.replace(/[^0-9T]/g, "");
     if (clean.length >= 8) {
       const year = parseInt(clean.slice(0, 4), 10);
       const month = parseInt(clean.slice(4, 6), 10) - 1;
       const day = parseInt(clean.slice(6, 8), 10);
-      let hour = 12, min = 0;
+      let hour = midnight ? 0 : 12, min = 0;
       if (clean.length >= 13) {
         hour = parseInt(clean.slice(9, 11), 10);
         min = parseInt(clean.slice(11, 13), 10);
@@ -276,6 +292,11 @@ function meetingFromICSEvent(event) {
     title: event.title,
     date: Number.isFinite(event.date) ? event.date : Date.now(),
     attendees: event.attendees || "Google Calendar Sync",
+    attendeeEmails: event.attendeeEmails || [],
+    organizerEmail: event.organizerEmail || "",
+    iCalUID: event.iCalUID || event.uid || "",
+    end: Number.isFinite(event.end) ? event.end : null,
+    allDay: !!event.allDay,
     notes,
     meetingLink: event.meetingLink || "",
     followUps: event.followUps && event.followUps.length ? event.followUps : [],

@@ -5,8 +5,9 @@ import {
   googleTokenForUser,
   hasScope,
 } from "../lib/googleWorkspace.js";
-import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { requireBoardMember } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
+import { mapGoogleEvent } from "../lib/googleCalendarEvents.js";
 
 /**
  * Pulls Gmail and Google Calendar straight from the signed-in user's Workspace
@@ -31,59 +32,6 @@ function fail(message, status = 400, extra = {}) {
   return Response.json({ error: message, ...extra }, { status });
 }
 
-function attendeeLine(event) {
-  const people = (event.attendees || [])
-    .map((a) => a.displayName || a.email)
-    .filter(Boolean);
-  if (people.length) return people.join(", ").slice(0, 180);
-  const organiser = event.organizer && (event.organizer.displayName || event.organizer.email);
-  return organiser || "Google Calendar";
-}
-
-function meetingLink(event) {
-  if (event.hangoutLink) return event.hangoutLink;
-  const entry = (event.conferenceData && event.conferenceData.entryPoints) || [];
-  const video = entry.find((e) => e.entryPointType === "video");
-  if (video && video.uri) return video.uri;
-  const text = `${event.location || ""}\n${event.description || ""}`;
-  const meet = text.match(/https?:\/\/meet\.google\.com\/[a-z0-9-]+/i);
-  if (meet) return meet[0];
-  const zoom = text.match(/https?:\/\/[\w.-]*zoom\.us\/(?:j|w|s|my)\/\S+/i);
-  return zoom ? zoom[0].replace(/[.,;)\]]+$/, "") : "";
-}
-
-function mapEvent(e, calendar) {
-  // All-day events carry a bare date. Parsing that as-is lands on UTC midnight,
-  // which reads as the previous day anywhere west of Greenwich — so pin it to
-  // midday, the same convention the board's own date fields use.
-  const timed = e.start && e.start.dateTime;
-  const allDay = e.start && e.start.date;
-  const date = timed
-    ? new Date(timed).getTime()
-    : allDay
-      ? new Date(`${allDay}T12:00:00`).getTime()
-      : Date.now();
-  const where = e.location ? `Where: ${e.location}` : "";
-  const calName = calendar && calendar.summary && calendar.id !== "primary" && !calendar.primary
-    ? calendar.summary
-    : "";
-  const people = attendeeLine(e);
-  return {
-    // Stable across syncs, so a repeated pull updates rather than duplicates.
-    // Primary keeps the original id so existing meetings are updated in place.
-    id: calendar && calendar.primary ? `gcal-${e.id}` : `gcal-${calendar && calendar.id}-${e.id}`,
-    title: e.summary,
-    date,
-    attendees: calName ? `${calName} · ${people}` : people,
-    notes: [where, e.description].filter(Boolean).join("\n\n").slice(0, 2000) || "Synced from Google Calendar",
-    meetingLink: meetingLink(e),
-    followUps: [],
-    projectId: null,
-    calendarId: (calendar && calendar.id) || "primary",
-    calendarLabel: (calendar && calendar.summary) || "",
-  };
-}
-
 async function listCalendars(token) {
   try {
     const data = await googleGet(`${CALENDAR}/users/me/calendarList?maxResults=50`, token);
@@ -102,8 +50,8 @@ async function eventsForCalendar(token, calendar, timeMin, timeMax) {
     token
   );
   return (data.items || [])
-    .filter((e) => e.status !== "cancelled" && e.summary)
-    .map((e) => mapEvent(e, calendar));
+    .map((e) => mapGoogleEvent(e, calendar))
+    .filter(Boolean);
 }
 
 /** Calendar events, in the shape the Calendar and Meetings tabs already store. */
@@ -125,8 +73,9 @@ async function syncCalendar(token, excludedCalendarIds) {
   );
   const seen = new Set();
   const meetings = pages.flat().filter((m) => {
-    if (seen.has(m.id)) return false;
-    seen.add(m.id);
+    const key = m.iCalUID ? `${m.iCalUID}|${m.date}` : m.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
   return {
@@ -140,7 +89,7 @@ async function syncCalendar(token, excludedCalendarIds) {
 }
 
 export async function POST(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
   const auth = gate.auth;
   const limited = await rateLimit({

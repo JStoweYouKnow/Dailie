@@ -5,7 +5,7 @@ import { staleFollowUps, deriveDirectoryFromEmails, makeTask } from "../lib/mode
 import { parseEmailPaste, dedupeEmails } from "../lib/emailImport";
 import { syncFromGoogle } from "../lib/googleSync";
 import { useAccount, useAuthToken } from "../lib/auth";
-import { isHouseEmail } from "../lib/houseAccess";
+import { isHouseViewer } from "../lib/houseAccess";
 import { formatShort, relativeDays, daysSince, parseEmailList } from "../lib/format";
 import {
   ViewHeader, FilterChips, DataTable, EmptyState, Badge, InlineText, InlineSelect,
@@ -24,7 +24,8 @@ export function EmailImportModal({ onClose }) {
   const [preview, setPreview] = useState(null);
 
   const accounts = data.settings.emailAccounts || [];
-  const canManageMailboxes = !authEnabled || isHouseEmail(signedIn && signedIn.email);
+  const me = (data.team || []).find((m) => signedIn && m.clerkId === signedIn.id);
+  const canManageMailboxes = isHouseViewer({ authEnabled, role: me && me.role, email: signedIn && signedIn.email });
 
   const addAccount = () => {
     const address = newAccount.trim().toLowerCase();
@@ -213,7 +214,10 @@ export function LogEmailModal({ onClose, prefill }) {
  * widen the window and the alerts disappear, so you can always narrow it again.
  */
 function FollowUpControl({ count }) {
-  const { data, updateSettings } = useStore();
+  const { data, updateSettings, currentUser } = useStore();
+  const { enabled: authEnabled, account: signedIn } = useAccount();
+  const me = (data.team || []).find((m) => signedIn && m.clerkId === signedIn.id) || currentUser;
+  const canManageFollowUp = isHouseViewer({ authEnabled, role: me && me.role, email: signedIn && signedIn.email });
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: count ? 10 : 22,
@@ -226,8 +230,9 @@ function FollowUpControl({ count }) {
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
         <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>ALERT AFTER</span>
         <input type="number" min="1" max="365" className="md-input" style={{ width: 72, padding: "4px 8px", fontSize: 12 }}
+          disabled={!canManageFollowUp}
           value={data.settings.followUpDays}
-          onChange={(e) => updateSettings({ followUpDays: Math.min(365, Math.max(1, Number(e.target.value) || 14)) })} />
+          onChange={(e) => canManageFollowUp && updateSettings({ followUpDays: Math.min(365, Math.max(1, Number(e.target.value) || 14)) })} />
         <span className="md-mono" style={{ fontSize: 10, color: "var(--dim)" }}>DAYS OF SILENCE</span>
       </div>
     </div>

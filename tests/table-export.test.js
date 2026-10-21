@@ -78,6 +78,8 @@ test("canExportBoard allows house domains only", () => {
   assert.equal(canExportBoard("guest@gmail.com"), false);
   assert.equal(canExportBoard("d.sterling@a24films.com"), false);
   assert.equal(canExportBoard(""), false);
+  assert.equal(canExportBoard("guest@gmail.com", "house"), true);
+  assert.equal(canExportBoard("elena@matriarch-studios.com", "contractor"), false);
 });
 
 test("exportEmailFromSession prefers the signed-in account when auth is on", () => {

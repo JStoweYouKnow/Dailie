@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   action,
   internalAction,
@@ -13,7 +13,6 @@ import {
   hasScope,
 } from "../lib/googleWorkspace.js";
 import { deriveDirectoryFromEmails } from "../src/lib/model.js";
-import { isHouseEmail } from "../src/lib/houseAccess.js";
 
 /**
  * Scheduled Gmail capture.
@@ -193,6 +192,7 @@ async function syncAll(ctx: ActionCtx, callerEmail?: string): Promise<SyncSummar
     }
   }
 
+  if (summary.added > 0) await ctx.scheduler.runAfter(0, internal.dealMailSync.run, {});
   return summary;
 }
 
@@ -213,10 +213,10 @@ export const syncNow = action({
   handler: async (ctx): Promise<SyncSummary> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not signed in.");
-    if (!isHouseEmail(identity.email)) {
+    const access = await ctx.runQuery(api.board.viewerAccess, {});
+    if (!access.allow || !access.isHouse) {
       throw new Error("Only a studio account can run mailbox sync.");
     }
-    await ctx.runMutation(internal.syncState.grantCallerConsent, { clerkId: identity.subject });
     return await syncAll(ctx, identity.email);
   },
 });

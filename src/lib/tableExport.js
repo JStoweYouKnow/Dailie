@@ -4,13 +4,15 @@
  */
 
 import { formatFull, formatMoney } from "./format.js";
-import { HOUSE_DOMAINS, isHouseEmail } from "./houseAccess.js";
+import { HOUSE_DOMAINS, HOUSE_ROLE, CONTRACTOR_ROLE, isHouseEmail } from "./houseAccess.js";
 import { ndaFor } from "./model.js";
 
-/** House addresses only — contractors on Gmail etc. can use the board, not take a copy. */
+/** House accounts only — contractors on Gmail etc. can use the board, not take a copy. */
 export const EXPORT_DOMAINS = HOUSE_DOMAINS;
 
-export function canExportBoard(email) {
+export function canExportBoard(email, role) {
+  if (role === HOUSE_ROLE) return true;
+  if (role === CONTRACTOR_ROLE) return false;
   return isHouseEmail(email);
 }
 

@@ -4,7 +4,7 @@ import { useStore } from "../lib/store";
 import { participantNames, speakersIn } from "../lib/model";
 import { formatShort, formatClock, formatDuration, parseEmailList } from "../lib/format";
 import { ViewHeader, EmptyState, Badge, Section, ModalShell, Field, Avatar } from "../ui/kit";
-import { visibleMeetings } from "../lib/calendarExclusions";
+import { meetingsForViewer } from "../lib/calendarExclusions";
 import CallDetail, { mediaSrc } from "./CallDetail";
 import { apiFetch } from "../lib/sessionToken";
 import { safeHref } from "../lib/safeUrl";
@@ -207,7 +207,7 @@ function CallRow({ call, onOpen }) {
 }
 
 export default function CallsView({ searchQuery, onStartRecording }) {
-  const { data, updateSettings } = useStore();
+  const { data, updateSettings, currentUser } = useStore();
   const [emailCall, setEmailCall] = useState(null);
   const [openCall, setOpenCall] = useState(null);
 
@@ -225,10 +225,10 @@ export default function CallsView({ searchQuery, onStartRecording }) {
 
   const upcoming = useMemo(() => {
     const soon = Date.now() + 60 * 60 * 1000;
-    return visibleMeetings(data.meetings, data.settings)
+    return meetingsForViewer(data.meetings, data.settings, currentUser, data.team)
       .filter((m) => m.meetingLink && m.date > Date.now() - 30 * 60 * 1000 && m.date < soon)
       .sort((a, b) => a.date - b.date);
-  }, [data.meetings, data.settings]);
+  }, [data.meetings, data.settings, data.team, currentUser]);
 
   return (
     <div>

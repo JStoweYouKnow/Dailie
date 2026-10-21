@@ -9,7 +9,7 @@ import { mergeSyncedMeetings, excludedMeetingList, excludedCalendarIdSet, restor
 import { syncFromGoogle, requestGoogleAccess, googleHasScope, GOOGLE_CALENDAR_SCOPE, GOOGLE_DRIVE_SCOPE, GOOGLE_SYNC_SCOPES, shouldResumeGoogleCalendarSync, markGoogleCalendarResumeStarted, clearGoogleCalendarResume } from "../lib/googleSync";
 import { useAccount, useAuthToken, useClerkUser } from "../lib/auth";
 import { apiFetch } from "../lib/sessionToken";
-import { isHouseEmail } from "../lib/houseAccess";
+import { isHouseViewer } from "../lib/houseAccess";
 
 /**
  * Primary path is OAuth ("Sync my Google Calendar"). Secret iCal feeds are a fallback
@@ -29,15 +29,20 @@ export default function SyncModal({ onClose }) {
   const [paste, setPaste] = useState("");
   const [preview, setPreview] = useState(null);
 
-  const canManageFeeds = !authEnabled || isHouseEmail(account && account.email);
+  const me = (data.team || []).find((m) => account && m.clerkId === account.id);
+  const canManageFeeds = isHouseViewer({ authEnabled, role: me && me.role, email: account && account.email });
   const feeds = data.settings.calendarFeeds || [];
   const googleCalendars = data.settings.googleCalendars || [];
   const excludedCalendars = excludedCalendarIdSet(data.settings);
   const hiddenEvents = excludedMeetingList(data.settings);
 
   /** Merges by event id so a repeated pull updates rather than duplicates. */
-  const mergeMeetings = (incoming) => {
-    const { meetings, added, updated } = mergeSyncedMeetings(data.meetings, incoming, data.settings);
+  const mergeMeetings = (incoming, { syncedBy = "", source = "" } = {}) => {
+    const { meetings, added, updated } = mergeSyncedMeetings(data.meetings, incoming, data.settings, {
+      syncedBy,
+      source,
+      team: data.team || [],
+    });
     patch({ meetings });
     return { added, updated };
   };
@@ -65,7 +70,7 @@ export default function SyncModal({ onClose }) {
         calendarId: `feed:${feed.id}`,
         calendarLabel: feed.label,
       }));
-      const { added, updated } = mergeMeetings(stamped);
+      const { added, updated } = mergeMeetings(stamped, { source: "feed" });
       if (persist) {
         updateSettings({
           calendarFeeds: feeds.map((f) => (f.id === feed.id ? { ...f, lastSyncedAt: Date.now(), eventCount: parsed.meetings.length } : f)),
@@ -125,7 +130,10 @@ export default function SyncModal({ onClose }) {
         updateSettings({ googleCalendars: result.calendars });
       }
       clearGoogleCalendarResume();
-      const { added, updated } = mergeMeetings(result.meetings || []);
+      const { added, updated } = mergeMeetings(result.meetings || [], {
+        syncedBy: (currentUser && currentUser.id) || "",
+        source: "google",
+      });
       showToast(`Google Calendar: ${added} new, ${updated} updated.`, "success");
       setGoogleState("idle");
     } catch (err) {
@@ -219,7 +227,8 @@ export default function SyncModal({ onClose }) {
                     <input
                       type="checkbox"
                       checked={on}
-                      onChange={(e) => setCalendarExcluded(cal.id, !e.target.checked, {
+                      disabled={!canManageFeeds}
+                      onChange={(e) => canManageFeeds && setCalendarExcluded(cal.id, !e.target.checked, {
                         meetings: data.meetings,
                         settings: data.settings,
                         patch,
@@ -254,10 +263,12 @@ export default function SyncModal({ onClose }) {
                   {[entry.calendarLabel, entry.date ? formatShort(entry.date) : ""].filter(Boolean).join(" · ")}
                 </div>
               </div>
-              <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)", fontSize: 12 }}
-                onClick={() => restoreExcludedMeeting(entry.id, { settings: data.settings, updateSettings, showToast })}>
-                Restore
-              </button>
+              {canManageFeeds && (
+                <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)", fontSize: 12 }}
+                  onClick={() => restoreExcludedMeeting(entry.id, { settings: data.settings, updateSettings, showToast })}>
+                  Restore
+                </button>
+              )}
             </div>
           ))}
         </Section>

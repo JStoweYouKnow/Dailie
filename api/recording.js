@@ -1,13 +1,21 @@
 import { getFromStore, redirectToBlob } from "../lib/blobStore.js";
-import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { requireBoardMember } from "../lib/requireApiAuth.js";
+import { rateLimit } from "../lib/rateLimit.js";
 
 // Recordings are read through this route. Clients keep the path, not a public
 // store URL — see lib/blobStore.js.
 const RECORDING_PATH = /^recordings\/[A-Za-z0-9._-]+$/;
 
 export async function GET(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
+  const limited = await rateLimit({
+    bucket: "recording-get",
+    key: `recording-get:${gate.auth.userId}`,
+    request,
+    token: gate.convexJwt,
+  });
+  if (limited.error) return limited.error;
 
   const path = new URL(request.url).searchParams.get("path") || "";
 

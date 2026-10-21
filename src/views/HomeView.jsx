@@ -4,11 +4,11 @@ import {
   ArrowRight, Mail, Clock,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import { staleFollowUps, alertsFor, recordTypeInfo, lookupColor, PAYMENT_STATUSES, lookupLabel, isOnProject } from "../lib/model";
+import { staleFollowUps, alertsFor, recordTypeInfo, lookupColor, PAYMENT_STATUSES, lookupLabel, isOnProject, isArchivedProject } from "../lib/model";
 import { formatShort, formatClock, formatDay, relativeDays, daysSince, DAY } from "../lib/format";
 import { imageSrc } from "../lib/files";
 import { Section, EmptyState, Badge, Avatar, AvatarStack, Stat } from "../ui/kit";
-import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
+import { isSyncedMeeting, excludeMeetingFromSync, meetingsForViewer } from "../lib/calendarExclusions";
 import { safeHref } from "../lib/safeUrl";
 
 function TaskLine({ task, onToggle, projectName, memberName }) {
@@ -89,15 +89,15 @@ function TeamTaskColumns({ onOpenTab }) {
 }
 
 function MeetingsPanel({ onOpenTab, onRecord }) {
-  const { data, patch, updateSettings, showToast } = useStore();
+  const { data, patch, updateSettings, showToast, currentUser } = useStore();
 
   const upcoming = useMemo(() => {
     const from = Date.now() - 2 * 60 * 60 * 1000;
-    return visibleMeetings(data.meetings, data.settings)
+    return meetingsForViewer(data.meetings, data.settings, currentUser, data.team)
       .filter((m) => m.date >= from && m.date <= Date.now() + 14 * DAY)
       .sort((a, b) => a.date - b.date)
       .slice(0, 8);
-  }, [data.meetings, data.settings]);
+  }, [data.meetings, data.settings, data.team, currentUser]);
 
   if (!upcoming.length) {
     return (
@@ -168,7 +168,7 @@ export default function HomeView({ onOpenTab, onOpenProject, onRecord }) {
 
   const myProjects = useMemo(() => {
     const id = currentUser && currentUser.id;
-    return data.projects.filter((p) => isOnProject(p, id));
+    return data.projects.filter((p) => isOnProject(p, id) && !isArchivedProject(p));
   }, [data.projects, currentUser]);
 
   const stale = useMemo(() => staleFollowUps(data), [data]);

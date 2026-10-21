@@ -1,6 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { requireApiAuth } from "../lib/requireApiAuth.js";
+import { requireBoardMember } from "../lib/requireApiAuth.js";
 import { rateLimit } from "../lib/rateLimit.js";
 
 const MODEL = process.env.SUMMARY_MODEL || "anthropic/claude-sonnet-5";
@@ -36,7 +36,7 @@ Rules:
 }
 
 export async function POST(request) {
-  const gate = await requireApiAuth(request);
+  const gate = await requireBoardMember(request);
   if (gate.error) return gate.error;
   const limited = await rateLimit({
     bucket: "draft-email",

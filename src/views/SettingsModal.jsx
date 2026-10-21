@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2, UserCheck, LogOut, ShieldCheck, Upload, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { useAccount, useSignOut } from "../lib/auth";
-import { isHouseEmail } from "../lib/houseAccess";
+import { isHouseViewer } from "../lib/houseAccess";
 import { uid } from "../lib/format";
 import { ModalShell, Field, Section, Avatar, InlineText, ConfirmButton, Badge } from "../ui/kit";
 
@@ -17,10 +17,10 @@ export default function SettingsModal({ onClose }) {
   const [inviting, setInviting] = useState(false);
 
   const accounts = data.settings.emailAccounts || [];
-  const canManageMailboxes = !authEnabled || isHouseEmail(signedIn && signedIn.email);
-  const canManageTeam = !authEnabled || isHouseEmail(signedIn && signedIn.email);
   const myClerkId = (signedIn && signedIn.id) || (currentUser && currentUser.id);
   const me = (data.team || []).find((m) => m.clerkId === myClerkId);
+  const canManageMailboxes = isHouseViewer({ authEnabled, role: me && me.role, email: signedIn && signedIn.email });
+  const canManageTeam = canManageMailboxes;
 
   const addMember = async () => {
     if (!name.trim()) return;
@@ -221,12 +221,20 @@ export default function SettingsModal({ onClose }) {
       <Section title="FOLLOW-UP ALERTS">
         <Field label="FLAG A RELATIONSHIP AFTER THIS MANY QUIET DAYS">
           <input type="number" min="1" max="365" className="md-input" style={{ width: 120 }}
-            value={data.settings.followUpDays} onChange={(e) => updateSettings({ followUpDays: Math.max(1, Number(e.target.value) || 14) })} />
+            disabled={!canManageMailboxes}
+            value={data.settings.followUpDays} onChange={(e) => canManageMailboxes && updateSettings({ followUpDays: Math.max(1, Number(e.target.value) || 14) })} />
         </Field>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--bone)", cursor: "pointer" }}>
           <input type="checkbox" checked={!!data.settings.autoArmRecording} onChange={(e) => updateSettings({ autoArmRecording: e.target.checked })} />
           Prompt me to record when a calendar call is starting
         </label>
+        {canManageMailboxes && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--bone)", cursor: "pointer", marginTop: 8 }}>
+            <input type="checkbox" checked={data.settings.dealsFromEmail !== false}
+              onChange={(e) => updateSettings({ dealsFromEmail: e.target.checked })} style={{ marginTop: 3 }} />
+            <span>Update deals from their email: set the next step, key dates, last contact and follow-up tasks, and suggest stage moves for approval.</span>
+          </label>
+        )}
       </Section>
     </ModalShell>
   );

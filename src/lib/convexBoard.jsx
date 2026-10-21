@@ -7,8 +7,9 @@ import { normalizeData, SEED_DATA, assignmentNotices } from "./model";
 import { AUTH_ENABLED } from "./auth";
 import { uid } from "./format";
 import { fromSharedBoard, toSharedPayload, toRecordsPayload, hasLocalContent, withoutSeedRecords, pendingLocalContribution, SHARED_COLLECTIONS } from "./sharedBoard";
+import { MAX_PUT_MANY } from "./boardWrite";
 import { loadStoredData } from "./store";
-import { canWriteCollection, isHouseEmail } from "./houseAccess";
+import { canWriteCollection, isHouseViewer } from "./houseAccess";
 
 /**
  * The shared board.
@@ -25,7 +26,7 @@ export const CONVEX_URL = import.meta.env.VITE_CONVEX_URL || "";
 
 // A Convex mutation takes a bounded argument payload, and an imported mailbox is far
 // past it. Records are written in batches of this many.
-const CHUNK_SIZE = 200;
+const CHUNK_SIZE = MAX_PUT_MANY;
 
 /** Convex rejects `undefined` anywhere in a mutation argument. */
 function convexData(value) {
@@ -261,7 +262,8 @@ export function useSharedBoard(account) {
     });
   }, [put]);
 
-  const houseWriter = !AUTH_ENABLED || isHouseEmail(account && account.email);
+  const me = (data.team || []).find((m) => account && (m.clerkId === account.id || (m.email || "").toLowerCase() === (account.email || "").toLowerCase()));
+  const houseWriter = !AUTH_ENABLED || isHouseViewer({ role: me && me.role, email: account && account.email });
   const allowWrite = useCallback((collection) => {
     if (canWriteCollection(collection, { isHouse: houseWriter })) return true;
     showToast("Only a studio account can edit this part of the board.", "error");

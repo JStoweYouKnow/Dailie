@@ -99,6 +99,7 @@ export function ExportMenu({ title, columns, rows }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const exportEmail = exportEmailFromSession({ authEnabled, account, currentUser });
+  const me = (data.team || []).find((m) => account && (m.clerkId === account.id || (m.email || "").toLowerCase() === (account.email || "").toLowerCase()));
 
   useEffect(() => {
     if (!open) return undefined;
@@ -110,7 +111,7 @@ export function ExportMenu({ title, columns, rows }) {
   }, [open]);
 
   if (!rows || !rows.length) return null;
-  if (!canExportBoard(exportEmail)) return null;
+  if (!canExportBoard(exportEmail, me && me.role)) return null;
 
   const ctx = { data, companyName, projectName, memberName, exportEmail };
   const run = (kind) => {

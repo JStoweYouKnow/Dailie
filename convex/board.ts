@@ -4,22 +4,36 @@ import {
   isHouseEmail,
   lockSharedSettings,
   memberBindPlan,
+  memberDisplayFromIdentity,
+  nextMemberRole,
+  CONTRACTOR_ROLE,
   PUBLIC_WORKSPACE_KEYS,
   redactSettingsForViewer,
   canWriteCollection,
   canReadCollection,
-  workspaceAccess,
+  canReadRecord,
+  canWriteRecord,
   pendingClerkId,
 } from "../src/lib/houseAccess.js";
 import { redactRecordBlobUrls } from "../src/lib/blobUrls.js";
-import { isSharedCollection, isSeedRecordId } from "../src/lib/sharedBoard.js";
-
-/** Writes stay gated. Reads return null when there is no session so the client can wait. */
-async function requireIdentity(ctx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Not signed in.");
-  return identity;
-}
+import {
+  assertPutManySize,
+  MAX_BOARD_GET_PER_COLLECTION,
+  MAX_MEMBERS,
+  MAX_MERGE_PER_COLLECTION,
+  prepareRecordWrite,
+  prepareWorkspaceValue,
+} from "../src/lib/boardWrite.js";
+import { isSharedCollection, isSeedRecordId, SHARED_COLLECTIONS } from "../src/lib/sharedBoard.js";
+import { collapseMeetings, isPersonalSyncedMeeting, redactMeeting, viewerIsIncluded } from "../src/lib/calendarPrivacy.js";
+import {
+  memberByClerk,
+  memberByEmail,
+  requireIdentity,
+  requireMember,
+  requireHouse,
+  viewerAccessFor,
+} from "./lib/access.js";
 
 function assertSharedCollection(collection: string) {
   if (!isSharedCollection(collection)) {
@@ -27,57 +41,33 @@ function assertSharedCollection(collection: string) {
   }
 }
 
-/** Convex documents cannot contain `undefined`; drop those keys before writing. */
-function asConvexData(value) {
-  return JSON.parse(JSON.stringify(value ?? null));
-}
-
-function assertCanWriteCollection(identity, collection: string) {
-  if (!canWriteCollection(collection, { isHouse: isHouseEmail(identity.email) })) {
+function assertCanWriteCollection(isHouse: boolean, collection: string) {
+  if (!canWriteCollection(collection, { isHouse })) {
     throw new Error("Only a studio account can edit this part of the board.");
   }
 }
 
-async function memberByClerk(ctx, clerkId: string) {
-  return await ctx.db
-    .query("members")
-    .withIndex("by_clerk", (q) => q.eq("clerkId", clerkId))
-    .unique();
-}
-
-async function memberByEmail(ctx, identity) {
-  const email = String(identity.email || "").trim().toLowerCase();
-  if (!email) return null;
-  return await ctx.db
-    .query("members")
-    .withIndex("by_email", (q) => q.eq("email", email))
-    .unique();
-}
-
-async function accessFor(ctx, identity) {
-  const byClerk = await memberByClerk(ctx, identity.subject);
-  const byEmail = byClerk ? null : await memberByEmail(ctx, identity);
-  return workspaceAccess({
-    clerkId: identity.subject,
-    isHouse: isHouseEmail(identity.email),
-    emailVerified: identity.emailVerified,
-    byClerk,
-    byEmail,
-  });
-}
-
-/** Signed in and already in the workspace (or a verified house email). */
-async function requireMember(ctx) {
-  const identity = await requireIdentity(ctx);
-  const access = await accessFor(ctx, identity);
-  if (!access.allow) throw new Error(access.reason || "This workspace is invite-only.");
-  return identity;
-}
-
-function requireHouse(identity) {
-  if (!isHouseEmail(identity.email)) {
-    throw new Error("Only a studio account can do that.");
+function assertCanWriteRecord(isHouse: boolean, collection: string, prior: unknown, next: unknown) {
+  if (!canWriteRecord(collection, { prior, next }, { isHouse })) {
+    throw new Error("Only a studio account can edit this record.");
   }
+}
+
+type PrivacyMember = { id: string; name: string; email: string };
+
+async function privacyTeam(ctx: { db: { query: Function } }): Promise<PrivacyMember[]> {
+  const members = await ctx.db.query("members").take(MAX_MEMBERS);
+  return members.map((member: { clerkId: string; name?: string; email?: string }) => ({
+    id: member.clerkId,
+    name: member.name || "",
+    email: member.email || "",
+  }));
+}
+
+function canReviseMeeting(prior: unknown, identity: { subject: string; email?: string | null }, team: PrivacyMember[]) {
+  if (!prior || typeof prior !== "object") return true;
+  if (!isPersonalSyncedMeeting(prior)) return true;
+  return viewerIsIncluded(prior, { id: identity.subject, email: identity.email || "" }, team);
 }
 
 const boardReturn = v.object({
@@ -116,41 +106,59 @@ export const get = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const access = await accessFor(ctx, identity);
+    const access = await viewerAccessFor(ctx);
     if (!access.allow) {
       return { denied: true as const, reason: access.reason || "This workspace is invite-only." };
     }
 
-    const rows = await ctx.db.query("records").collect();
+    const house = access.isHouse;
     const collections = {};
-    const house = isHouseEmail(identity.email);
-    for (const row of rows) {
-      if (!canReadCollection(row.collection, { isHouse: house })) continue;
-      (collections[row.collection] ||= []).push(redactRecordBlobUrls(row.data));
+    for (const name of SHARED_COLLECTIONS) {
+      if (!canReadCollection(name, { isHouse: house })) continue;
+      const rows = await ctx.db
+        .query("records")
+        .withIndex("by_collection", (q) => q.eq("collection", name))
+        .take(MAX_BOARD_GET_PER_COLLECTION);
+      collections[name] = rows
+        .filter((row) => canReadRecord(name, row.data, { isHouse: house }))
+        .map((row) => redactRecordBlobUrls(row.data));
     }
 
-    const members = await ctx.db.query("members").collect();
-    const workspace = await ctx.db.query("workspace").collect();
-    const settings = workspace.find((w) => w.key === "settings");
-    const pipelines = workspace.find((w) => w.key === "pipelines");
+    const members = await ctx.db.query("members").take(MAX_MEMBERS);
+    const team = members
+      .map((m) => ({
+        id: m.clerkId,
+        clerkId: m.clerkId,
+        name: m.name || "",
+        email: m.email || "",
+        role: m.role || "",
+        imageUrl: m.imageUrl || "",
+        status: m.status,
+        lastSeenAt: m.lastSeenAt,
+        googleSyncConsent: m.googleSyncConsent === true,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const self = team.find((member) => member.clerkId === identity.subject);
+    if (collections.meetings) {
+      const viewer = { id: identity.subject, email: (self && self.email) || identity.email || "" };
+      collections.meetings = collapseMeetings(collections.meetings, team)
+        .map((meeting) => redactMeeting(meeting, viewer, team))
+        .filter(Boolean);
+    }
+    const settings = await ctx.db
+      .query("workspace")
+      .withIndex("by_key", (q) => q.eq("key", "settings"))
+      .unique();
+    const pipelines = await ctx.db
+      .query("workspace")
+      .withIndex("by_key", (q) => q.eq("key", "pipelines"))
+      .unique();
 
     return {
       collections,
-      team: members
-        .map((m) => ({
-          id: m.clerkId,
-          clerkId: m.clerkId,
-          name: m.name || "",
-          email: m.email || "",
-          role: m.role || "",
-          imageUrl: m.imageUrl || "",
-          status: m.status,
-          lastSeenAt: m.lastSeenAt,
-          googleSyncConsent: m.googleSyncConsent === true,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      team,
       settings: settings
-        ? redactSettingsForViewer(settings.value, { isHouse: isHouseEmail(identity.email) })
+        ? redactSettingsForViewer(settings.value, { isHouse: house })
         : null,
       pipelines: pipelines ? pipelines.value : null,
     };
@@ -162,15 +170,19 @@ export const put = mutation({
   args: { collection: v.string(), docId: v.string(), data: v.any() },
   returns: v.null(),
   handler: async (ctx, { collection, docId, data }) => {
-    const identity = await requireMember(ctx);
+    const { identity, isHouse } = await requireMember(ctx);
     assertSharedCollection(collection);
-    assertCanWriteCollection(identity, collection);
+    assertCanWriteCollection(isHouse, collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_doc", (q) => q.eq("collection", collection).eq("docId", docId))
       .unique();
+    assertCanWriteRecord(isHouse, collection, existing?.data, data);
+    if (existing && collection === "meetings" && !canReviseMeeting(existing.data, identity, await privacyTeam(ctx))) {
+      return null;
+    }
 
-    const patch = { collection, docId, data: asConvexData(data), updatedAt: Date.now(), updatedBy: identity.subject };
+    const patch = { collection, docId, data: prepareRecordWrite(data), updatedAt: Date.now(), updatedBy: identity.subject };
     if (existing) await ctx.db.patch(existing._id, patch);
     else await ctx.db.insert("records", patch);
     return null;
@@ -181,14 +193,19 @@ export const remove = mutation({
   args: { collection: v.string(), docId: v.string() },
   returns: v.null(),
   handler: async (ctx, { collection, docId }) => {
-    const identity = await requireMember(ctx);
+    const { identity, isHouse } = await requireMember(ctx);
     assertSharedCollection(collection);
-    assertCanWriteCollection(identity, collection);
+    assertCanWriteCollection(isHouse, collection);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_doc", (q) => q.eq("collection", collection).eq("docId", docId))
       .unique();
-    if (existing) await ctx.db.delete(existing._id);
+    if (!existing) return null;
+    assertCanWriteRecord(isHouse, collection, existing.data, null);
+    if (collection === "meetings" && !canReviseMeeting(existing.data, identity, await privacyTeam(ctx))) {
+      return null;
+    }
+    await ctx.db.delete(existing._id);
     return null;
   },
 });
@@ -198,38 +215,52 @@ export const putMany = mutation({
   args: { collection: v.string(), records: v.array(v.any()), prune: v.optional(v.boolean()) },
   returns: v.object({ written: v.number(), deleted: v.number(), unchanged: v.number() }),
   handler: async (ctx, { collection, records, prune }) => {
-    const identity = await requireMember(ctx);
+    const { identity, isHouse } = await requireMember(ctx);
     assertSharedCollection(collection);
-    assertCanWriteCollection(identity, collection);
+    assertCanWriteCollection(isHouse, collection);
+    assertPutManySize(records);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_collection", (q) => q.eq("collection", collection))
       .collect();
     const byId = new Map(existing.map((r) => [r.docId, r]));
     const now = Date.now();
+    const team = collection === "meetings" ? await privacyTeam(ctx) : [];
 
     let written = 0;
     for (const record of records) {
+      if (!record || typeof record !== "object" || Array.isArray(record) || record.id == null || record.id === "") {
+        throw new Error("Each record needs an id.");
+      }
       const docId = String(record.id);
       const prior = byId.get(docId);
+      assertCanWriteRecord(isHouse, collection, prior?.data, record);
+      if (prior && collection === "meetings" && !canReviseMeeting(prior.data, identity, team)) {
+        byId.delete(docId);
+        continue;
+      }
+      const payload = prepareRecordWrite(record);
       if (prior) {
         byId.delete(docId);
         // Rewriting an unchanged record costs a write and risks the transaction's
         // limits for nothing. "Populate from email" re-sends every message it has
         // seen, and almost none of them differ.
-        const payload = asConvexData(record);
         if (JSON.stringify(prior.data) === JSON.stringify(payload)) continue;
         await ctx.db.patch(prior._id, { data: payload, updatedAt: now, updatedBy: identity.subject });
       } else {
-        await ctx.db.insert("records", { collection, docId, data: asConvexData(record), updatedAt: now, updatedBy: identity.subject });
+        await ctx.db.insert("records", { collection, docId, data: payload, updatedAt: now, updatedBy: identity.subject });
       }
       written += 1;
     }
     // Anything left was removed in this edit — unless this is one chunk of a larger
     // write, where the records not in this chunk are still perfectly alive.
     let deleted = 0;
-    if (prune !== false && isHouseEmail(identity.email)) {
-      for (const orphan of byId.values()) { await ctx.db.delete(orphan._id); deleted += 1; }
+    if (prune !== false && isHouse) {
+      for (const orphan of byId.values()) {
+        if (collection === "meetings" && !canReviseMeeting(orphan.data, identity, team)) continue;
+        await ctx.db.delete(orphan._id);
+        deleted += 1;
+      }
     }
     return { written, deleted, unchanged: records.length - written };
   },
@@ -240,18 +271,20 @@ export const pruneCollection = mutation({
   args: { collection: v.string(), keepIds: v.array(v.string()) },
   returns: v.object({ deleted: v.number() }),
   handler: async (ctx, { collection, keepIds }) => {
-    const identity = await requireMember(ctx);
+    const { identity, isHouse } = await requireMember(ctx);
     assertSharedCollection(collection);
-    assertCanWriteCollection(identity, collection);
-    if (!isHouseEmail(identity.email)) return { deleted: 0 };
+    assertCanWriteCollection(isHouse, collection);
+    if (!isHouse) return { deleted: 0 };
     const keep = new Set(keepIds);
     const existing = await ctx.db
       .query("records")
       .withIndex("by_collection", (q) => q.eq("collection", collection))
       .collect();
+    const team = collection === "meetings" ? await privacyTeam(ctx) : [];
     let deleted = 0;
     for (const row of existing) {
       if (keep.has(row.docId)) continue;
+      if (collection === "meetings" && !canReviseMeeting(row.data, identity, team)) continue;
       await ctx.db.delete(row._id);
       deleted += 1;
     }
@@ -263,21 +296,22 @@ export const setWorkspace = mutation({
   args: { key: v.string(), value: v.any() },
   returns: v.null(),
   handler: async (ctx, { key, value }) => {
-    const identity = await requireMember(ctx);
+    const { isHouse } = await requireMember(ctx);
     if (!PUBLIC_WORKSPACE_KEYS.includes(key)) {
       throw new Error("Unknown workspace key.");
     }
+    if (key === "pipelines" && !isHouse) return null;
     const existing = await ctx.db
       .query("workspace")
       .withIndex("by_key", (q) => q.eq("key", key))
       .unique();
     const prior = existing && existing.value && typeof existing.value === "object" ? existing.value : {};
-    const next = key === "settings"
-      ? lockSharedSettings(value, {
-          isHouse: isHouseEmail(identity.email),
-          prior,
-        })
-      : value;
+    const next = prepareWorkspaceValue(
+      key === "settings"
+        ? lockSharedSettings(value, { isHouse, prior })
+        : value
+    );
+    if (existing && JSON.stringify(existing.value) === JSON.stringify(next)) return null;
     if (existing) await ctx.db.patch(existing._id, { value: next, updatedAt: Date.now() });
     else await ctx.db.insert("workspace", { key, value: next, updatedAt: Date.now() });
     return null;
@@ -292,7 +326,7 @@ export const setWorkspace = mutation({
 export const touchMember = mutation({
   args: { name: v.string(), email: v.string(), imageUrl: v.optional(v.string()) },
   returns: v.string(),
-  handler: async (ctx, { name, email, imageUrl }) => {
+  handler: async (ctx, { email }) => {
     const identity = await requireIdentity(ctx);
     const clerkId = identity.subject;
     const now = Date.now();
@@ -320,23 +354,30 @@ export const touchMember = mutation({
     }
 
     if (plan.action === "update" && plan.target) {
+      const display = memberDisplayFromIdentity(identity, plan.target);
       await ctx.db.patch(plan.target._id, {
         clerkId,
-        name: name || plan.target.name,
+        name: display.name,
         email: plan.claimEmail ? identityEmail || plan.target.email : plan.target.email,
-        imageUrl: imageUrl || plan.target.imageUrl,
+        role: nextMemberRole({
+          currentRole: plan.target.role,
+          email: identityEmail || plan.target.email,
+          emailVerified,
+        }),
+        imageUrl: display.imageUrl,
         status: "active",
         lastSeenAt: now,
       });
       return clerkId;
     }
 
+    const display = memberDisplayFromIdentity(identity);
     await ctx.db.insert("members", {
       clerkId,
-      name: name || (plan.claimEmail && identityEmail ? identityEmail.split("@")[0] : "") || "New member",
+      name: display.name,
       email: plan.claimEmail ? identityEmail : "",
-      role: "",
-      imageUrl: imageUrl || "",
+      role: nextMemberRole({ currentRole: "", email: identityEmail, emailVerified }),
+      imageUrl: display.imageUrl,
       status: "active",
       firstSeenAt: now,
       lastSeenAt: now,
@@ -353,8 +394,8 @@ export const inviteMember = mutation({
   args: { name: v.string(), email: v.string() },
   returns: v.object({ clerkId: v.string() }),
   handler: async (ctx, { name, email }) => {
-    const identity = await requireMember(ctx);
-    requireHouse(identity);
+    const session = await requireMember(ctx);
+    requireHouse(session);
     const address = String(email || "").trim().toLowerCase();
     const label = String(name || "").trim() || (address.includes("@") ? address.split("@")[0] : "");
     if (!address.includes("@") || !address.split("@")[1]) {
@@ -376,7 +417,7 @@ export const inviteMember = mutation({
       clerkId,
       name: label,
       email: address,
-      role: "",
+      role: CONTRACTOR_ROLE,
       imageUrl: "",
       status: "invited",
       firstSeenAt: now,
@@ -391,8 +432,8 @@ export const removeMember = mutation({
   args: { clerkId: v.string() },
   returns: v.null(),
   handler: async (ctx, { clerkId }) => {
-    const identity = await requireMember(ctx);
-    requireHouse(identity);
+    const { identity, isHouse } = await requireMember(ctx);
+    requireHouse({ isHouse });
     if (!clerkId || clerkId === identity.subject) {
       throw new Error("You cannot remove yourself.");
     }
@@ -407,10 +448,21 @@ export const viewerMayAccess = query({
   args: {},
   returns: v.boolean(),
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return false;
-    const access = await accessFor(ctx, identity);
+    const access = await viewerAccessFor(ctx);
     return access.allow === true;
+  },
+});
+
+/** Membership plus stored house role — used by Vercel /api routes. */
+export const viewerAccess = query({
+  args: {},
+  returns: v.object({
+    allow: v.boolean(),
+    isHouse: v.boolean(),
+  }),
+  handler: async (ctx) => {
+    const access = await viewerAccessFor(ctx);
+    return { allow: access.allow, isHouse: access.isHouse };
   },
 });
 
@@ -419,7 +471,7 @@ export const setGoogleSyncConsent = mutation({
   args: { consent: v.boolean() },
   returns: v.null(),
   handler: async (ctx, { consent }) => {
-    const identity = await requireMember(ctx);
+    const { identity } = await requireMember(ctx);
     const row = await memberByClerk(ctx, identity.subject);
     if (!row) throw new Error("Not a member of this workspace.");
     await ctx.db.patch(row._id, { googleSyncConsent: consent });
@@ -443,15 +495,18 @@ export const merge = mutation({
     skipped: v.number(),
   }),
   handler: async (ctx, { collections }) => {
-    const identity = await requireMember(ctx);
+    const { identity, isHouse } = await requireMember(ctx);
     const now = Date.now();
     const added = {};
     let skipped = 0;
-    const house = isHouseEmail(identity.email);
+    const house = isHouse;
 
     for (const [collection, records] of Object.entries(collections || {})) {
       if (!isSharedCollection(collection) || !Array.isArray(records)) continue;
       if (!canWriteCollection(collection, { isHouse: house })) continue;
+      if (records.length > MAX_MERGE_PER_COLLECTION) {
+        throw new Error(`At most ${MAX_MERGE_PER_COLLECTION} records per collection.`);
+      }
 
       const existing = await ctx.db
         .query("records")
@@ -460,14 +515,15 @@ export const merge = mutation({
       const known = new Set(existing.map((r) => r.docId));
 
       for (const record of records) {
-        if (!record || !record.id) continue;
+        if (!record || typeof record !== "object" || Array.isArray(record) || !record.id) continue;
         if (isSeedRecordId(record.id)) { skipped += 1; continue; }
         const docId = String(record.id);
         if (known.has(docId)) { skipped += 1; continue; }
+        if (!canWriteRecord(collection, { prior: null, next: record }, { isHouse: house })) { skipped += 1; continue; }
         await ctx.db.insert("records", {
           collection,
           docId,
-          data: record,
+          data: prepareRecordWrite(record),
           updatedAt: now,
           updatedBy: identity.subject,
         });
@@ -493,8 +549,8 @@ export const seed = mutation({
     count: v.optional(v.number()),
   }),
   handler: async (ctx, { collections, settings, pipelines }) => {
-    const identity = await requireMember(ctx);
-    if (!isHouseEmail(identity.email)) {
+    const { identity, isHouse } = await requireMember(ctx);
+    if (!isHouse) {
       return { seeded: false, reason: "Only a studio account can create the shared board." };
     }
     const already = await ctx.db.query("records").first();
@@ -504,13 +560,16 @@ export const seed = mutation({
     let count = 0;
     for (const [collection, records] of Object.entries(collections || {})) {
       if (!isSharedCollection(collection) || !Array.isArray(records)) continue;
+      if (records.length > MAX_MERGE_PER_COLLECTION) {
+        throw new Error(`At most ${MAX_MERGE_PER_COLLECTION} records per collection.`);
+      }
       for (const record of records) {
-        if (!record || !record.id) continue;
+        if (!record || typeof record !== "object" || Array.isArray(record) || !record.id) continue;
         if (isSeedRecordId(record.id)) continue;
         await ctx.db.insert("records", {
           collection,
           docId: String(record.id),
-          data: record,
+          data: prepareRecordWrite(record),
           updatedAt: now,
           updatedBy: identity.subject,
         });
@@ -519,13 +578,19 @@ export const seed = mutation({
     }
     if (!count) return { seeded: false, reason: "Nothing to seed besides sample data." };
     if (settings) {
-      const seeded = lockSharedSettings(settings, {
+      const seeded = prepareWorkspaceValue(lockSharedSettings(settings, {
         isHouse: true,
         prior: settings,
-      });
+      }));
       await ctx.db.insert("workspace", { key: "settings", value: seeded, updatedAt: now });
     }
-    if (pipelines) await ctx.db.insert("workspace", { key: "pipelines", value: pipelines, updatedAt: now });
+    if (pipelines) {
+      await ctx.db.insert("workspace", {
+        key: "pipelines",
+        value: prepareWorkspaceValue(pipelines),
+        updatedAt: now,
+      });
+    }
     return { seeded: true, count };
   },
 });

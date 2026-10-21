@@ -176,6 +176,183 @@ export const DEFAULT_PIPELINES = {
   ],
 };
 
+/** Quiet this long, and still not won or lost, a deal counts as stalled. */
+export const DEAL_STALL_DAYS = 60;
+
+const FINISHED_STAGE_KEYS = ["delivered", "released", "complete", "wrapped"];
+
+export function isArchivedProject(project) {
+  return !!(project && Number(project.archivedAt) > 0);
+}
+
+function pipelineStageOf(project, pipelines) {
+  const type = (project && project.recordType) || "service";
+  const pipeline = (pipelines && pipelines[type]) || DEFAULT_PIPELINES[type] || [];
+  return pipeline.find((c) => c.key === project.pipelineStage) || null;
+}
+
+/** Lost / Passed, including a column someone renamed or added with that label. */
+export function isLostOrPassedDeal(project, pipelines) {
+  if (!project) return false;
+  const key = String(project.pipelineStage || "").toLowerCase();
+  if (key === "lost" || key === "passed") return true;
+  const label = String((pipelineStageOf(project, pipelines) || {}).label || "").toLowerCase();
+  return /\blost\b|\bpassed\b/.test(label);
+}
+
+function isFinishedDeal(project, pipelines) {
+  const key = String(project.pipelineStage || "").toLowerCase();
+  if (FINISHED_STAGE_KEYS.includes(key)) return true;
+  const label = String((pipelineStageOf(project, pipelines) || {}).label || "").toLowerCase();
+  return /\b(delivered|released|complete|wrapped)\b/.test(label);
+}
+
+/** Latest of the deal's own edits, its mail, and its activity log. */
+export function dealLastActivity(project) {
+  const stamps = [project && project.updatedAt, project && project.lastContactAt];
+  for (const entry of (project && project.history) || []) stamps.push(entry && entry.date);
+  const times = stamps.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  return times.length ? Math.max(...times) : 0;
+}
+
+/**
+ * Why this deal belongs in the archive, or null while it is still live work.
+ * Delivered and wrapped deals stay on the board: finishing is not stalling.
+ *
+ * @returns {"lost" | "stalled" | null}
+ */
+export function archiveReasonFor(project, { pipelines, now = Date.now(), stallDays = DEAL_STALL_DAYS } = {}) {
+  if (!project || isArchivedProject(project)) return null;
+  if (isLostOrPassedDeal(project, pipelines)) return "lost";
+  if (isFinishedDeal(project, pipelines)) return null;
+  const last = dealLastActivity(project);
+  if (!last) return null;
+  return now - last >= stallDays * DAY ? "stalled" : null;
+}
+
+export const ARCHIVE_REASON_LABELS = {
+  lost: "Lost / Passed",
+  stalled: "Stalled",
+  manual: "Archived",
+};
+
+/** The write that takes a deal off the board. Reason is inferred unless it is a manual archive. */
+export function archiveChange(project, { pipelines, now = Date.now(), stallDays = DEAL_STALL_DAYS } = {}) {
+  const reason = archiveReasonFor(project, { pipelines, now, stallDays }) || "manual";
+  const note = reason === "lost"
+    ? "Archived — lost / passed"
+    : reason === "stalled"
+      ? "Archived — stalled"
+      : "Archived";
+  return { patch: { archivedAt: now, archiveReason: reason }, note };
+}
+
+export function restoreChange() {
+  return { patch: { archivedAt: null, archiveReason: null }, note: "Restored from archive" };
+}
+
+export function dealsReadyToArchive(projects, options) {
+  return (projects || []).filter((project) => archiveReasonFor(project, options));
+}
+
+/**
+ * A conversation that is not a deal yet. It stays here until someone passes on it
+ * or opens a deal from it.
+ */
+export const OPPORTUNITY_STATUSES = [
+  { key: "talking", label: "In conversation", color: HUE.sage },
+  { key: "waiting", label: "Waiting", color: HUE.sand },
+  { key: "passed", label: "Passed", color: HUE.faint },
+  { key: "deal", label: "Became a deal", color: HUE.moss },
+];
+
+export const OPPORTUNITY_SOURCES = [
+  { key: "intro", label: "Introduction" },
+  { key: "email", label: "Email" },
+  { key: "meeting", label: "Meeting" },
+  { key: "call", label: "Call" },
+  { key: "inbound", label: "Inbound" },
+];
+
+export function opportunityStatusInfo(key) {
+  return OPPORTUNITY_STATUSES.find((s) => s.key === key) || OPPORTUNITY_STATUSES[0];
+}
+
+export function opportunitySourceLabel(key) {
+  return (OPPORTUNITY_SOURCES.find((s) => s.key === key) || {}).label || "Conversation";
+}
+
+/** Still being talked about — not passed, and not already a deal. */
+export function isOpenOpportunity(opportunity) {
+  const status = opportunity && opportunity.status;
+  return status !== "passed" && status !== "deal";
+}
+
+export function normalizeConversations(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((entry) => entry && String(entry.note || "").trim())
+    .map((entry) => ({
+      id: entry.id || uid(),
+      at: Number(entry.at) > 0 ? Number(entry.at) : Date.now(),
+      who: String(entry.who || "").trim(),
+      note: String(entry.note || "").trim(),
+    }))
+    .sort((a, b) => b.at - a.at);
+}
+
+export function makeOpportunity(fields = {}) {
+  const now = Date.now();
+  return {
+    title: "",
+    summary: "",
+    companyId: null,
+    contactName: "",
+    contactEmail: "",
+    ownerId: null,
+    status: "talking",
+    source: "intro",
+    nextStep: "",
+    projectId: null,
+    createdAt: now,
+    updatedAt: now,
+    ...fields,
+    id: (fields && fields.id) || uid(),
+    conversations: normalizeConversations(fields && fields.conversations),
+  };
+}
+
+/** The deal a conversation becomes. The caller stores it and points the opportunity at its id. */
+export function dealFromOpportunity(opportunity, { recordType = "service", pipelineStage = null, stage = "development", now = Date.now() } = {}) {
+  const ownerId = (opportunity && opportunity.ownerId) || null;
+  const title = String((opportunity && opportunity.title) || "").trim() || "Untitled deal";
+  return {
+    title,
+    description: String((opportunity && opportunity.summary) || "").trim(),
+    recordType,
+    stage,
+    pipelineStage,
+    ownerId,
+    ownerIds: ownerId ? [ownerId] : [],
+    teamIds: [],
+    companyId: (opportunity && opportunity.companyId) || null,
+    contactName: String((opportunity && opportunity.contactName) || "").trim(),
+    contactEmail: String((opportunity && opportunity.contactEmail) || "").trim().toLowerCase(),
+    contactPhone: "",
+    budget: "",
+    priority: "MEDIUM",
+    nextStep: String((opportunity && opportunity.nextStep) || "").trim(),
+    paymentStatus: "na",
+    imagePath: "",
+    imageUrl: "",
+    attachments: [],
+    customFields: {},
+    dates: [],
+    createdAt: now,
+    updatedAt: now,
+    history: [{ id: `h-${now}`, date: now, note: `Opened from an opportunity: ${title}` }],
+  };
+}
+
 export const COMPANY_TYPES = [
   { key: "client", label: "Client", color: HUE.teal },
   { key: "vendor", label: "Vendor", color: HUE.sand },
@@ -689,6 +866,8 @@ export const SEED_DATA = {
     },
   ],
   logs: [],
+  dealUpdates: [],
+  opportunities: [],
   notifications: [],
 };
 
@@ -1042,6 +1221,10 @@ export function normalizeData(raw) {
     invoices: ensureArray(input.invoices).map((i) => ({ status: "draft", direction: "incoming", currency: "USD", ...i, id: i.id || uid() })),
     payments: ensureArray(input.payments).map((p) => ({ status: "unpaid", currency: "USD", ...p, id: p.id || uid() })),
     logs: ensureArray(input.logs).filter((l) => l.id !== "log-1"),
+    dealUpdates: ensureArray(input.dealUpdates)
+      .filter((u) => u && u.projectId)
+      .map((u) => ({ summary: "", subject: "", stageSuggestion: null, ...u, id: u.id || uid() })),
+    opportunities: ensureArray(input.opportunities).map((o) => makeOpportunity(o || {})),
     notifications: ensureArray(input.notifications).map((n) => ({
       kind: "assignment", role: "assignee", recordType: "task", recordId: null,
       title: "", userId: null, actorId: null, readAt: null,

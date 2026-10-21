@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Video, ExternalLink, EyeOff } from "lucide-react";
 import { useStore } from "../lib/store";
-import { RECORD_TYPES, EVENT_KINDS, lookupColor, lookupLabel, projectCalendarMarks } from "../lib/model";
+import { RECORD_TYPES, EVENT_KINDS, lookupColor, lookupLabel, projectCalendarMarks, isArchivedProject } from "../lib/model";
 import { formatClock } from "../lib/format";
 import { FilterChips, Section, Badge } from "../ui/kit";
-import { visibleMeetings, isSyncedMeeting, excludeMeetingFromSync } from "../lib/calendarExclusions";
+import { isSyncedMeeting, excludeMeetingFromSync, meetingsForViewer } from "../lib/calendarExclusions";
+import { meetingDayStarts } from "../lib/calendarPrivacy";
 import { safeHref } from "../lib/safeUrl";
 
 function dateKey(ts) {
@@ -14,7 +15,7 @@ function dateKey(ts) {
 }
 
 export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
-  const { data, patch, updateSettings, showToast } = useStore();
+  const { data, patch, updateSettings, showToast, currentUser } = useStore();
   const [cursor, setCursor] = useState(new Date());
   const [filter, setFilter] = useState("all");
 
@@ -32,9 +33,21 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
     };
 
     if (filter === "all" || filter === "meetings") {
-      visibleMeetings(data.meetings, data.settings).forEach((m) => push(m.date, {
-        id: `m-${m.id}`, kind: "meeting", label: m.title, color: "var(--accent)", ts: m.date, meeting: m,
-      }));
+      meetingsForViewer(data.meetings, data.settings, currentUser, data.team, { includeBusy: true }).forEach((m) => {
+        meetingDayStarts(m).forEach((ts) => {
+          const onStart = dateKey(ts) === dateKey(m.date);
+          push(ts, {
+            id: `m-${m.id}-${dateKey(ts)}`,
+            kind: "meeting",
+            label: m.title,
+            color: m.busy ? "var(--dim)" : "var(--accent)",
+            ts: !m.allDay && onStart ? m.date : ts,
+            showTime: !m.allDay && onStart,
+            meeting: m,
+            busy: !!m.busy,
+          });
+        });
+      });
     }
 
     if (filter === "all" || filter === "tasks") {
@@ -55,7 +68,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
     const typeFilters = RECORD_TYPES.map((t) => t.key);
     if (filter === "all" || typeFilters.includes(filter)) {
       data.projects
-        .filter((p) => filter === "all" || p.recordType === filter)
+        .filter((p) => !isArchivedProject(p) && (filter === "all" || p.recordType === filter))
         .forEach((p) => {
           projectCalendarMarks(p).forEach((mark) => {
             push(mark.ts, { id: mark.id, kind: "project", label: mark.label, color: mark.color, ts: mark.ts, project: p });
@@ -65,7 +78,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
 
     Object.values(map).forEach((list) => list.sort((a, b) => a.ts - b.ts));
     return map;
-  }, [data.meetings, data.settings, data.tasks, data.projects, data.events, filter]);
+  }, [data.meetings, data.settings, data.team, data.tasks, data.projects, data.events, currentUser, filter]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -88,6 +101,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
   ];
 
   const openEntry = (e) => {
+    if (e.busy) return;
     if (e.project && onOpenProject) onOpenProject(e.project);
     else if (e.kind === "meeting" && onOpenTab) onOpenTab("meetings");
     else if (e.kind === "task" && onOpenTab) onOpenTab("tasks");
@@ -135,12 +149,14 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
                   onKeyDown={(ev) => { if (ev.key === "Enter") openEntry(e); }}
                   title={e.label}
                   style={{
-                    fontSize: 10, padding: "3px 5px", marginBottom: 3, borderRadius: 4, cursor: "pointer",
-                    background: `${e.color === "var(--accent)" ? "var(--accent-soft)" : `${e.color}22`}`,
-                    borderLeft: `2px solid ${e.color}`, color: "var(--bone)",
+                    fontSize: 10, padding: "3px 5px", marginBottom: 3, borderRadius: 4,
+                    cursor: e.busy ? "default" : "pointer",
+                    background: e.busy ? "transparent" : (e.color === "var(--accent)" ? "var(--accent-soft)" : `${e.color}22`),
+                    borderLeft: `2px solid ${e.color}`,
+                    color: e.busy ? "var(--dim)" : "var(--bone)",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
-                  {e.kind === "meeting" ? `${formatClock(e.ts)} ` : ""}{e.label}
+                  {e.showTime ? `${formatClock(e.ts)} ` : ""}{e.label}
                 </div>
               ))}
               {events.length > 4 && (
@@ -153,17 +169,17 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
       </div>
 
       <Section title="NEXT UP" style={{ marginTop: 26 }}>
-        {visibleMeetings(data.meetings, data.settings)
+        {meetingsForViewer(data.meetings, data.settings, currentUser, data.team, { includeBusy: true })
           .filter((m) => m.date >= Date.now() - 60 * 60 * 1000)
           .sort((a, b) => a.date - b.date)
           .slice(0, 5)
           .map((m) => (
             <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderBottom: "1px solid var(--rule)", flexWrap: "wrap" }}>
               <span className="md-mono" style={{ fontSize: 11, color: "var(--dim)", width: 120 }}>
-                {new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {formatClock(m.date)}
+                {new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {m.allDay ? "All day" : formatClock(m.date)}
               </span>
-              <span style={{ flex: "1 1 180px", fontSize: 13, fontWeight: 600 }}>{m.title}</span>
-              {safeHref(m.meetingLink) && (
+              <span style={{ flex: "1 1 180px", fontSize: 13, fontWeight: 600, color: m.busy ? "var(--dim)" : "var(--bone)" }}>{m.title}</span>
+              {!m.busy && safeHref(m.meetingLink) && (
                 <>
                   <a className="md-btn md-btn-ghost" href={safeHref(m.meetingLink)} target="_blank" rel="noreferrer" style={{ textDecoration: "none", border: "1px solid var(--rule)", fontSize: 12 }}>
                     <ExternalLink size={12} /> Join
@@ -173,7 +189,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
                   </button>
                 </>
               )}
-              {isSyncedMeeting(m) && (
+              {!m.busy && isSyncedMeeting(m) && (
                 <button className="md-btn md-btn-ghost" title="Hide from calendar sync" style={{ fontSize: 12 }}
                   onClick={() => excludeMeetingFromSync(m, {
                     meetings: data.meetings, settings: data.settings, patch, updateSettings, showToast,
@@ -183,7 +199,7 @@ export default function CalendarView({ onOpenProject, onOpenTab, onRecord }) {
               )}
             </div>
           ))}
-        {visibleMeetings(data.meetings, data.settings).filter((m) => m.date >= Date.now() - 60 * 60 * 1000).length === 0 && (
+        {meetingsForViewer(data.meetings, data.settings, currentUser, data.team, { includeBusy: true }).filter((m) => m.date >= Date.now() - 60 * 60 * 1000).length === 0 && (
           <div style={{ fontSize: 13, color: "var(--dim)" }}>Nothing scheduled. Connect a Google Calendar feed to pull meetings in.</div>
         )}
       </Section>

@@ -24,4 +24,10 @@ crons.interval("sync meeting notes", { hours: 1 }, internal.driveNotes.syncNotes
  */
 crons.interval("sync meet transcripts", { minutes: 30 }, internal.meet.syncTranscripts, {});
 
+/**
+ * Deals catch up on their own mail. A Gmail sync that adds mail also schedules this
+ * straight away; the interval is the backstop for mail filed some other way.
+ */
+crons.interval("update deals from email", { minutes: 30 }, internal.dealMailSync.run, {});
+
 export default crons;

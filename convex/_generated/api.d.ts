@@ -11,8 +11,11 @@
 import type * as board from "../board.js";
 import type * as calls from "../calls.js";
 import type * as crons from "../crons.js";
+import type * as dealMailSync from "../dealMailSync.js";
+import type * as dealUpdates from "../dealUpdates.js";
 import type * as driveNotes from "../driveNotes.js";
 import type * as gmail from "../gmail.js";
+import type * as lib_access from "../lib/access.js";
 import type * as meet from "../meet.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as syncState from "../syncState.js";
@@ -27,8 +30,11 @@ declare const fullApi: ApiFromModules<{
   board: typeof board;
   calls: typeof calls;
   crons: typeof crons;
+  dealMailSync: typeof dealMailSync;
+  dealUpdates: typeof dealUpdates;
   driveNotes: typeof driveNotes;
   gmail: typeof gmail;
+  "lib/access": typeof lib_access;
   meet: typeof meet;
   rateLimit: typeof rateLimit;
   syncState: typeof syncState;

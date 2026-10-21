@@ -4,21 +4,21 @@ import {
   Calendar as CalendarIcon, Settings, ExternalLink, Home, Clapperboard, CheckSquare,
   Users, Building2, Contact, UserCheck, Truck, FileText, Receipt, History,
   MoreHorizontal, ChevronLeft, ChevronRight, Plus,
-  Mic2, Megaphone, Scale, Menu, Presentation, Share2, Briefcase,
+  Mic2, Megaphone, Scale, Menu, Presentation, Share2, Briefcase, MessagesSquare,
 } from "lucide-react";
 import { StoreProvider, useBoardStore } from "./lib/store";
 import { AuthGate, useAccount, useSignOut } from "./lib/auth";
 import { apiFetch } from "./lib/sessionToken";
 import { canExportBoard, exportEmailFromSession } from "./lib/tableExport";
-import { isHouseEmail } from "./lib/houseAccess";
+import { isHouseViewer } from "./lib/houseAccess";
 import { GOOGLE_CALENDAR_RESUME_KEY } from "./lib/googleSync";
 import { SHARED_ENABLED, useSharedBoard } from "./lib/convexBoard";
 import SharedBoundary from "./lib/SharedBoundary";
-import { normalizeData, staleFollowUps } from "./lib/model";
+import { normalizeData, staleFollowUps, isOpenOpportunity } from "./lib/model";
 import { DAY } from "./lib/format";
 import { parseDocumentFile } from "./documentParser";
 import { parseSyncPayload, isICalendarFeed } from "./calendarSync";
-import { mergeSyncedMeetings, isIncomingExcluded } from "./lib/calendarExclusions";
+import { mergeSyncedMeetings, isIncomingExcluded, meetingsForViewer } from "./lib/calendarExclusions";
 import { LoadingState, Stat, Avatar, ModalShell, Field } from "./ui/kit";
 import Markdown from "./ui/Markdown";
 import { IMPORT_FORMATS, pickFormat } from "./lib/textFormats";
@@ -26,6 +26,7 @@ import {
   DailieBrandLogo, Toast, NotificationCenter, LiveCallBanner, CommandPalette, AIAssistantDrawer, InfoModal,
 } from "./views/shell";
 import HomeView from "./views/HomeView";
+import OpportunitiesView from "./views/OpportunitiesView";
 import ProjectsView from "./views/ProjectsView";
 import ProjectDetail from "./views/ProjectDetail";
 import NewProjectModal from "./views/NewProjectModal";
@@ -66,6 +67,7 @@ const NAV = [
   {
     group: "Work",
     items: [
+      { key: "opportunities", label: "Opportunities", icon: MessagesSquare },
       { key: "projects", label: "Deals", icon: Clapperboard },
       { key: "slate", label: "Slate", icon: Presentation },
       { key: "tasks", label: "Tasks & Notes", icon: CheckSquare },
@@ -395,13 +397,13 @@ function Board({ store }) {
   const liveMeeting = useMemo(() => {
     if (!data.settings.autoArmRecording) return null;
     const alreadyRecorded = new Set(data.calls.map((c) => c.meetingId).filter(Boolean));
-    return data.meetings.find((m) =>
+    return meetingsForViewer(data.meetings, data.settings, currentUser, data.team).find((m) =>
       m.meetingLink &&
       !isIncomingExcluded(m, data.settings) &&
       !alreadyRecorded.has(m.id) &&
       !dismissedCalls.includes(m.id) &&
       Math.abs(m.date - Date.now()) < 5 * 60 * 1000) || null;
-  }, [data.meetings, data.calls, data.settings, dismissedCalls]);
+  }, [data.meetings, data.team, data.calls, data.settings, currentUser, dismissedCalls]);
 
   // Re-pull every subscribed Google Calendar on load so meetings are current.
   const syncedOnce = useRef(false);
@@ -427,7 +429,10 @@ function Board({ store }) {
               calendarId: event.calendarId || `feed:${feed.id}`,
               calendarLabel: event.calendarLabel || feed.label,
             }));
-            const { meetings, added: n } = mergeSyncedMeetings(current.meetings, stamped, current.settings);
+            const { meetings, added: n } = mergeSyncedMeetings(current.meetings, stamped, current.settings, {
+              source: "feed",
+              team: current.team || [],
+            });
             added += n;
             return { meetings };
           });
@@ -444,11 +449,16 @@ function Board({ store }) {
   };
 
   const exportEmail = exportEmailFromSession({ authEnabled, account, currentUser });
-  const canBackup = canExportBoard(exportEmail);
-  const showHouseNav = !authEnabled || isHouseEmail((account && account.email) || (currentUser && currentUser.email));
+  const meMember = (data.team || []).find((m) =>
+    (account && (m.clerkId === account.id || (m.email || "").toLowerCase() === (account.email || "").toLowerCase()))
+    || (currentUser && m.id === currentUser.id)
+  );
+  const house = isHouseViewer({ authEnabled, role: meMember && meMember.role, email: exportEmail });
+  const canBackup = canExportBoard(exportEmail, meMember && meMember.role);
+  const showHouseNav = house;
 
   const exportBoard = () => {
-    if (!canExportBoard(exportEmailFromSession({ authEnabled, account, currentUser }))) {
+    if (!canExportBoard(exportEmailFromSession({ authEnabled, account, currentUser }), meMember && meMember.role)) {
       showToast("Only a studio account can export a backup.", "error");
       return;
     }
@@ -468,7 +478,7 @@ function Board({ store }) {
     const ext = file.name.split(".").pop().toLowerCase();
 
     if (ext === "json") {
-      if (!canExportBoard(exportEmailFromSession({ authEnabled, account, currentUser }))) {
+      if (!canExportBoard(exportEmailFromSession({ authEnabled, account, currentUser }), meMember && meMember.role)) {
         showToast("Only a studio account can restore a backup.", "error");
         return;
       }
@@ -518,6 +528,8 @@ function Board({ store }) {
     switch (activeTab) {
       case "home":
         return <HomeView onOpenTab={openTab} onOpenProject={setDetailProject} onRecord={(m) => setRecorder({ meeting: m })} />;
+      case "opportunities":
+        return <OpportunitiesView searchQuery={searchQuery} onOpenProject={setDetailProject} />;
       case "projects":
         return <ProjectsView searchQuery={searchQuery} onOpenDetail={setDetailProject} onOpenNew={() => setShowNewProject(true)} />;
       case "tasks":
@@ -562,6 +574,7 @@ function Board({ store }) {
   };
 
   const navCounts = {
+    opportunities: (data.opportunities || []).filter(isOpenOpportunity).length || undefined,
     tasks: myOpen || undefined,
     emails: stale.length || undefined,
     social: (data.social || []).filter((s) =>

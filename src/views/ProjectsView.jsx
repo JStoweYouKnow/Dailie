@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { LayoutGrid, Table as TableIcon, Image as ImageIcon, Plus, Star } from "lucide-react";
+import { LayoutGrid, Table as TableIcon, Image as ImageIcon, Plus, Star, Archive, ArchiveRestore } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES,
   PAYMENT_STATUSES, lookupLabel, lookupColor,
   projectOwnerIds, withProjectOwners, isOnProject,
+  isArchivedProject, ARCHIVE_REASON_LABELS, archiveChange, restoreChange, dealsReadyToArchive,
 } from "../lib/model";
 import { formatShort, uid } from "../lib/format";
 import {
@@ -37,7 +38,7 @@ function purge(row, item) {
   return purgeAttachment(row, item).then((attachments) => ({ attachments }));
 }
 
-function ProjectCard({ project, onOpen, memberName, companyName }) {
+function ProjectCard({ project, onOpen, onRestore, memberName, companyName }) {
   const { update } = useStore();
   const type = recordTypeInfo(project.recordType);
   const image = imageSrc(project);
@@ -60,6 +61,9 @@ function ProjectCard({ project, onOpen, memberName, companyName }) {
           </div>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 9 }}>
             <Badge label={type.short} color={type.color} />
+            {isArchivedProject(project) && (
+              <Badge label={ARCHIVE_REASON_LABELS[project.archiveReason] || "Archived"} color="var(--dim)" />
+            )}
             {project.paymentStatus && project.paymentStatus !== "na" && (
               <Badge label={lookupLabel(PAYMENT_STATUSES, project.paymentStatus)} color={lookupColor(PAYMENT_STATUSES, project.paymentStatus)} />
             )}
@@ -97,16 +101,22 @@ function ProjectCard({ project, onOpen, memberName, companyName }) {
         {!files.length && (
           <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 5 }}>Deck, one-sheet, treatment, budget.</div>
         )}
+        {onRestore && (
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, marginTop: 8 }}
+            onClick={() => onRestore(project)}>
+            <ArchiveRestore size={12} /> Restore
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function GalleryGrid({ projects, onOpen, memberName, companyName }) {
+function GalleryGrid({ projects, onOpen, onRestore, memberName, companyName }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(248px, 1fr))", gap: 16 }}>
       {projects.map((p) => (
-        <ProjectCard key={p.id} project={p} onOpen={() => onOpen(p)} memberName={memberName} companyName={companyName} />
+        <ProjectCard key={p.id} project={p} onOpen={() => onOpen(p)} onRestore={onRestore} memberName={memberName} companyName={companyName} />
       ))}
     </div>
   );
@@ -117,7 +127,7 @@ function GalleryGrid({ projects, onOpen, memberName, companyName }) {
  * One editable pipeline per record type. Each type keeps its own columns, so
  * "All Types" stacks the boards rather than hiding work behind a filter.
  */
-function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail }) {
+function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail, onRestore }) {
   const { data, patch, update, updateProject, memberName, companyName } = useStore();
   const type = recordTypeInfo(typeKey);
   const pipeline = data.pipelines[typeKey] || [];
@@ -183,7 +193,9 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail }) {
         onRemoveColumn={pipeline.length > 1 ? removeColumn : undefined}
         onReorderColumns={reorderColumns}
         emptyHint="Drag a deal here"
-        renderCard={(p) => <ProjectCard project={p} onOpen={() => onOpenDetail(p)} memberName={memberName} companyName={companyName} />}
+        renderCard={(p) => (
+          <ProjectCard project={p} onOpen={() => onOpenDetail(p)} onRestore={onRestore} memberName={memberName} companyName={companyName} />
+        )}
       />
     </div>
   );
@@ -194,9 +206,34 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
   const [typeFilter, setTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useState("pipeline");
   const [mineOnly, setMineOnly] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
+
+  const readyToArchive = useMemo(
+    () => dealsReadyToArchive(data.projects, { pipelines: data.pipelines }),
+    [data.projects, data.pipelines]
+  );
+  const archivedCount = data.projects.filter(isArchivedProject).length;
+
+  const archiveOne = (project) => {
+    const change = archiveChange(project, { pipelines: data.pipelines });
+    updateProject(project.id, change.patch, change.note);
+  };
+
+  const restoreOne = (project) => {
+    const change = restoreChange();
+    updateProject(project.id, change.patch, change.note);
+  };
+
+  const archiveReady = () => {
+    const n = readyToArchive.length;
+    if (!n) return;
+    const label = n === 1 ? "1 deal that is stalled or lost / passed" : `${n} deals that are stalled or lost / passed`;
+    if (!window.confirm(`Archive ${label}? They leave the board and stay in Archive, where you can restore them.`)) return;
+    readyToArchive.forEach(archiveOne);
+  };
 
   const projects = useMemo(() => {
-    let list = data.projects;
+    let list = data.projects.filter((p) => (showArchive ? isArchivedProject(p) : !isArchivedProject(p)));
     if (typeFilter !== "all") list = list.filter((p) => p.recordType === typeFilter);
     if (mineOnly) list = list.filter((p) => isMine(p, currentUser && currentUser.id));
     if (searchQuery) {
@@ -213,7 +250,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         listAttachments(p).some((a) => (a.fileName || "").toLowerCase().includes(q)));
     }
     return list;
-  }, [data.projects, typeFilter, mineOnly, searchQuery, currentUser, memberName]);
+  }, [data.projects, typeFilter, mineOnly, searchQuery, currentUser, memberName, showArchive]);
 
   const moveToStage = (projectId, stageKey) => {
     const project = data.projects.find((p) => p.id === projectId);
@@ -223,7 +260,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
 
   const typeOptions = RECORD_TYPES.map((t) => ({
     key: t.key, label: t.short, color: t.color,
-    count: data.projects.filter((p) => p.recordType === t.key).length,
+    count: data.projects.filter((p) => p.recordType === t.key && (showArchive ? isArchivedProject(p) : !isArchivedProject(p))).length,
   }));
 
   const modeButton = (mode, Icon, title) => (
@@ -311,6 +348,21 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         ...allColumns.filter((c) => !savedOrder.includes(c.key)),
       ]
     : allColumns;
+  const shownColumns = showArchive
+    ? [...columns, {
+      key: "archive",
+      label: "ARCHIVE",
+      stopClick: true,
+      render: (p) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Badge label={ARCHIVE_REASON_LABELS[p.archiveReason] || "Archived"} color="var(--dim)" />
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => restoreOne(p)}>
+            <ArchiveRestore size={12} /> Restore
+          </button>
+        </div>
+      ),
+    }]
+    : columns;
 
   const reorderTableColumns = (fromKey, toKey) => {
     const order = columns.map((c) => c.key);
@@ -323,11 +375,23 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
 
   return (
     <div>
-      <ViewHeader count={projects.length} label={`DEAL${projects.length === 1 ? "" : "S"}${mineOnly ? " ASSIGNED TO ME" : ""}`}>
+      <ViewHeader
+        count={projects.length}
+        label={showArchive ? `ARCHIVED DEAL${projects.length === 1 ? "" : "S"}` : `DEAL${projects.length === 1 ? "" : "S"}${mineOnly ? " ASSIGNED TO ME" : ""}`}
+      >
         <button className="md-chip" onClick={() => setMineOnly((m) => !m)}
           style={mineOnly ? { background: "var(--accent)", borderColor: "var(--accent)", color: "var(--ink)" } : undefined}>
           <Star size={11} style={{ marginRight: 5, verticalAlign: -1 }} /> My Deals
         </button>
+        <button className="md-chip" onClick={() => setShowArchive((on) => !on)}
+          style={showArchive ? { background: "var(--accent)", borderColor: "var(--accent)", color: "var(--ink)" } : undefined}>
+          <Archive size={11} style={{ marginRight: 5, verticalAlign: -1 }} /> Archive{archivedCount ? ` · ${archivedCount}` : ""}
+        </button>
+        {!showArchive && readyToArchive.length > 0 && (
+          <button className="md-btn" onClick={archiveReady}>
+            <Archive size={13} /> Archive {readyToArchive.length} stalled & lost
+          </button>
+        )}
         <div style={{ display: "flex", background: "var(--panel-raised)", border: "1px solid var(--rule)", borderRadius: 6, padding: 2 }}>
           {modeButton("pipeline", LayoutGrid, "Deal pipeline board")}
           {modeButton("gallery", ImageIcon, "Gallery view")}
@@ -343,18 +407,22 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
 
       {projects.length === 0 ? (
         <EmptyState
-          title={mineOnly ? "Nothing assigned to you yet" : "No deals match this filter"}
-          subtitle={mineOnly ? "Deals where you are the owner or a team member land here." : "Change the type filter, clear your search, or add a deal."}
+          title={showArchive ? "Nothing in the archive" : mineOnly ? "Nothing assigned to you yet" : "No deals match this filter"}
+          subtitle={showArchive
+            ? "Lost, passed, and stalled deals can be archived from the board. Restoring one puts it back."
+            : mineOnly
+              ? "Deals where you are the owner or a team member land here."
+              : "Change the type filter, clear your search, or add a deal."}
         />
       ) : viewMode === "table" ? (
-        <DataTable columns={columns} rows={projects} onRowClick={onOpenDetail} onReorderColumns={reorderTableColumns} hideExport />
+        <DataTable columns={shownColumns} rows={projects} onRowClick={onOpenDetail} onReorderColumns={showArchive ? undefined : reorderTableColumns} hideExport />
       ) : viewMode === "gallery" ? (
-        <GalleryGrid projects={projects} onOpen={onOpenDetail} memberName={memberName} companyName={companyName} />
+        <GalleryGrid projects={projects} onOpen={onOpenDetail} onRestore={showArchive ? restoreOne : undefined} memberName={memberName} companyName={companyName} />
       ) : (
         (typeFilter === "all" ? RECORD_TYPES.map((t) => t.key) : [typeFilter])
           .filter((key) => typeFilter !== "all" || projects.some((p) => p.recordType === key))
           .map((key) => (
-            <PipelineBoard key={key} typeKey={key} projects={projects} showHeading={typeFilter === "all"} onOpenDetail={onOpenDetail} />
+            <PipelineBoard key={key} typeKey={key} projects={projects} showHeading={typeFilter === "all"} onOpenDetail={onOpenDetail} onRestore={showArchive ? restoreOne : undefined} />
           ))
       )}
     </div>

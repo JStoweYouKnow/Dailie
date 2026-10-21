@@ -1,7 +1,19 @@
 /**
  * Meetings pulled from Google (OAuth or an iCal feed) can be hidden so they stay
  * off the board and are skipped on the next sync. Whole calendars can be skipped too.
+ *
+ * A person's Google sync is personal: see calendarPrivacy for who sees the title
+ * and who only sees that the time is busy.
  */
+
+import {
+  collapseMeetings,
+  googleMeetingId,
+  meetingSeriesKey,
+  mergeMeetingRecords,
+  redactMeeting,
+  stampSyncedMeeting,
+} from "./calendarPrivacy.js";
 
 export function isSyncedMeeting(meeting) {
   const id = meeting && meeting.id;
@@ -39,47 +51,82 @@ export function visibleMeetings(meetings, settings) {
   return (meetings || []).filter((m) => !isIncomingExcluded(m, settings));
 }
 
-export function mergeSyncedMeetings(currentMeetings, incoming, settings) {
-  const existing = new Map((currentMeetings || []).map((m) => [m.id, m]));
+function findSyncedIndex(meetings, stamped) {
+  const series = meetingSeriesKey(stamped);
+  if (series) {
+    const bySeries = meetings.findIndex((meeting) => meeting && meetingSeriesKey(meeting) === series);
+    if (bySeries >= 0) return bySeries;
+  }
+  const ids = [stamped.id, ...(stamped.aliasIds || [])].filter(Boolean);
+  return meetings.findIndex((meeting) => meeting && ids.includes(meeting.id));
+}
+
+/**
+ * Pull a calendar into the board.
+ * `syncedBy` is the signed-in member. `source: "feed"` marks a studio iCal feed,
+ * which stays visible to the whole team. The same occurrence from two people
+ * updates one record.
+ */
+export function mergeSyncedMeetings(currentMeetings, incoming, settings, { syncedBy = "", team = [], source = "" } = {}) {
+  const meetings = (currentMeetings || []).map((meeting) => ({ ...meeting }));
+  const drop = new Set();
   let added = 0;
   let updated = 0;
   let skipped = 0;
   (incoming || []).forEach((event) => {
     if (!event || !event.id) return;
-    if (isIncomingExcluded(event, settings)) {
+    if (isIncomingExcluded(event, settings) || (event.aliasIds || []).some((id) => isIncomingExcluded({ id }, settings))) {
       skipped += 1;
       return;
     }
-    const prior = existing.get(event.id);
-    if (prior) {
-      existing.set(event.id, {
-        ...prior,
-        title: event.title,
-        date: event.date,
-        attendees: event.attendees,
-        meetingLink: event.meetingLink || prior.meetingLink,
-        notes: prior.notes || event.notes,
-        calendarId: event.calendarId || prior.calendarId || "",
-        calendarLabel: event.calendarLabel || prior.calendarLabel || "",
-      });
+    const stamped = stampSyncedMeeting(event, { syncedBy, team, source: source || event.source || "" });
+    const idx = findSyncedIndex(meetings, stamped);
+    const stored = { ...stamped };
+    delete stored.aliasIds;
+    if (idx >= 0) {
+      const prior = meetings[idx];
+      const merged = mergeMeetingRecords(prior, stored, team);
+      merged.id = prior.id;
+      meetings[idx] = merged;
       updated += 1;
-    } else {
-      existing.set(event.id, {
-        ...event,
-        followUps: event.followUps || [],
-        projectId: event.projectId || null,
-        calendarId: event.calendarId || "",
-        calendarLabel: event.calendarLabel || "",
+      [stamped.id, ...(stamped.aliasIds || [])].forEach((id) => {
+        if (id && id !== prior.id) drop.add(id);
       });
-      added += 1;
+      return;
     }
+    const id = stamped.iCalUID ? googleMeetingId(stamped.iCalUID, stamped.date, stamped.id) : stamped.id;
+    const existing = meetings.findIndex((meeting) => meeting && meeting.id === id);
+    if (existing >= 0) {
+      const merged = mergeMeetingRecords(meetings[existing], stored, team);
+      merged.id = meetings[existing].id;
+      meetings[existing] = merged;
+      updated += 1;
+      return;
+    }
+    meetings.push({
+      ...stored,
+      id,
+      followUps: stored.followUps || [],
+      projectId: stored.projectId || null,
+      calendarId: stored.calendarId || "",
+      calendarLabel: stored.calendarLabel || "",
+    });
+    added += 1;
   });
   return {
-    meetings: [...existing.values()].sort((a, b) => b.date - a.date),
+    meetings: meetings.filter((meeting) => meeting && !drop.has(meeting.id)).sort((a, b) => b.date - a.date),
     added,
     updated,
     skipped,
   };
+}
+
+/** Meetings this person may see. Busy blocks are included only when asked. */
+export function meetingsForViewer(meetings, settings, viewer, team = [], { includeBusy = false } = {}) {
+  const shown = collapseMeetings(visibleMeetings(meetings, settings), team)
+    .map((meeting) => redactMeeting(meeting, viewer, team))
+    .filter(Boolean);
+  return includeBusy ? shown : shown.filter((meeting) => !meeting.busy);
 }
 
 export function snapshotExcludedMeeting(meeting) {

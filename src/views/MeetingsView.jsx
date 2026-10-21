@@ -3,7 +3,7 @@ import { Plus, Users, ExternalLink, Video, CheckSquare, Square, X, EyeOff } from
 import { useStore } from "../lib/store";
 import { makeTask } from "../lib/model";
 import { formatShort, uid, tsFromDateInput } from "../lib/format";
-import { isSyncedMeeting, excludeMeetingFromSync, visibleMeetings } from "../lib/calendarExclusions";
+import { isSyncedMeeting, excludeMeetingFromSync, meetingsForViewer } from "../lib/calendarExclusions";
 import { safeHref } from "../lib/safeUrl";
 import {
   ViewHeader, EmptyState, ModalShell, Field, ConfirmButton, InlineText, InlineSelect, MemberPicker, Badge,
@@ -176,10 +176,10 @@ export function NewMeetingModal({ onClose, initialTitle = "", initialNotes = "" 
 }
 
 export default function MeetingsView({ searchQuery, onRecord, onOpenNew }) {
-  const { data } = useStore();
+  const { data, currentUser } = useStore();
 
   const meetings = useMemo(() => {
-    let list = visibleMeetings(data.meetings, data.settings).sort((a, b) => b.date - a.date);
+    let list = meetingsForViewer(data.meetings, data.settings, currentUser, data.team).sort((a, b) => b.date - a.date);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter((m) =>
@@ -188,7 +188,7 @@ export default function MeetingsView({ searchQuery, onRecord, onOpenNew }) {
         (m.attendees || "").toLowerCase().includes(q));
     }
     return list;
-  }, [data.meetings, data.settings, searchQuery]);
+  }, [data.meetings, data.settings, data.team, currentUser, searchQuery]);
 
   return (
     <div>
