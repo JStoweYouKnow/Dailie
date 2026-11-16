@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_SOW_SECTION_DEFS,
+  DEFAULT_SOW_STUDIO_NAME,
   makeSowSection,
   normalizeSowSections,
   sowDraftFromProject,
@@ -27,43 +28,69 @@ test("sowDraftFromProject prefills parties, scope, fees, and timeline from a dea
   };
   const draft = sowDraftFromProject(project, {
     company: { id: "co-1", name: "A24" },
-    studioName: "Matriarch Studios",
+    studioName: DEFAULT_SOW_STUDIO_NAME,
+    sowNumber: "2026-014",
+    ownershipModel: "clientOwned",
   });
   assert.equal(draft.projectId, "proj-1");
   assert.equal(draft.companyId, "co-1");
+  assert.match(draft.title, /No\. 2026-014/);
   assert.match(draft.title, /Obsidian Echo/);
   assert.equal(draft.value, "$14.5M");
+  assert.equal(draft.ownershipModel, "clientOwned");
+  assert.equal(draft.preamble, undefined);
+  assert.equal(draft.msaDate, undefined);
   assert.equal(draft.sections.length, DEFAULT_SOW_SECTION_DEFS.length);
   const parties = draft.sections.find((s) => s.title === "Parties");
-  assert.match(parties.body, /Matriarch Studios/);
+  assert.match(parties.body, /Matriarch Studios, LLC/);
   assert.match(parties.body, /A24/);
   assert.match(parties.body, /David Sterling/);
-  const scope = draft.sections.find((s) => s.title === "Scope of Work");
+  const scope = draft.sections.find((s) => s.title === "Project and Scope of Work");
   assert.match(scope.body, /Feature development/);
-  const fees = draft.sections.find((s) => s.title === "Fees & Payment");
+  assert.match(scope.body, /Production method/);
+  const fees = draft.sections.find((s) => s.title === "Budget, Fees and Payment");
   assert.match(fees.body, /\$14\.5M/);
-  const timeline = draft.sections.find((s) => s.title === "Timeline & Milestones");
+  assert.match(fees.body, /Total approved budget/);
+  const timeline = draft.sections.find((s) => s.title === "Timeline, Approvals and Revisions");
   assert.match(timeline.body, /Pitch/);
+  const ownership = draft.sections.find((s) => s.title === "Ownership and Rights");
+  assert.match(ownership.body, /Client-Owned Production/);
+  assert.doesNotMatch(ownership.body, /Agreement §/);
+  const signatures = draft.sections.find((s) => s.title === "Signatures");
+  assert.match(signatures.body, /A24/);
 });
 
-test("sowDraftFromProject works with no deal", () => {
-  const draft = sowDraftFromProject(null, { studioName: "Matriarch Studios" });
+test("sowDraftFromProject works with no deal and has no MSA references", () => {
+  const draft = sowDraftFromProject(null, { studioName: DEFAULT_SOW_STUDIO_NAME });
   assert.equal(draft.projectId, null);
   assert.equal(draft.companyId, null);
-  assert.equal(draft.title, "Statement of Work");
+  assert.match(draft.title, /Statement of Work No\./);
   assert.equal(draft.sections.length, DEFAULT_SOW_SECTION_DEFS.length);
+  assert.equal(draft.sections[0].title, "Parties");
+  assert.equal(draft.sections[11].title, "Signatures");
+  const blob = JSON.stringify(draft);
+  assert.doesNotMatch(blob, /MSA|Master Production Services Agreement|Agreement §/);
 });
 
 test("sections can be added and removed through normalize helpers", () => {
   const base = normalizeSowSections([
     makeSowSection({ title: "Parties", body: "A" }),
-    makeSowSection({ title: "Scope of Work", body: "B" }),
+    makeSowSection({ title: "Project and Scope of Work", body: "B" }),
   ]);
   const withExtra = normalizeSowSections([...base, makeSowSection({ title: "Risks", body: "C" })]);
   assert.equal(withExtra.length, 3);
-  const removed = normalizeSowSections(withExtra.filter((s) => s.title !== "Scope of Work"));
+  const removed = normalizeSowSections(withExtra.filter((s) => s.title !== "Project and Scope of Work"));
   assert.equal(removed.length, 2);
   assert.deepEqual(removed.map((s) => s.title), ["Parties", "Risks"]);
+});
+
+test("export payload includes ownership label without preamble", () => {
+  const payload = sowExportPayload(sowDraftFromProject(null, {
+    ownershipModel: "studioOwned",
+  }));
+  assert.equal(payload.ownershipLabel, "Studio-Owned Production");
+  assert.equal(payload.preamble, undefined);
+  assert.match(payload.studioName, /Matriarch Studios, LLC/);
 });
 
 test("PDF export starts with a PDF header", () => {
@@ -76,7 +103,9 @@ test("PDF export starts with a PDF header", () => {
   const pdf = sowToPdf(draft);
   assert.ok(pdf.startsWith("%PDF-1.4"));
   assert.match(pdf, /Test Deal/);
-  assert.match(pdf, /Scope of Work/);
+  assert.match(pdf, /Project and Scope of Work/);
+  assert.match(pdf, /Total approved budget/);
+  assert.doesNotMatch(pdf, /Master Production Services Agreement/);
 });
 
 test("Word export is a ZIP archive", async () => {

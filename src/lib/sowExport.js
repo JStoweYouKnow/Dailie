@@ -88,14 +88,18 @@ function pdfObjects(parts) {
 
 function headerLines(payload) {
   const lines = [];
-  if (payload.studioName && payload.clientName) {
-    lines.push(`${payload.studioName}  ·  ${payload.clientName}`);
-  } else if (payload.studioName || payload.clientName) {
-    lines.push(payload.studioName || payload.clientName);
+  if (payload.studioName) {
+    lines.push(`Provider: ${payload.studioName} ("Matriarch")`);
   }
+  if (payload.clientName) {
+    lines.push(`Client: ${payload.clientName} ("Client")`);
+  }
+  if (payload.contactLine) lines.push(`Primary contact: ${payload.contactLine}`);
   if (payload.projectTitle) lines.push(`Project: ${payload.projectTitle}`);
-  if (payload.contactLine) lines.push(`Contact: ${payload.contactLine}`);
-  if (payload.value) lines.push(`Value: ${payload.value}`);
+  if (payload.value) lines.push(`Total approved budget: ${payload.value}`);
+  if (payload.ownershipLabel) {
+    lines.push(`Ownership model: [${payload.ownershipModel ? payload.ownershipLabel : "Client-Owned Production / Studio-Owned Production"}]`);
+  }
   return lines;
 }
 

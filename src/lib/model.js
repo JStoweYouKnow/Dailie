@@ -612,13 +612,25 @@ export function resolvedContractKind(contract) {
 /** Default Statement of Work sections. Titles can be renamed; bodies are filled by the wizard. */
 export const DEFAULT_SOW_SECTION_DEFS = [
   { key: "parties", title: "Parties" },
-  { key: "scope", title: "Scope of Work" },
-  { key: "deliverables", title: "Deliverables" },
-  { key: "timeline", title: "Timeline & Milestones" },
-  { key: "fees", title: "Fees & Payment" },
-  { key: "terms", title: "Terms & Conditions" },
+  { key: "scope", title: "Project and Scope of Work" },
+  { key: "ownership", title: "Ownership and Rights" },
+  { key: "deliverables", title: "Final Deliverables" },
+  { key: "clientMaterials", title: "Client Materials" },
+  { key: "timeline", title: "Timeline, Approvals and Revisions" },
+  { key: "fees", title: "Budget, Fees and Payment" },
+  { key: "production", title: "Production Terms" },
   { key: "acceptance", title: "Acceptance" },
+  { key: "special", title: "Special Terms" },
+  { key: "terms", title: "Terms and Conditions" },
+  { key: "signatures", title: "Signatures" },
 ];
+
+export const SOW_OWNERSHIP_MODELS = [
+  { key: "clientOwned", label: "Client-Owned Production" },
+  { key: "studioOwned", label: "Studio-Owned Production" },
+];
+
+export const DEFAULT_SOW_STUDIO_NAME = "Matriarch Studios, LLC";
 
 export function makeSowSection(fields = {}) {
   return {
@@ -639,62 +651,192 @@ function formatSowDate(ts) {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function ownershipModelLabel(key) {
+  const found = SOW_OWNERSHIP_MODELS.find((m) => m.key === key);
+  return (found && found.label) || "Client-Owned Production / Studio-Owned Production";
+}
+
 /**
  * Prefills a Statement of Work from a deal (or blank if none).
  * Company / studio names are passed in so this stays free of store lookups.
  */
-export function sowDraftFromProject(project, { company = null, studioName = "Matriarch Studios" } = {}) {
+export function sowDraftFromProject(project, {
+  company = null,
+  studioName = DEFAULT_SOW_STUDIO_NAME,
+  sowNumber = "",
+  ownershipModel = "",
+} = {}) {
   const clientName = (company && company.name) || "";
   const contactName = (project && project.contactName) || (company && company.contactName) || "";
   const contactEmail = (project && project.contactEmail) || (company && company.contactEmail) || "";
   const contactPhone = (project && project.contactPhone) || (company && company.contactPhone) || "";
-  const contactLine = [contactName, contactEmail, contactPhone].filter(Boolean).join(" · ");
   const projectTitle = (project && project.title) || "";
+  const numberPart = String(sowNumber || "").trim() || "[●]";
   const title = projectTitle
-    ? `Statement of Work — ${projectTitle}`
-    : "Statement of Work";
+    ? `Statement of Work No. ${numberPart} — ${projectTitle}`
+    : `Statement of Work No. ${numberPart}`;
   const value = (project && project.budget) || "";
+  const studio = studioName || DEFAULT_SOW_STUDIO_NAME;
+  const ownershipChoice = ownershipModelLabel(ownershipModel);
+  const startLabel = formatSowDate(project && project.startDate) || "[●]";
+  const endLabel = formatSowDate(project && project.endDate) || "[●]";
+  const valueOrBlank = value || "[●]";
+
+  const milestoneLines = normalizeProjectDates(project && project.dates)
+    .filter((mark) => mark && mark.label && mark.date)
+    .map((mark) => `${mark.label} | ${formatSowDate(mark.date)}`);
 
   const partiesBody = [
-    `Provider: ${studioName}`,
-    clientName ? `Client: ${clientName}` : "Client: ",
-    contactLine ? `Primary contact: ${contactLine}` : "",
-    projectTitle ? `Project: ${projectTitle}` : "",
-  ].filter(Boolean).join("\n");
+    "Provider | Client",
+    "--- | ---",
+    `Legal entity: ${studio}, a Delaware limited liability company | ${clientName || "[Client]"}, a [STATE] [ENTITY TYPE]`,
+    `Representative for approvals: [NAME, TITLE] | ${contactName || "[●]"}`,
+    `Email: [EMAIL] | ${contactEmail || "[●]"}`,
+    `Phone: [PHONE] | ${contactPhone || "[●]"}`,
+  ].join("\n");
 
-  const scopeBody = (project && project.description) || "";
+  const scopeIntro = (project && project.description) || "[Describe the Project.]";
+  const scopeBody = [
+    scopeIntro,
+    "",
+    "Item | Terms",
+    "--- | ---",
+    "Format | [Spot / short film / series / feature; length; number of episodes or cuts]",
+    "Production method | [Live action / AI-generated / hybrid]",
+    "Approved or restricted AI Tools | [List, or \"Matriarch's choice\"]",
+    "Out of scope | [Anything expressly excluded; changes require a Change Order]",
+  ].join("\n");
 
-  const dateLines = [];
-  if (project && project.startDate) dateLines.push(`Start: ${formatSowDate(project.startDate)}`);
-  if (project && project.endDate) dateLines.push(`Delivery: ${formatSowDate(project.endDate)}`);
-  normalizeProjectDates(project && project.dates).forEach((mark) => {
-    if (mark && mark.label && mark.date) dateLines.push(`${mark.label}: ${formatSowDate(mark.date)}`);
-  });
-  const timelineBody = dateLines.join("\n");
+  const ownershipBody = [
+    `This Project is a [${ownershipChoice}]. If no box is chosen, it is a Client-Owned Production.`,
+    "",
+    "- Client-Owned Production: On payment in full, Client owns the Final Deliverables listed in Section 4, excluding Studio IP and third-party materials.",
+    "- Studio-Owned Production: Matriarch owns the Project and all Work Product. Client receives the following license to the Final Deliverables:",
+    "",
+    "License term | Detail",
+    "--- | ---",
+    "Media | [●]",
+    "Territory | [●]",
+    "Term | [●]",
+    "Exclusivity | [●]",
+    "Sponsorship, integration or presenting rights | [●]",
+    "",
+    "Third-party materials: [Music, stock, fonts and talent usage terms, or \"to be listed in delivery notes\"].",
+  ].join("\n");
 
-  const feesBody = value
-    ? `Fees: ${value}\nPayment schedule to be confirmed in the signed agreement.`
-    : "Fees and payment schedule to be confirmed.";
+  const deliverablesBody = [
+    "# | Deliverable | Specifications (resolution, codec, frame rate, aspect ratio, audio, captions)",
+    "--- | --- | ---",
+    "1 | [●] | [●]",
+    "2 | [●] | [●]",
+    "3 | [●] | [●]",
+    "",
+    "Delivery method: [File transfer service / drive / platform].",
+    "Raw footage, project files and generation files are not Deliverables unless listed above.",
+  ].join("\n");
+
+  const clientMaterialsBody = [
+    "Material | Format | Due date",
+    "--- | --- | ---",
+    "[Logos, brand guidelines] | [●] | [●]",
+    "[Product, footage, talent] | [●] | [●]",
+    "",
+    "Client delays extend Matriarch's deadlines day for day, and resulting costs are charged to Client.",
+  ].join("\n");
+
+  const approvalRows = [
+    "[Treatment / script] | [●]",
+    "[Style frames / look book] | [●]",
+    "[Start of principal production or generation] | [●]",
+    "[Rough cut] | [●]",
+    "[Fine cut] | [●]",
+    `Final Deliverables | ${endLabel}`,
+    ...milestoneLines,
+  ];
+
+  const timelineBody = [
+    `Start: ${startLabel}`,
+    `Delivery of Final Deliverables: ${endLabel}`,
+    "",
+    "Approval stage | Target date",
+    "--- | ---",
+    ...approvalRows,
+    "",
+    "- Feedback window: Client provides consolidated feedback or approval within [three (3)] Business Days of each submission; otherwise the submission is deemed approved.",
+    "- Revision rounds: [Two (2)] rounds of consolidated revisions per approval stage. Additional rounds, or changes that depart from approved direction, require a Change Order.",
+  ].join("\n");
+
+  const feesBody = [
+    "Line | Amount (USD)",
+    "--- | ---",
+    "Production Fee | [●]",
+    "Estimated Third-Party Costs | [●]",
+    "Contingency ([10]%; drawn only with Client approval) | [●]",
+    `Total approved budget | ${valueOrBlank}`,
+    "",
+    "Installment | Amount | Due",
+    "--- | --- | ---",
+    `Deposit | 50% of ${valueOrBlank} | On signature of this SOW; work begins on receipt`,
+    `Production installment | 25% of ${valueOrBlank} | At [start of principal production or generation]`,
+    `Final installment | 25% of ${valueOrBlank}, plus approved overages and reconciled expenses | On delivery of the Final Deliverables`,
+    "",
+    "- Invoices are due within [fifteen (15)] days of the invoice date.",
+    "- Unbudgeted Third-Party Costs are billed at cost plus [●]%.",
+    "- Weather days and holds not caused by Matriarch are billed at: [rate or \"actual cost\"].",
+    "- Cancellation by Client is subject to fees as mutually agreed in writing before work begins, or as stated in Special Terms.",
+  ].join("\n");
+
+  const productionBody = [
+    "Item | Terms",
+    "--- | ---",
+    "Key personnel | [Director, producer, AI lead]",
+    "Talent and guild status | [Non-union / SAG-AFTRA or other; signatory entity; usage terms]",
+    "Insurance | [E&O required? Client as additional insured?]",
+    "Credit | [\"Produced by Matriarch\" / \"A Matriarch Production\"; placement]",
+    "Portfolio use | [Standard / restrictions]",
+  ].join("\n");
+
+  const acceptanceBody = "Client has [five (5)] Business Days after delivery of the Final Deliverables to notify Matriarch in writing of any material technical nonconformity with the specifications in Section 4. Matriarch will correct any such nonconformity and redeliver. The Final Deliverables are deemed accepted on the earlier of Client's written acceptance, expiry of that period without notice, or any public release or commercial use by Client.";
+
+  const specialBody = "[None.]";
+
+  const termsBody = "This Statement of Work sets out the terms for the Project between Matriarch and Client. Changes to this SOW require a signed Change Order (email confirmation from each Party's representative is sufficient). Work begins after both Parties sign and Matriarch receives the deposit.";
+
+  const signaturesBody = [
+    `${studio} | ${clientName || "[Client]"}`,
+    "--- | ---",
+    "By: | By:",
+    "Name: | Name:",
+    "Title: | Title:",
+    "Date: | Date:",
+  ].join("\n");
 
   const byKey = {
     parties: partiesBody,
     scope: scopeBody,
-    deliverables: "",
+    ownership: ownershipBody,
+    deliverables: deliverablesBody,
+    clientMaterials: clientMaterialsBody,
     timeline: timelineBody,
     fees: feesBody,
-    terms: "This Statement of Work is governed by the master agreement between the parties, if any. Work begins after both parties sign.",
-    acceptance: "Client acceptance of deliverables will be confirmed in writing. Silence for five business days after delivery counts as acceptance unless otherwise agreed.",
+    production: productionBody,
+    acceptance: acceptanceBody,
+    special: specialBody,
+    terms: termsBody,
+    signatures: signaturesBody,
   };
 
   return {
     title,
+    sowNumber: String(sowNumber || "").trim(),
+    ownershipModel: String(ownershipModel || "").trim(),
     projectId: (project && project.id) || null,
     companyId: (project && project.companyId) || (company && company.id) || null,
     contactName,
     contactEmail,
     contactPhone,
     clientName,
-    studioName: studioName || "Matriarch Studios",
+    studioName: studio,
     value,
     projectTitle,
     sections: DEFAULT_SOW_SECTION_DEFS.map((def) => makeSowSection({
@@ -706,10 +848,14 @@ export function sowDraftFromProject(project, { company = null, studioName = "Mat
 
 export function sowExportPayload(draft) {
   const sections = normalizeSowSections(draft && draft.sections);
+  const ownershipModel = String((draft && draft.ownershipModel) || "").trim();
   return {
     title: String((draft && draft.title) || "Statement of Work").trim() || "Statement of Work",
+    sowNumber: String((draft && draft.sowNumber) || "").trim(),
+    ownershipModel,
+    ownershipLabel: ownershipModelLabel(ownershipModel),
     clientName: String((draft && draft.clientName) || "").trim(),
-    studioName: String((draft && draft.studioName) || "Matriarch Studios").trim() || "Matriarch Studios",
+    studioName: String((draft && draft.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME,
     contactLine: [
       draft && draft.contactName,
       draft && draft.contactEmail,

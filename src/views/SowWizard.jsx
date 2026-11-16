@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2, ChevronUp, ChevronDown, Download, FileText, ArrowRight, ArrowLeft } from "lucide-react";
 import { useStore } from "../lib/store";
-import { makeSowSection, sowDraftFromProject, sowExportPayload, normalizeSowSections, isArchivedProject } from "../lib/model";
+import {
+  makeSowSection,
+  sowDraftFromProject,
+  sowExportPayload,
+  normalizeSowSections,
+  isArchivedProject,
+  DEFAULT_SOW_STUDIO_NAME,
+  SOW_OWNERSHIP_MODELS,
+} from "../lib/model";
 import { uid } from "../lib/format";
 import { ModalShell, Field, Section, Badge } from "../ui/kit";
 import { CompanySelect } from "../ui/CompanySelect";
@@ -14,14 +22,25 @@ const STEPS = [
   { key: "export", label: "Preview & export" },
 ];
 
-const STUDIO_NAME = "Matriarch Studios";
+const STUDIO_NAME = DEFAULT_SOW_STUDIO_NAME;
 
-function draftFromSelection(data, projectId) {
+function draftFromSelection(data, projectId, extras = {}) {
   const project = projectId ? (data.projects || []).find((p) => p.id === projectId) : null;
   const company = project && project.companyId
     ? (data.companies || []).find((c) => c.id === project.companyId)
     : null;
-  return sowDraftFromProject(project || null, { company, studioName: STUDIO_NAME });
+  return sowDraftFromProject(project || null, {
+    company,
+    studioName: STUDIO_NAME,
+    ...extras,
+  });
+}
+
+function buildSowTitle(sowNumber, projectTitle) {
+  const numberPart = String(sowNumber || "").trim() || "[●]";
+  return projectTitle
+    ? `Statement of Work No. ${numberPart} — ${projectTitle}`
+    : `Statement of Work No. ${numberPart}`;
 }
 
 export default function SowWizard({ projectId: initialProjectId = null, onClose }) {
@@ -36,13 +55,54 @@ export default function SowWizard({ projectId: initialProjectId = null, onClose 
   const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
 
   const applyDeal = (projectId) => {
-    const next = draftFromSelection(data, projectId || null);
-    setDraft((d) => ({
-      ...next,
-      // Keep an edited title if the user already typed one and is clearing the deal.
-      title: projectId ? next.title : (d.title || next.title),
-      studioName: d.studioName || STUDIO_NAME,
-    }));
+    setDraft((d) => {
+      const next = draftFromSelection(data, projectId || null, {
+        sowNumber: d.sowNumber,
+        ownershipModel: d.ownershipModel,
+      });
+      return {
+        ...next,
+        // Keep an edited title if the user already typed one and is clearing the deal.
+        title: projectId ? next.title : (d.title || next.title),
+        studioName: d.studioName || STUDIO_NAME,
+        sowNumber: d.sowNumber || "",
+        ownershipModel: d.ownershipModel || "",
+      };
+    });
+  };
+
+  const setSowMeta = (patch) => {
+    setDraft((d) => {
+      const next = { ...d, ...patch };
+      if ("sowNumber" in patch || "projectTitle" in patch) {
+        const project = next.projectId
+          ? (data.projects || []).find((p) => p.id === next.projectId)
+          : null;
+        const projectTitle = (project && project.title) || next.projectTitle || "";
+        next.projectTitle = projectTitle;
+        next.title = buildSowTitle(next.sowNumber, projectTitle);
+      }
+      if ("ownershipModel" in patch) {
+        const rebuilt = sowDraftFromProject(
+          next.projectId ? (data.projects || []).find((p) => p.id === next.projectId) : null,
+          {
+            company: next.companyId
+              ? (data.companies || []).find((c) => c.id === next.companyId)
+              : (next.clientName ? { name: next.clientName } : null),
+            studioName: next.studioName,
+            sowNumber: next.sowNumber,
+            ownershipModel: next.ownershipModel,
+          },
+        );
+        const ownership = rebuilt.sections.find((s) => /Ownership and Rights/i.test(s.title));
+        if (ownership) {
+          next.sections = normalizeSowSections((next.sections || []).map((s) => (
+            /Ownership and Rights/i.test(s.title) ? { ...s, body: ownership.body } : s
+          )));
+        }
+      }
+      return next;
+    });
   };
 
   const updateSection = (id, patch) => {
@@ -125,11 +185,15 @@ export default function SowWizard({ projectId: initialProjectId = null, onClose 
         status: "draft",
         value: payload.value,
         notes: [
+          draft.sowNumber && `SOW No. ${draft.sowNumber}`,
+          payload.ownershipModel && payload.ownershipLabel,
           draft.contactName && `Contact: ${draft.contactName}`,
           draft.contactEmail,
           draft.contactPhone,
         ].filter(Boolean).join(" · "),
         sections: payload.sections,
+        sowNumber: draft.sowNumber || "",
+        ownershipModel: draft.ownershipModel || "",
         ownerId: currentUser && currentUser.id,
         signedAt: null,
         expiresAt: null,
@@ -185,14 +249,24 @@ export default function SowWizard({ projectId: initialProjectId = null, onClose 
               ))}
             </select>
           </Field>
-          <Field label="TITLE">
-            <input
-              className="md-input"
-              value={draft.title}
-              onChange={(e) => setField("title", e.target.value)}
-              placeholder="Statement of Work — Project name"
-            />
-          </Field>
+          <div className="md-split" style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 12 }}>
+            <Field label="SOW NO.">
+              <input
+                className="md-input"
+                value={draft.sowNumber || ""}
+                onChange={(e) => setSowMeta({ sowNumber: e.target.value })}
+                placeholder="●"
+              />
+            </Field>
+            <Field label="TITLE">
+              <input
+                className="md-input"
+                value={draft.title}
+                onChange={(e) => setField("title", e.target.value)}
+                placeholder="Statement of Work No. [●] — Project name"
+              />
+            </Field>
+          </div>
           <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="CLIENT / COUNTERPARTY">
               <CompanySelect
@@ -221,14 +295,28 @@ export default function SowWizard({ projectId: initialProjectId = null, onClose 
               <input className="md-input" value={draft.contactPhone || ""} onChange={(e) => setField("contactPhone", e.target.value)} placeholder="+1…" />
             </Field>
           </div>
-          <Field label="VALUE / FEES">
-            <input
-              className="md-input"
-              value={draft.value || ""}
-              onChange={(e) => setField("value", e.target.value)}
-              placeholder="e.g. $180,000"
-            />
-          </Field>
+          <div className="md-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="TOTAL APPROVED BUDGET">
+              <input
+                className="md-input"
+                value={draft.value || ""}
+                onChange={(e) => setField("value", e.target.value)}
+                placeholder="e.g. $180,000"
+              />
+            </Field>
+            <Field label="OWNERSHIP MODEL">
+              <select
+                className="md-select"
+                value={draft.ownershipModel || ""}
+                onChange={(e) => setSowMeta({ ownershipModel: e.target.value })}
+              >
+                <option value="">Choose…</option>
+                {SOW_OWNERSHIP_MODELS.map((m) => (
+                  <option key={m.key} value={m.key}>{m.label}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
         </div>
       )}
 
@@ -279,7 +367,8 @@ export default function SowWizard({ projectId: initialProjectId = null, onClose 
             <div style={{ fontSize: 13, color: "var(--dim)", marginBottom: 16 }}>
               {[preview.studioName, preview.clientName].filter(Boolean).join(" · ")}
               {preview.projectTitle ? ` · ${preview.projectTitle}` : ""}
-              {preview.value ? ` · ${preview.value}` : ""}
+              {preview.value ? ` · Budget ${preview.value}` : ""}
+              {preview.ownershipModel ? ` · ${preview.ownershipLabel}` : ""}
             </div>
             {preview.sections.map((section, index) => (
               <div key={section.id || index} style={{ marginBottom: 14 }}>
