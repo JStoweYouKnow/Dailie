@@ -40,6 +40,7 @@ import EmailsView from "./views/EmailsView";
 import CompaniesView from "./views/CompaniesView";
 import PeopleView from "./views/PeopleView";
 import ContractsView from "./views/ContractsView";
+import SowWizard from "./views/SowWizard";
 import FinanceView from "./views/FinanceView";
 import TimelineView from "./views/TimelineView";
 import SyncModal from "./views/SyncModal";
@@ -317,6 +318,7 @@ function Board({ store }) {
   const [showPalette, setShowPalette] = useState(false);
   const [showAssistant, setShowAssistant] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
+  const [sowWizard, setSowWizard] = useState(null);
   const [recorder, setRecorder] = useState(null);
   const [importDoc, setImportDoc] = useState(null);
   const [docSeed, setDocSeed] = useState({ title: "", body: "" });
@@ -681,6 +683,17 @@ function Board({ store }) {
             project={data.projects.find((p) => p.id === detailProject.id) || detailProject}
             onClose={() => setDetailProject(null)}
             onOpenRecord={(tab) => { setDetailProject(null); openTab(tab); }}
+            onOpenSow={house ? (project) => {
+              const id = project && project.id;
+              setDetailProject(null);
+              setSowWizard({ projectId: id || null });
+            } : undefined}
+          />
+        )}
+        {sowWizard && house && (
+          <SowWizard
+            projectId={sowWizard.projectId}
+            onClose={() => setSowWizard(null)}
           />
         )}
         {showNewProject && (

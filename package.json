@@ -20,6 +20,7 @@
     "@vercel/microfrontends": "^2.4.0",
     "ai": "^7.0.66",
     "convex": "^1.44.0",
+    "docx": "^9.15.4",
     "lucide-react": "^0.344.0",
     "mammoth": "^1.7.1",
     "pdfjs-dist": "^3.11.174",

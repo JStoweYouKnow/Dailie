@@ -9,6 +9,7 @@ import {
 } from "../ui/kit";
 import { useDraftUploads } from "../lib/draftUploads";
 import { CompanySelect } from "../ui/CompanySelect";
+import SowWizard from "./SowWizard";
 
 function NewContractModal({ onClose, defaultKind }) {
   const { data, add, currentUser } = useStore();
@@ -89,6 +90,7 @@ export default function ContractsView({ searchQuery }) {
   const { data, update, remove, companyName, projectName } = useStore();
   const [kindFilter, setKindFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
+  const [showSow, setShowSow] = useState(false);
 
   const rows = useMemo(() => {
     let list = [...data.contracts];
@@ -149,6 +151,9 @@ export default function ContractsView({ searchQuery }) {
   return (
     <div>
       <ViewHeader count={rows.length} label="AGREEMENTS ON FILE">
+        <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)" }} onClick={() => setShowSow(true)}>
+          <FileText size={14} /> Create SOW
+        </button>
         <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> New Agreement</button>
       </ViewHeader>
 
@@ -177,6 +182,7 @@ export default function ContractsView({ searchQuery }) {
       )}
 
       {showNew && <NewContractModal onClose={() => setShowNew(false)} defaultKind={kindFilter === "all" ? "nda" : kindFilter} />}
+      {showSow && <SowWizard onClose={() => setShowSow(false)} />}
     </div>
   );
 }

@@ -595,6 +595,7 @@ export const LEGAL_SPECIALTIES = [
 export const CONTRACT_KINDS = [
   { key: "nda", label: "NDA" },
   { key: "deal", label: "Deal Contract" },
+  { key: "sow", label: "Statement of Work" },
   { key: "vendor", label: "Vendor Contract" },
   { key: "betaTester", label: "Beta Tester Agreement" },
   { key: "other", label: "Other Agreement" },
@@ -606,6 +607,118 @@ export function resolvedContractKind(contract) {
   const kind = known ? contract.kind : "other";
   if (kind === "other" && /beta\s*-?\s*tester/i.test(contract.title || "")) return "betaTester";
   return kind;
+}
+
+/** Default Statement of Work sections. Titles can be renamed; bodies are filled by the wizard. */
+export const DEFAULT_SOW_SECTION_DEFS = [
+  { key: "parties", title: "Parties" },
+  { key: "scope", title: "Scope of Work" },
+  { key: "deliverables", title: "Deliverables" },
+  { key: "timeline", title: "Timeline & Milestones" },
+  { key: "fees", title: "Fees & Payment" },
+  { key: "terms", title: "Terms & Conditions" },
+  { key: "acceptance", title: "Acceptance" },
+];
+
+export function makeSowSection(fields = {}) {
+  return {
+    id: fields.id || uid(),
+    title: String(fields.title || "Section").trim() || "Section",
+    body: String(fields.body || "").trim(),
+  };
+}
+
+export function normalizeSowSections(list) {
+  return ensureArray(list).map((section) => makeSowSection(section || {})).filter((section) => section.title);
+}
+
+function formatSowDate(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+/**
+ * Prefills a Statement of Work from a deal (or blank if none).
+ * Company / studio names are passed in so this stays free of store lookups.
+ */
+export function sowDraftFromProject(project, { company = null, studioName = "Matriarch Studios" } = {}) {
+  const clientName = (company && company.name) || "";
+  const contactName = (project && project.contactName) || (company && company.contactName) || "";
+  const contactEmail = (project && project.contactEmail) || (company && company.contactEmail) || "";
+  const contactPhone = (project && project.contactPhone) || (company && company.contactPhone) || "";
+  const contactLine = [contactName, contactEmail, contactPhone].filter(Boolean).join(" · ");
+  const projectTitle = (project && project.title) || "";
+  const title = projectTitle
+    ? `Statement of Work — ${projectTitle}`
+    : "Statement of Work";
+  const value = (project && project.budget) || "";
+
+  const partiesBody = [
+    `Provider: ${studioName}`,
+    clientName ? `Client: ${clientName}` : "Client: ",
+    contactLine ? `Primary contact: ${contactLine}` : "",
+    projectTitle ? `Project: ${projectTitle}` : "",
+  ].filter(Boolean).join("\n");
+
+  const scopeBody = (project && project.description) || "";
+
+  const dateLines = [];
+  if (project && project.startDate) dateLines.push(`Start: ${formatSowDate(project.startDate)}`);
+  if (project && project.endDate) dateLines.push(`Delivery: ${formatSowDate(project.endDate)}`);
+  normalizeProjectDates(project && project.dates).forEach((mark) => {
+    if (mark && mark.label && mark.date) dateLines.push(`${mark.label}: ${formatSowDate(mark.date)}`);
+  });
+  const timelineBody = dateLines.join("\n");
+
+  const feesBody = value
+    ? `Fees: ${value}\nPayment schedule to be confirmed in the signed agreement.`
+    : "Fees and payment schedule to be confirmed.";
+
+  const byKey = {
+    parties: partiesBody,
+    scope: scopeBody,
+    deliverables: "",
+    timeline: timelineBody,
+    fees: feesBody,
+    terms: "This Statement of Work is governed by the master agreement between the parties, if any. Work begins after both parties sign.",
+    acceptance: "Client acceptance of deliverables will be confirmed in writing. Silence for five business days after delivery counts as acceptance unless otherwise agreed.",
+  };
+
+  return {
+    title,
+    projectId: (project && project.id) || null,
+    companyId: (project && project.companyId) || (company && company.id) || null,
+    contactName,
+    contactEmail,
+    contactPhone,
+    clientName,
+    studioName: studioName || "Matriarch Studios",
+    value,
+    projectTitle,
+    sections: DEFAULT_SOW_SECTION_DEFS.map((def) => makeSowSection({
+      title: def.title,
+      body: byKey[def.key] || "",
+    })),
+  };
+}
+
+export function sowExportPayload(draft) {
+  const sections = normalizeSowSections(draft && draft.sections);
+  return {
+    title: String((draft && draft.title) || "Statement of Work").trim() || "Statement of Work",
+    clientName: String((draft && draft.clientName) || "").trim(),
+    studioName: String((draft && draft.studioName) || "Matriarch Studios").trim() || "Matriarch Studios",
+    contactLine: [
+      draft && draft.contactName,
+      draft && draft.contactEmail,
+      draft && draft.contactPhone,
+    ].filter(Boolean).join(" · "),
+    value: String((draft && draft.value) || "").trim(),
+    projectTitle: String((draft && draft.projectTitle) || "").trim(),
+    sections,
+  };
 }
 
 export const CONTRACT_STATUSES = [
@@ -1216,7 +1329,14 @@ export function normalizeData(raw) {
     }),
     contracts: ensureArray(input.contracts).map((c) => {
       const merged = { status: "draft", kind: "other", talentId: null, ...c, id: c.id || uid() };
-      return { ...merged, kind: resolvedContractKind(merged) };
+      const kind = resolvedContractKind(merged);
+      return {
+        ...merged,
+        kind,
+        sections: kind === "sow" || Array.isArray(merged.sections)
+          ? normalizeSowSections(merged.sections)
+          : [],
+      };
     }),
     invoices: ensureArray(input.invoices).map((i) => ({ status: "draft", direction: "incoming", currency: "USD", ...i, id: i.id || uid() })),
     payments: ensureArray(input.payments).map((p) => ({ status: "unpaid", currency: "USD", ...p, id: p.id || uid() })),
