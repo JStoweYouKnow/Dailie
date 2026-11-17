@@ -7,18 +7,20 @@ import {
   normalizeSowSections,
   sowDraftFromProject,
   sowExportPayload,
+  buildSowSections,
 } from "../src/lib/model.js";
 import { sowToPdf, sowToDocx } from "../src/lib/sowExport.js";
 import { DAY } from "../src/lib/format.js";
 
 const NOW = Date.parse("2026-10-21T12:00:00Z");
 
-test("sowDraftFromProject prefills parties, scope, fees, and timeline from a deal", () => {
+test("sowDraftFromProject pulls deal data into answers and sections", () => {
   const project = {
     id: "proj-1",
     title: "The Obsidian Echo",
     description: "Feature development and packaging.",
     companyId: "co-1",
+    recordType: "service",
     contactName: "David Sterling",
     contactEmail: "d.sterling@a24.com",
     budget: "$14.5M",
@@ -30,16 +32,16 @@ test("sowDraftFromProject prefills parties, scope, fees, and timeline from a dea
     company: { id: "co-1", name: "A24" },
     studioName: DEFAULT_SOW_STUDIO_NAME,
     sowNumber: "2026-014",
-    ownershipModel: "clientOwned",
   });
   assert.equal(draft.projectId, "proj-1");
   assert.equal(draft.companyId, "co-1");
+  assert.equal(draft.ownershipModel, "clientOwned");
   assert.match(draft.title, /No\. 2026-014/);
   assert.match(draft.title, /Obsidian Echo/);
   assert.equal(draft.value, "$14.5M");
-  assert.equal(draft.ownershipModel, "clientOwned");
-  assert.equal(draft.preamble, undefined);
-  assert.equal(draft.msaDate, undefined);
+  assert.equal(draft.answers.scope, "Feature development and packaging.");
+  assert.equal(draft.answers.productionFee, "$14.5M");
+  assert.equal(draft.milestones.length, 1);
   assert.equal(draft.sections.length, DEFAULT_SOW_SECTION_DEFS.length);
   const parties = draft.sections.find((s) => s.title === "Parties");
   assert.match(parties.body, /Matriarch Studios, LLC/);
@@ -47,29 +49,55 @@ test("sowDraftFromProject prefills parties, scope, fees, and timeline from a dea
   assert.match(parties.body, /David Sterling/);
   const scope = draft.sections.find((s) => s.title === "Project and Scope of Work");
   assert.match(scope.body, /Feature development/);
-  assert.match(scope.body, /Production method/);
   const fees = draft.sections.find((s) => s.title === "Budget, Fees and Payment");
   assert.match(fees.body, /\$14\.5M/);
-  assert.match(fees.body, /Total approved budget/);
   const timeline = draft.sections.find((s) => s.title === "Timeline, Approvals and Revisions");
   assert.match(timeline.body, /Pitch/);
-  const ownership = draft.sections.find((s) => s.title === "Ownership and Rights");
-  assert.match(ownership.body, /Client-Owned Production/);
-  assert.doesNotMatch(ownership.body, /Agreement §/);
-  const signatures = draft.sections.find((s) => s.title === "Signatures");
-  assert.match(signatures.body, /A24/);
 });
 
-test("sowDraftFromProject works with no deal and has no MSA references", () => {
+test("sowDraftFromProject works with no deal", () => {
   const draft = sowDraftFromProject(null, { studioName: DEFAULT_SOW_STUDIO_NAME });
   assert.equal(draft.projectId, null);
   assert.equal(draft.companyId, null);
   assert.match(draft.title, /Statement of Work No\./);
   assert.equal(draft.sections.length, DEFAULT_SOW_SECTION_DEFS.length);
-  assert.equal(draft.sections[0].title, "Parties");
-  assert.equal(draft.sections[11].title, "Signatures");
-  const blob = JSON.stringify(draft);
-  assert.doesNotMatch(blob, /MSA|Master Production Services Agreement|Agreement §/);
+  assert.ok(draft.answers);
+  assert.equal(draft.answers.deliverables.length, 3);
+});
+
+test("buildSowSections uses selectable answers", () => {
+  const draft = sowDraftFromProject(null, {
+    ownershipModel: "studioOwned",
+    answers: {
+      format: "feature",
+      formatDetail: "90 minutes",
+      productionMethod: "hybrid",
+      aiTools: "custom",
+      aiToolsCustom: "Runway + Midjourney",
+      licenseMedia: "All media",
+      deliveryMethod: "drive",
+      feedbackWindow: "5",
+      revisionRounds: "1",
+      credit: "aMatriarch",
+      portfolioUse: "restricted",
+    },
+  });
+  const sections = buildSowSections(draft);
+  const scope = sections.find((s) => s.title === "Project and Scope of Work");
+  assert.match(scope.body, /Feature; 90 minutes/);
+  assert.match(scope.body, /Hybrid/);
+  assert.match(scope.body, /Runway \+ Midjourney/);
+  const ownership = sections.find((s) => s.title === "Ownership and Rights");
+  assert.match(ownership.body, /Studio-Owned Production/);
+  assert.match(ownership.body, /All media/);
+  const deliverables = sections.find((s) => s.title === "Final Deliverables");
+  assert.match(deliverables.body, /Drive/);
+  const timeline = sections.find((s) => s.title === "Timeline, Approvals and Revisions");
+  assert.match(timeline.body, /Five \(5\) Business Days/);
+  assert.match(timeline.body, /One \(1\) round/);
+  const production = sections.find((s) => s.title === "Production Terms");
+  assert.match(production.body, /A Matriarch Production/);
+  assert.match(production.body, /Restricted/);
 });
 
 test("sections can be added and removed through normalize helpers", () => {
@@ -84,13 +112,17 @@ test("sections can be added and removed through normalize helpers", () => {
   assert.deepEqual(removed.map((s) => s.title), ["Parties", "Risks"]);
 });
 
-test("export payload includes ownership label without preamble", () => {
-  const payload = sowExportPayload(sowDraftFromProject(null, {
+test("export payload rebuilds sections from answers", () => {
+  const draft = sowDraftFromProject(null, {
     ownershipModel: "studioOwned",
-  }));
+    answers: { format: "spot", productionMethod: "aiGenerated" },
+  });
+  draft.answers.format = "series";
+  const payload = sowExportPayload(draft);
   assert.equal(payload.ownershipLabel, "Studio-Owned Production");
-  assert.equal(payload.preamble, undefined);
-  assert.match(payload.studioName, /Matriarch Studios, LLC/);
+  const scope = payload.sections.find((s) => s.title === "Project and Scope of Work");
+  assert.match(scope.body, /Series/);
+  assert.match(scope.body, /AI-generated/);
 });
 
 test("PDF export starts with a PDF header", () => {
@@ -105,7 +137,6 @@ test("PDF export starts with a PDF header", () => {
   assert.match(pdf, /Test Deal/);
   assert.match(pdf, /Project and Scope of Work/);
   assert.match(pdf, /Total approved budget/);
-  assert.doesNotMatch(pdf, /Master Production Services Agreement/);
 });
 
 test("Word export is a ZIP archive", async () => {

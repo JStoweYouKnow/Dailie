@@ -609,7 +609,7 @@ export function resolvedContractKind(contract) {
   return kind;
 }
 
-/** Default Statement of Work sections. Titles can be renamed; bodies are filled by the wizard. */
+/** Default Statement of Work sections. Bodies are generated from structured wizard answers. */
 export const DEFAULT_SOW_SECTION_DEFS = [
   { key: "parties", title: "Parties" },
   { key: "scope", title: "Project and Scope of Work" },
@@ -628,6 +628,69 @@ export const DEFAULT_SOW_SECTION_DEFS = [
 export const SOW_OWNERSHIP_MODELS = [
   { key: "clientOwned", label: "Client-Owned Production" },
   { key: "studioOwned", label: "Studio-Owned Production" },
+];
+
+export const SOW_FORMATS = [
+  { key: "spot", label: "Spot" },
+  { key: "shortFilm", label: "Short film" },
+  { key: "series", label: "Series" },
+  { key: "feature", label: "Feature" },
+  { key: "other", label: "Other" },
+];
+
+export const SOW_PRODUCTION_METHODS = [
+  { key: "liveAction", label: "Live action" },
+  { key: "aiGenerated", label: "AI-generated" },
+  { key: "hybrid", label: "Hybrid" },
+];
+
+export const SOW_AI_TOOLS_OPTIONS = [
+  { key: "matriarchChoice", label: "Matriarch's choice" },
+  { key: "custom", label: "Custom list" },
+];
+
+export const SOW_DELIVERY_METHODS = [
+  { key: "fileTransfer", label: "File transfer service" },
+  { key: "drive", label: "Drive" },
+  { key: "platform", label: "Platform" },
+  { key: "other", label: "Other" },
+];
+
+export const SOW_FEEDBACK_WINDOWS = [
+  { key: "1", label: "One (1) Business Day" },
+  { key: "2", label: "Two (2) Business Days" },
+  { key: "3", label: "Three (3) Business Days" },
+  { key: "5", label: "Five (5) Business Days" },
+];
+
+export const SOW_REVISION_ROUNDS = [
+  { key: "1", label: "One (1) round" },
+  { key: "2", label: "Two (2) rounds" },
+  { key: "3", label: "Three (3) rounds" },
+];
+
+export const SOW_TALENT_OPTIONS = [
+  { key: "nonUnion", label: "Non-union" },
+  { key: "sagAftra", label: "SAG-AFTRA" },
+  { key: "other", label: "Other / to be confirmed" },
+];
+
+export const SOW_CREDIT_OPTIONS = [
+  { key: "producedBy", label: "Produced by Matriarch" },
+  { key: "aMatriarch", label: "A Matriarch Production" },
+  { key: "none", label: "No credit required" },
+  { key: "custom", label: "Custom" },
+];
+
+export const SOW_PORTFOLIO_OPTIONS = [
+  { key: "standard", label: "Standard portfolio use" },
+  { key: "restricted", label: "Restricted" },
+  { key: "none", label: "No portfolio use" },
+];
+
+export const SOW_WEATHER_OPTIONS = [
+  { key: "actual", label: "Actual cost" },
+  { key: "custom", label: "Custom rate" },
 ];
 
 export const DEFAULT_SOW_STUDIO_NAME = "Matriarch Studios, LLC";
@@ -656,55 +719,207 @@ function ownershipModelLabel(key) {
   return (found && found.label) || "Client-Owned Production / Studio-Owned Production";
 }
 
-/**
- * Prefills a Statement of Work from a deal (or blank if none).
- * Company / studio names are passed in so this stays free of store lookups.
- */
-export function sowDraftFromProject(project, {
-  company = null,
-  studioName = DEFAULT_SOW_STUDIO_NAME,
-  sowNumber = "",
-  ownershipModel = "",
-} = {}) {
-  const clientName = (company && company.name) || "";
-  const contactName = (project && project.contactName) || (company && company.contactName) || "";
-  const contactEmail = (project && project.contactEmail) || (company && company.contactEmail) || "";
-  const contactPhone = (project && project.contactPhone) || (company && company.contactPhone) || "";
-  const projectTitle = (project && project.title) || "";
-  const numberPart = String(sowNumber || "").trim() || "[●]";
-  const title = projectTitle
-    ? `Statement of Work No. ${numberPart} — ${projectTitle}`
-    : `Statement of Work No. ${numberPart}`;
-  const value = (project && project.budget) || "";
-  const studio = studioName || DEFAULT_SOW_STUDIO_NAME;
-  const ownershipChoice = ownershipModelLabel(ownershipModel);
-  const startLabel = formatSowDate(project && project.startDate) || "[●]";
-  const endLabel = formatSowDate(project && project.endDate) || "[●]";
-  const valueOrBlank = value || "[●]";
+function optionLabel(list, key, fallback = "[●]") {
+  if (!key) return fallback;
+  const found = list.find((item) => item.key === key);
+  return (found && found.label) || fallback;
+}
 
-  const milestoneLines = normalizeProjectDates(project && project.dates)
-    .filter((mark) => mark && mark.label && mark.date)
-    .map((mark) => `${mark.label} | ${formatSowDate(mark.date)}`);
+function blankOr(value, fallback = "[●]") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
+function defaultOwnershipFromProject(project) {
+  if (!project) return "";
+  if (project.recordType === "original") return "studioOwned";
+  if (project.recordType === "service" || project.recordType === "training"
+    || project.recordType === "eventsProduction" || project.recordType === "keynotePresentation") {
+    return "clientOwned";
+  }
+  return "";
+}
+
+function defaultFormatFromProject(project) {
+  if (!project) return "";
+  if (project.recordType === "keynotePresentation") return "other";
+  if (project.recordType === "eventsProduction") return "other";
+  return "";
+}
+
+export function makeSowDeliverable(fields = {}) {
+  return {
+    id: fields.id || uid(),
+    name: String(fields.name || "").trim(),
+    specs: String(fields.specs || "").trim(),
+  };
+}
+
+export function makeSowClientMaterial(fields = {}) {
+  return {
+    id: fields.id || uid(),
+    material: String(fields.material || "").trim(),
+    format: String(fields.format || "").trim(),
+    dueDate: String(fields.dueDate || "").trim(),
+  };
+}
+
+export function emptySowAnswers(overrides = {}) {
+  return {
+    clientEntityType: "",
+    clientState: "",
+    studioRepName: "",
+    studioRepTitle: "",
+    studioEmail: "",
+    studioPhone: "",
+    scope: "",
+    format: "",
+    formatDetail: "",
+    productionMethod: "",
+    aiTools: "matriarchChoice",
+    aiToolsCustom: "",
+    outOfScope: "",
+    licenseMedia: "",
+    licenseTerritory: "",
+    licenseTerm: "",
+    licenseExclusivity: "",
+    licenseSponsorship: "",
+    thirdPartyMaterials: "",
+    deliverables: [makeSowDeliverable(), makeSowDeliverable(), makeSowDeliverable()],
+    deliveryMethod: "fileTransfer",
+    deliveryMethodOther: "",
+    clientMaterials: [
+      makeSowClientMaterial({ material: "Logos, brand guidelines" }),
+      makeSowClientMaterial({ material: "Product, footage, talent" }),
+    ],
+    feedbackWindow: "3",
+    revisionRounds: "2",
+    productionFee: "",
+    thirdPartyCosts: "",
+    contingencyPct: "10",
+    contingencyAmount: "",
+    thirdPartyMarkupPct: "",
+    weatherBilling: "actual",
+    weatherRateCustom: "",
+    keyPersonnel: "",
+    talentStatus: "nonUnion",
+    talentNotes: "",
+    insurance: "",
+    credit: "producedBy",
+    creditCustom: "",
+    portfolioUse: "standard",
+    specialTerms: "",
+    ...overrides,
+  };
+}
+
+function normalizeSowAnswers(raw = {}) {
+  const base = emptySowAnswers(raw || {});
+  return {
+    ...base,
+    deliverables: ensureArray(raw.deliverables).map((row) => makeSowDeliverable(row || {})),
+    clientMaterials: ensureArray(raw.clientMaterials).map((row) => makeSowClientMaterial(row || {})),
+  };
+}
+
+function formatLine(answers) {
+  const label = optionLabel(SOW_FORMATS, answers.format, "");
+  const detail = String(answers.formatDetail || "").trim();
+  if (label && detail) return `${label}; ${detail}`;
+  if (label) return label;
+  return blankOr(detail);
+}
+
+function aiToolsLine(answers) {
+  if (answers.aiTools === "custom") return blankOr(answers.aiToolsCustom);
+  return optionLabel(SOW_AI_TOOLS_OPTIONS, answers.aiTools);
+}
+
+function deliveryMethodLine(answers) {
+  if (answers.deliveryMethod === "other") return blankOr(answers.deliveryMethodOther);
+  return optionLabel(SOW_DELIVERY_METHODS, answers.deliveryMethod);
+}
+
+function creditLine(answers) {
+  if (answers.credit === "custom") return blankOr(answers.creditCustom);
+  return optionLabel(SOW_CREDIT_OPTIONS, answers.credit);
+}
+
+function weatherLine(answers) {
+  if (answers.weatherBilling === "custom") return blankOr(answers.weatherRateCustom);
+  return optionLabel(SOW_WEATHER_OPTIONS, answers.weatherBilling, "actual cost");
+}
+
+function talentLine(answers) {
+  const base = optionLabel(SOW_TALENT_OPTIONS, answers.talentStatus, "");
+  const notes = String(answers.talentNotes || "").trim();
+  if (base && notes) return `${base}; ${notes}`;
+  return blankOr(base || notes);
+}
+
+function clientEntityLine(answers, clientName) {
+  const state = String(answers.clientState || "").trim();
+  const entity = String(answers.clientEntityType || "").trim();
+  const bits = [state, entity].filter(Boolean).join(" ");
+  if (bits) return `${blankOr(clientName, "[Client]")}, a ${bits}`;
+  return `${blankOr(clientName, "[Client]")}, a [STATE] [ENTITY TYPE]`;
+}
+
+function studioRepLine(answers) {
+  const name = String(answers.studioRepName || "").trim();
+  const title = String(answers.studioRepTitle || "").trim();
+  if (name && title) return `${name}, ${title}`;
+  if (name) return name;
+  if (title) return title;
+  return "[NAME, TITLE]";
+}
+
+function feedbackWindowPhrase(key) {
+  return optionLabel(SOW_FEEDBACK_WINDOWS, key, "three (3) Business Days").replace(/ Business Days?$/i, (m) => m);
+}
+
+function revisionRoundsPhrase(key) {
+  const label = optionLabel(SOW_REVISION_ROUNDS, key, "Two (2) rounds");
+  if (/^One\b/i.test(label)) return label.replace(/ rounds?$/i, " round");
+  return label.replace(/ rounds?$/i, " rounds");
+}
+
+/** Build the twelve SOW section bodies from deal data + structured answers. */
+export function buildSowSections(draft) {
+  const answers = normalizeSowAnswers(draft && draft.answers);
+  const studio = String((draft && draft.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME;
+  const clientName = String((draft && draft.clientName) || "").trim();
+  const contactName = String((draft && draft.contactName) || "").trim();
+  const contactEmail = String((draft && draft.contactEmail) || "").trim();
+  const contactPhone = String((draft && draft.contactPhone) || "").trim();
+  const ownershipModel = String((draft && draft.ownershipModel) || "").trim();
+  const ownershipChoice = ownershipModelLabel(ownershipModel);
+  const value = String((draft && draft.value) || "").trim();
+  const valueOrBlank = value || "[●]";
+  const startLabel = formatSowDate(draft && draft.startDate) || "[●]";
+  const endLabel = formatSowDate(draft && draft.endDate) || "[●]";
+  const milestoneLines = ensureArray(draft && draft.milestones)
+    .filter((mark) => mark && mark.label && mark.dateLabel)
+    .map((mark) => `${mark.label} | ${mark.dateLabel}`);
 
   const partiesBody = [
     "Provider | Client",
     "--- | ---",
-    `Legal entity: ${studio}, a Delaware limited liability company | ${clientName || "[Client]"}, a [STATE] [ENTITY TYPE]`,
-    `Representative for approvals: [NAME, TITLE] | ${contactName || "[●]"}`,
-    `Email: [EMAIL] | ${contactEmail || "[●]"}`,
-    `Phone: [PHONE] | ${contactPhone || "[●]"}`,
+    `Legal entity: ${studio}, a Delaware limited liability company | ${clientEntityLine(answers, clientName)}`,
+    `Representative for approvals: ${studioRepLine(answers)} | ${blankOr(contactName)}`,
+    `Email: ${blankOr(answers.studioEmail, "[EMAIL]")} | ${blankOr(contactEmail)}`,
+    `Phone: ${blankOr(answers.studioPhone, "[PHONE]")} | ${blankOr(contactPhone)}`,
   ].join("\n");
 
-  const scopeIntro = (project && project.description) || "[Describe the Project.]";
   const scopeBody = [
-    scopeIntro,
+    blankOr(answers.scope, "[Describe the Project.]"),
     "",
     "Item | Terms",
     "--- | ---",
-    "Format | [Spot / short film / series / feature; length; number of episodes or cuts]",
-    "Production method | [Live action / AI-generated / hybrid]",
-    "Approved or restricted AI Tools | [List, or \"Matriarch's choice\"]",
-    "Out of scope | [Anything expressly excluded; changes require a Change Order]",
+    `Format | ${formatLine(answers)}`,
+    `Production method | ${optionLabel(SOW_PRODUCTION_METHODS, answers.productionMethod)}`,
+    `Approved or restricted AI Tools | ${aiToolsLine(answers)}`,
+    `Out of scope | ${blankOr(answers.outOfScope, "[Anything expressly excluded; changes require a Change Order]")}`,
   ].join("\n");
 
   const ownershipBody = [
@@ -715,31 +930,34 @@ export function sowDraftFromProject(project, {
     "",
     "License term | Detail",
     "--- | ---",
-    "Media | [●]",
-    "Territory | [●]",
-    "Term | [●]",
-    "Exclusivity | [●]",
-    "Sponsorship, integration or presenting rights | [●]",
+    `Media | ${blankOr(answers.licenseMedia)}`,
+    `Territory | ${blankOr(answers.licenseTerritory)}`,
+    `Term | ${blankOr(answers.licenseTerm)}`,
+    `Exclusivity | ${blankOr(answers.licenseExclusivity)}`,
+    `Sponsorship, integration or presenting rights | ${blankOr(answers.licenseSponsorship)}`,
     "",
-    "Third-party materials: [Music, stock, fonts and talent usage terms, or \"to be listed in delivery notes\"].",
+    `Third-party materials: ${blankOr(answers.thirdPartyMaterials, "[Music, stock, fonts and talent usage terms, or \"to be listed in delivery notes\"]")}.`,
   ].join("\n");
 
+  const deliverableRows = answers.deliverables.length
+    ? answers.deliverables
+    : [makeSowDeliverable(), makeSowDeliverable(), makeSowDeliverable()];
   const deliverablesBody = [
     "# | Deliverable | Specifications (resolution, codec, frame rate, aspect ratio, audio, captions)",
     "--- | --- | ---",
-    "1 | [●] | [●]",
-    "2 | [●] | [●]",
-    "3 | [●] | [●]",
+    ...deliverableRows.map((row, i) => `${i + 1} | ${blankOr(row.name)} | ${blankOr(row.specs)}`),
     "",
-    "Delivery method: [File transfer service / drive / platform].",
+    `Delivery method: ${deliveryMethodLine(answers)}.`,
     "Raw footage, project files and generation files are not Deliverables unless listed above.",
   ].join("\n");
 
+  const materialRows = answers.clientMaterials.length
+    ? answers.clientMaterials
+    : [makeSowClientMaterial(), makeSowClientMaterial()];
   const clientMaterialsBody = [
     "Material | Format | Due date",
     "--- | --- | ---",
-    "[Logos, brand guidelines] | [●] | [●]",
-    "[Product, footage, talent] | [●] | [●]",
+    ...materialRows.map((row) => `${blankOr(row.material)} | ${blankOr(row.format)} | ${blankOr(row.dueDate)}`),
     "",
     "Client delays extend Matriarch's deadlines day for day, and resulting costs are charged to Client.",
   ].join("\n");
@@ -753,7 +971,6 @@ export function sowDraftFromProject(project, {
     `Final Deliverables | ${endLabel}`,
     ...milestoneLines,
   ];
-
   const timelineBody = [
     `Start: ${startLabel}`,
     `Delivery of Final Deliverables: ${endLabel}`,
@@ -762,16 +979,17 @@ export function sowDraftFromProject(project, {
     "--- | ---",
     ...approvalRows,
     "",
-    "- Feedback window: Client provides consolidated feedback or approval within [three (3)] Business Days of each submission; otherwise the submission is deemed approved.",
-    "- Revision rounds: [Two (2)] rounds of consolidated revisions per approval stage. Additional rounds, or changes that depart from approved direction, require a Change Order.",
+    `- Feedback window: Client provides consolidated feedback or approval within ${feedbackWindowPhrase(answers.feedbackWindow)} of each submission; otherwise the submission is deemed approved.`,
+    `- Revision rounds: ${revisionRoundsPhrase(answers.revisionRounds)} of consolidated revisions per approval stage. Additional rounds, or changes that depart from approved direction, require a Change Order.`,
   ].join("\n");
 
+  const contingencyPct = blankOr(answers.contingencyPct, "10");
   const feesBody = [
     "Line | Amount (USD)",
     "--- | ---",
-    "Production Fee | [●]",
-    "Estimated Third-Party Costs | [●]",
-    "Contingency ([10]%; drawn only with Client approval) | [●]",
+    `Production Fee | ${blankOr(answers.productionFee)}`,
+    `Estimated Third-Party Costs | ${blankOr(answers.thirdPartyCosts)}`,
+    `Contingency ([${contingencyPct}]%; drawn only with Client approval) | ${blankOr(answers.contingencyAmount)}`,
     `Total approved budget | ${valueOrBlank}`,
     "",
     "Installment | Amount | Due",
@@ -781,29 +999,26 @@ export function sowDraftFromProject(project, {
     `Final installment | 25% of ${valueOrBlank}, plus approved overages and reconciled expenses | On delivery of the Final Deliverables`,
     "",
     "- Invoices are due within [fifteen (15)] days of the invoice date.",
-    "- Unbudgeted Third-Party Costs are billed at cost plus [●]%.",
-    "- Weather days and holds not caused by Matriarch are billed at: [rate or \"actual cost\"].",
+    `- Unbudgeted Third-Party Costs are billed at cost plus ${blankOr(answers.thirdPartyMarkupPct)}%.`,
+    `- Weather days and holds not caused by Matriarch are billed at: ${weatherLine(answers)}.`,
     "- Cancellation by Client is subject to fees as mutually agreed in writing before work begins, or as stated in Special Terms.",
   ].join("\n");
 
   const productionBody = [
     "Item | Terms",
     "--- | ---",
-    "Key personnel | [Director, producer, AI lead]",
-    "Talent and guild status | [Non-union / SAG-AFTRA or other; signatory entity; usage terms]",
-    "Insurance | [E&O required? Client as additional insured?]",
-    "Credit | [\"Produced by Matriarch\" / \"A Matriarch Production\"; placement]",
-    "Portfolio use | [Standard / restrictions]",
+    `Key personnel | ${blankOr(answers.keyPersonnel, "[Director, producer, AI lead]")}`,
+    `Talent and guild status | ${talentLine(answers)}`,
+    `Insurance | ${blankOr(answers.insurance, "[E&O required? Client as additional insured]")}`,
+    `Credit | ${creditLine(answers)}`,
+    `Portfolio use | ${optionLabel(SOW_PORTFOLIO_OPTIONS, answers.portfolioUse)}`,
   ].join("\n");
 
   const acceptanceBody = "Client has [five (5)] Business Days after delivery of the Final Deliverables to notify Matriarch in writing of any material technical nonconformity with the specifications in Section 4. Matriarch will correct any such nonconformity and redeliver. The Final Deliverables are deemed accepted on the earlier of Client's written acceptance, expiry of that period without notice, or any public release or commercial use by Client.";
-
-  const specialBody = "[None.]";
-
+  const specialBody = blankOr(answers.specialTerms, "[None.]");
   const termsBody = "This Statement of Work sets out the terms for the Project between Matriarch and Client. Changes to this SOW require a signed Change Order (email confirmation from each Party's representative is sufficient). Work begins after both Parties sign and Matriarch receives the deposit.";
-
   const signaturesBody = [
-    `${studio} | ${clientName || "[Client]"}`,
+    `${studio} | ${blankOr(clientName, "[Client]")}`,
     "--- | ---",
     "By: | By:",
     "Name: | Name:",
@@ -826,10 +1041,56 @@ export function sowDraftFromProject(project, {
     signatures: signaturesBody,
   };
 
-  return {
+  return DEFAULT_SOW_SECTION_DEFS.map((def) => makeSowSection({
+    title: def.title,
+    body: byKey[def.key] || "",
+  }));
+}
+
+/**
+ * Prefills a Statement of Work from a deal (or blank if none).
+ * Deal fields are pulled in; remaining choices live on `answers`.
+ */
+export function sowDraftFromProject(project, {
+  company = null,
+  studioName = DEFAULT_SOW_STUDIO_NAME,
+  sowNumber = "",
+  ownershipModel = "",
+  answers: answerOverrides = null,
+} = {}) {
+  const clientName = (company && company.name) || "";
+  const contactName = (project && project.contactName) || (company && company.contactName) || "";
+  const contactEmail = (project && project.contactEmail) || (company && company.contactEmail) || "";
+  const contactPhone = (project && project.contactPhone) || (company && company.contactPhone) || "";
+  const projectTitle = (project && project.title) || "";
+  const numberPart = String(sowNumber || "").trim() || "[●]";
+  const title = projectTitle
+    ? `Statement of Work No. ${numberPart} — ${projectTitle}`
+    : `Statement of Work No. ${numberPart}`;
+  const value = (project && project.budget) || "";
+  const studio = studioName || DEFAULT_SOW_STUDIO_NAME;
+  const ownership = String(ownershipModel || defaultOwnershipFromProject(project) || "").trim();
+  const milestones = normalizeProjectDates(project && project.dates)
+    .filter((mark) => mark && mark.label && mark.date)
+    .map((mark) => ({
+      id: mark.id,
+      label: mark.label,
+      date: mark.date,
+      dateLabel: formatSowDate(mark.date),
+    }));
+
+  const answers = normalizeSowAnswers({
+    ...emptySowAnswers(),
+    scope: (project && project.description) || "",
+    format: defaultFormatFromProject(project),
+    productionFee: value,
+    ...(answerOverrides || {}),
+  });
+
+  const draft = {
     title,
     sowNumber: String(sowNumber || "").trim(),
-    ownershipModel: String(ownershipModel || "").trim(),
+    ownershipModel: ownership,
     projectId: (project && project.id) || null,
     companyId: (project && project.companyId) || (company && company.id) || null,
     contactName,
@@ -839,30 +1100,37 @@ export function sowDraftFromProject(project, {
     studioName: studio,
     value,
     projectTitle,
-    sections: DEFAULT_SOW_SECTION_DEFS.map((def) => makeSowSection({
-      title: def.title,
-      body: byKey[def.key] || "",
-    })),
+    startDate: (project && project.startDate) || null,
+    endDate: (project && project.endDate) || null,
+    milestones,
+    recordType: (project && project.recordType) || "",
+    answers,
   };
+  draft.sections = buildSowSections(draft);
+  return draft;
 }
 
 export function sowExportPayload(draft) {
-  const sections = normalizeSowSections(draft && draft.sections);
   const ownershipModel = String((draft && draft.ownershipModel) || "").trim();
+  const withAnswers = draft && draft.answers
+    ? { ...draft, sections: buildSowSections(draft) }
+    : draft;
+  const sections = normalizeSowSections(withAnswers && withAnswers.sections);
   return {
-    title: String((draft && draft.title) || "Statement of Work").trim() || "Statement of Work",
-    sowNumber: String((draft && draft.sowNumber) || "").trim(),
+    title: String((withAnswers && withAnswers.title) || "Statement of Work").trim() || "Statement of Work",
+    sowNumber: String((withAnswers && withAnswers.sowNumber) || "").trim(),
     ownershipModel,
     ownershipLabel: ownershipModelLabel(ownershipModel),
-    clientName: String((draft && draft.clientName) || "").trim(),
-    studioName: String((draft && draft.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME,
+    clientName: String((withAnswers && withAnswers.clientName) || "").trim(),
+    studioName: String((withAnswers && withAnswers.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME,
     contactLine: [
-      draft && draft.contactName,
-      draft && draft.contactEmail,
-      draft && draft.contactPhone,
+      withAnswers && withAnswers.contactName,
+      withAnswers && withAnswers.contactEmail,
+      withAnswers && withAnswers.contactPhone,
     ].filter(Boolean).join(" · "),
-    value: String((draft && draft.value) || "").trim(),
-    projectTitle: String((draft && draft.projectTitle) || "").trim(),
+    value: String((withAnswers && withAnswers.value) || "").trim(),
+    projectTitle: String((withAnswers && withAnswers.projectTitle) || "").trim(),
+    answers: normalizeSowAnswers((withAnswers && withAnswers.answers) || {}),
     sections,
   };
 }
