@@ -214,7 +214,7 @@ function EmailUpdateRow({ update, pipeline, onAccept, onDismiss }) {
   );
 }
 
-export default function ProjectDetail({ project, onClose, onOpenRecord, onOpenSow }) {
+export default function ProjectDetail({ project, onClose, onOpenRecord, onOpenSow, onOpenDealMemo }) {
   const { data, update, updateProject, remove, add, currentUser, memberName } = useStore();
   const [newTask, setNewTask] = useState("");
   const [note, setNote] = useState("");
@@ -784,7 +784,7 @@ export default function ProjectDetail({ project, onClose, onOpenRecord, onOpenSo
         </button>
       </Section>
 
-      {(contracts.length > 0 || invoices.length > 0 || onOpenSow) && (
+      {(contracts.length > 0 || invoices.length > 0 || onOpenSow || onOpenDealMemo) && (
         <Section title="PAPERWORK">
           {contracts.map((c) => (
             <div key={c.id} onClick={() => onOpenRecord && onOpenRecord("contracts")} role="button" tabIndex={0}
@@ -805,12 +805,20 @@ export default function ProjectDetail({ project, onClose, onOpenRecord, onOpenSo
               <Badge label={lookupLabel(INVOICE_STATUSES, i.status)} color={lookupColor(INVOICE_STATUSES, i.status)} />
             </div>
           ))}
-          {onOpenSow && (
-            <button className="md-btn md-btn-ghost" style={{ marginTop: contracts.length || invoices.length ? 6 : 0, fontSize: 12 }}
-              onClick={() => onOpenSow(project)}>
-              <FileText size={13} /> Create SOW
-            </button>
-          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: contracts.length || invoices.length ? 6 : 0 }}>
+            {onOpenSow && (
+              <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }}
+                onClick={() => onOpenSow(project)}>
+                <FileText size={13} /> Create SOW
+              </button>
+            )}
+            {onOpenDealMemo && (
+              <button className="md-btn md-btn-ghost" style={{ fontSize: 12 }}
+                onClick={() => onOpenDealMemo({ projectId: project.id })}>
+                <FileText size={13} /> Create Deal Memo
+              </button>
+            )}
+          </div>
         </Section>
       )}
 

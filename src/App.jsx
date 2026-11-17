@@ -41,6 +41,7 @@ import CompaniesView from "./views/CompaniesView";
 import PeopleView from "./views/PeopleView";
 import ContractsView from "./views/ContractsView";
 import SowWizard from "./views/SowWizard";
+import DealMemoWizard from "./views/DealMemoWizard";
 import FinanceView from "./views/FinanceView";
 import TimelineView from "./views/TimelineView";
 import SyncModal from "./views/SyncModal";
@@ -319,6 +320,7 @@ function Board({ store }) {
   const [showAssistant, setShowAssistant] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
   const [sowWizard, setSowWizard] = useState(null);
+  const [dealMemoWizard, setDealMemoWizard] = useState(null);
   const [recorder, setRecorder] = useState(null);
   const [importDoc, setImportDoc] = useState(null);
   const [docSeed, setDocSeed] = useState({ title: "", body: "" });
@@ -549,7 +551,15 @@ function Board({ store }) {
       case "people":
         return <PeopleView searchQuery={searchQuery} onOpenTab={openTab} />;
       case "team":
-        return <TeamView searchQuery={searchQuery} />;
+        return (
+          <TeamView
+            searchQuery={searchQuery}
+            onOpenDealMemo={house ? (opts) => setDealMemoWizard({
+              talentId: (opts && opts.talentId) || null,
+              projectId: (opts && opts.projectId) || null,
+            }) : undefined}
+          />
+        );
       case "vendors":
         return <CompaniesView searchQuery={searchQuery} onOpenTab={openTab} lockedType="vendor" title="VENDORS" />;
       case "aitools":
@@ -688,12 +698,26 @@ function Board({ store }) {
               setDetailProject(null);
               setSowWizard({ projectId: id || null });
             } : undefined}
+            onOpenDealMemo={house ? (opts) => {
+              setDetailProject(null);
+              setDealMemoWizard({
+                projectId: (opts && opts.projectId) || null,
+                talentId: (opts && opts.talentId) || null,
+              });
+            } : undefined}
           />
         )}
         {sowWizard && house && (
           <SowWizard
             projectId={sowWizard.projectId}
             onClose={() => setSowWizard(null)}
+          />
+        )}
+        {dealMemoWizard && house && (
+          <DealMemoWizard
+            projectId={dealMemoWizard.projectId}
+            talentId={dealMemoWizard.talentId}
+            onClose={() => setDealMemoWizard(null)}
           />
         )}
         {showNewProject && (

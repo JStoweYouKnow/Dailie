@@ -10,6 +10,7 @@ import {
 import { useDraftUploads } from "../lib/draftUploads";
 import { CompanySelect } from "../ui/CompanySelect";
 import SowWizard from "./SowWizard";
+import DealMemoWizard from "./DealMemoWizard";
 
 function NewContractModal({ onClose, defaultKind }) {
   const { data, add, currentUser } = useStore();
@@ -91,6 +92,7 @@ export default function ContractsView({ searchQuery }) {
   const [kindFilter, setKindFilter] = useState("all");
   const [showNew, setShowNew] = useState(false);
   const [showSow, setShowSow] = useState(false);
+  const [showDealMemo, setShowDealMemo] = useState(false);
 
   const rows = useMemo(() => {
     let list = [...data.contracts];
@@ -154,6 +156,9 @@ export default function ContractsView({ searchQuery }) {
         <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)" }} onClick={() => setShowSow(true)}>
           <FileText size={14} /> Create SOW
         </button>
+        <button className="md-btn md-btn-ghost" style={{ border: "1px solid var(--rule)" }} onClick={() => setShowDealMemo(true)}>
+          <FileText size={14} /> Create Deal Memo
+        </button>
         <button className="md-btn md-btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> New Agreement</button>
       </ViewHeader>
 
@@ -183,6 +188,7 @@ export default function ContractsView({ searchQuery }) {
 
       {showNew && <NewContractModal onClose={() => setShowNew(false)} defaultKind={kindFilter === "all" ? "nda" : kindFilter} />}
       {showSow && <SowWizard onClose={() => setShowSow(false)} />}
+      {showDealMemo && <DealMemoWizard onClose={() => setShowDealMemo(false)} />}
     </div>
   );
 }

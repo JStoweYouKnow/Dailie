@@ -596,6 +596,7 @@ export const CONTRACT_KINDS = [
   { key: "nda", label: "NDA" },
   { key: "deal", label: "Deal Contract" },
   { key: "sow", label: "Statement of Work" },
+  { key: "dealMemo", label: "Deal Memo" },
   { key: "vendor", label: "Vendor Contract" },
   { key: "betaTester", label: "Beta Tester Agreement" },
   { key: "other", label: "Other Agreement" },
@@ -1131,6 +1132,337 @@ export function sowExportPayload(draft) {
     value: String((withAnswers && withAnswers.value) || "").trim(),
     projectTitle: String((withAnswers && withAnswers.projectTitle) || "").trim(),
     answers: normalizeSowAnswers((withAnswers && withAnswers.answers) || {}),
+    sections,
+  };
+}
+
+/** Deal memo for engaging artists and production / post talent. */
+export const DEFAULT_DEAL_MEMO_SECTION_DEFS = [
+  { key: "parties", title: "Parties" },
+  { key: "engagement", title: "Engagement" },
+  { key: "scope", title: "Services & Scope" },
+  { key: "dates", title: "Dates & Availability" },
+  { key: "compensation", title: "Compensation" },
+  { key: "credit", title: "Credit & Portfolio" },
+  { key: "legal", title: "Union & Legal" },
+  { key: "special", title: "Special Terms" },
+  { key: "signatures", title: "Signatures" },
+];
+
+export const DEAL_MEMO_PHASES = [
+  { key: "preproduction", label: "Pre-Production" },
+  { key: "production", label: "Production" },
+  { key: "postproduction", label: "Post-Production" },
+  { key: "other", label: "Other / Across phases" },
+];
+
+export const DEAL_MEMO_ENGAGEMENT_TYPES = [
+  { key: "artist", label: "Artist / Performer" },
+  { key: "production", label: "Production talent" },
+  { key: "post", label: "Post-production talent" },
+  { key: "other", label: "Other collaborator" },
+];
+
+export const DEAL_MEMO_EXCLUSIVITY = [
+  { key: "none", label: "Non-exclusive" },
+  { key: "duringTerm", label: "Exclusive during the engagement term" },
+  { key: "project", label: "Exclusive for this Project" },
+];
+
+export const DEAL_MEMO_PAYMENT_SCHEDULES = [
+  { key: "weekly", label: "Weekly" },
+  { key: "onWrap", label: "On wrap / delivery" },
+  { key: "halfHalf", label: "50% start / 50% wrap" },
+  { key: "net30", label: "Net 30 from invoice" },
+  { key: "custom", label: "Custom" },
+];
+
+export const DEAL_MEMO_CONFIDENTIALITY = [
+  { key: "existingNda", label: "Covered by existing Crew NDA" },
+  { key: "included", label: "Confidentiality terms included herein" },
+  { key: "none", label: "None / to be confirmed" },
+];
+
+export function emptyDealMemoAnswers(overrides = {}) {
+  return {
+    role: "",
+    phase: "production",
+    engagementType: "production",
+    scope: "",
+    deliverables: "",
+    exclusivity: "none",
+    location: "",
+    allocation: "",
+    rateAmount: "",
+    rateUnit: "day",
+    currency: "USD",
+    buyout: "",
+    overtime: "",
+    kitFee: "",
+    paymentSchedule: "weekly",
+    paymentScheduleCustom: "",
+    credit: "producedBy",
+    creditCustom: "",
+    portfolioUse: "standard",
+    unionStatus: "nonUnion",
+    unionNotes: "",
+    killFee: "",
+    travel: "",
+    confidentiality: "existingNda",
+    specialTerms: "",
+    studioRepName: "",
+    studioRepTitle: "",
+    ...overrides,
+  };
+}
+
+function normalizeDealMemoAnswers(raw = {}) {
+  return emptyDealMemoAnswers(raw || {});
+}
+
+function dealMemoOptionLabel(list, key, fallback = "[●]") {
+  if (!key) return fallback;
+  const found = list.find((item) => item.key === key);
+  return (found && found.label) || fallback;
+}
+
+function dealMemoRateLine(answers) {
+  const amount = String(answers.rateAmount || "").trim();
+  if (!amount) return "[●]";
+  const unit = dealMemoOptionLabel(RATE_UNITS, answers.rateUnit, "");
+  const currency = String(answers.currency || "USD").trim() || "USD";
+  return unit ? `${amount} ${currency} ${unit}` : `${amount} ${currency}`;
+}
+
+function dealMemoPaymentLine(answers) {
+  if (answers.paymentSchedule === "custom") {
+    return String(answers.paymentScheduleCustom || "").trim() || "[●]";
+  }
+  return dealMemoOptionLabel(DEAL_MEMO_PAYMENT_SCHEDULES, answers.paymentSchedule);
+}
+
+function dealMemoCreditLine(answers) {
+  if (answers.credit === "custom") return String(answers.creditCustom || "").trim() || "[●]";
+  return dealMemoOptionLabel(SOW_CREDIT_OPTIONS, answers.credit);
+}
+
+function dealMemoUnionLine(answers) {
+  const base = dealMemoOptionLabel(SOW_TALENT_OPTIONS, answers.unionStatus, "");
+  const notes = String(answers.unionNotes || "").trim();
+  if (base && notes) return `${base}; ${notes}`;
+  return String(base || notes || "[●]");
+}
+
+function assignmentForTalentProject(talent, projectId) {
+  if (!talent || !projectId) return null;
+  return ensureArray(talent.assignments).find((a) => a && a.projectId === projectId) || null;
+}
+
+function defaultEngagementType(disciplines, phase) {
+  const blob = ensureArray(disciplines).join(" ").toLowerCase();
+  if (/actor|performer|talent|cast|singer|musician/.test(blob)) return "artist";
+  if (phase === "postproduction" || /editor|colour|color|vfx|sound|composer|animator|post/.test(blob)) return "post";
+  if (/director|producer|writer|photography|gaffer|ad\b|designer|casting/.test(blob)) return "production";
+  return phase === "postproduction" ? "post" : "production";
+}
+
+/** Build deal memo section bodies from talent/deal fields + structured answers. */
+export function buildDealMemoSections(draft) {
+  const answers = normalizeDealMemoAnswers(draft && draft.answers);
+  const studio = String((draft && draft.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME;
+  const talentName = String((draft && draft.talentName) || "").trim() || "[Talent]";
+  const talentEmail = String((draft && draft.talentEmail) || "").trim();
+  const talentPhone = String((draft && draft.talentPhone) || "").trim();
+  const agent = String((draft && draft.agent) || "").trim();
+  const projectTitle = String((draft && draft.projectTitle) || "").trim() || "[Project]";
+  const startLabel = formatSowDate(draft && draft.startDate) || "[●]";
+  const endLabel = formatSowDate(draft && draft.endDate) || "[●]";
+  const studioRep = [answers.studioRepName, answers.studioRepTitle].filter(Boolean).join(", ") || "[NAME, TITLE]";
+
+  const partiesBody = [
+    "Studio | Talent",
+    "--- | ---",
+    `Legal entity: ${studio} | ${talentName}`,
+    `Studio representative: ${studioRep} | Agent / rep: ${agent || "[●]"}`,
+    `Email: [EMAIL] | ${talentEmail || "[●]"}`,
+    `Phone: [PHONE] | ${talentPhone || "[●]"}`,
+  ].join("\n");
+
+  const engagementBody = [
+    "Item | Terms",
+    "--- | ---",
+    `Project | ${projectTitle}`,
+    `Role | ${blankOr(answers.role)}`,
+    `Engagement type | ${dealMemoOptionLabel(DEAL_MEMO_ENGAGEMENT_TYPES, answers.engagementType)}`,
+    `Phase | ${dealMemoOptionLabel(DEAL_MEMO_PHASES, answers.phase)}`,
+    `Exclusivity | ${dealMemoOptionLabel(DEAL_MEMO_EXCLUSIVITY, answers.exclusivity)}`,
+  ].join("\n");
+
+  const scopeBody = [
+    blankOr(answers.scope, "[Describe services to be performed.]"),
+    "",
+    `Deliverables: ${blankOr(answers.deliverables, "[To be confirmed]")}`,
+  ].join("\n");
+
+  const datesBody = [
+    "Item | Terms",
+    "--- | ---",
+    `Start | ${startLabel}`,
+    `End | ${endLabel}`,
+    `Allocation | ${blankOr(answers.allocation, "100")}%`,
+    `Work location | ${blankOr(answers.location)}`,
+  ].join("\n");
+
+  const compensationBody = [
+    "Item | Terms",
+    "--- | ---",
+    `Rate | ${dealMemoRateLine(answers)}`,
+    `Buyout / rights | ${blankOr(answers.buyout, "None / to be confirmed")}`,
+    `Overtime | ${blankOr(answers.overtime, "As applicable under the engagement")}`,
+    `Kit / gear fee | ${blankOr(answers.kitFee, "None")}`,
+    `Payment schedule | ${dealMemoPaymentLine(answers)}`,
+  ].join("\n");
+
+  const creditBody = [
+    "Item | Terms",
+    "--- | ---",
+    `Credit | ${dealMemoCreditLine(answers)}`,
+    `Portfolio use | ${dealMemoOptionLabel(SOW_PORTFOLIO_OPTIONS, answers.portfolioUse)}`,
+  ].join("\n");
+
+  const legalBody = [
+    "Item | Terms",
+    "--- | ---",
+    `Union / guild status | ${dealMemoUnionLine(answers)}`,
+    `Confidentiality | ${dealMemoOptionLabel(DEAL_MEMO_CONFIDENTIALITY, answers.confidentiality)}`,
+    `Kill / cancellation fee | ${blankOr(answers.killFee, "To be confirmed")}`,
+    `Travel & expenses | ${blankOr(answers.travel, "Pre-approved expenses only")}`,
+  ].join("\n");
+
+  const specialBody = blankOr(answers.specialTerms, "[None.]");
+  const signaturesBody = [
+    `${studio} | ${talentName}`,
+    "--- | ---",
+    "By: | By:",
+    "Name: | Name:",
+    "Title: | Title:",
+    "Date: | Date:",
+  ].join("\n");
+
+  const byKey = {
+    parties: partiesBody,
+    engagement: engagementBody,
+    scope: scopeBody,
+    dates: datesBody,
+    compensation: compensationBody,
+    credit: creditBody,
+    legal: legalBody,
+    special: specialBody,
+    signatures: signaturesBody,
+  };
+
+  return DEFAULT_DEAL_MEMO_SECTION_DEFS.map((def) => makeSowSection({
+    title: def.title,
+    body: byKey[def.key] || "",
+  }));
+}
+
+/**
+ * Prefills a deal memo from talent and optional deal/assignment.
+ * Rate, role, dates, and contact fields come from the roster when present.
+ */
+export function dealMemoDraftFrom({
+  talent = null,
+  project = null,
+  assignment = null,
+  studioName = DEFAULT_SOW_STUDIO_NAME,
+  memoNumber = "",
+  answers: answerOverrides = null,
+} = {}) {
+  const booking = assignment || assignmentForTalentProject(talent, project && project.id);
+  const disciplines = talentDisciplines(talent);
+  const projectTitle = (project && project.title) || "";
+  const numberPart = String(memoNumber || "").trim() || "[●]";
+  const talentName = (talent && talent.name) || "";
+  const title = talentName && projectTitle
+    ? `Deal Memo No. ${numberPart} — ${talentName} / ${projectTitle}`
+    : talentName
+      ? `Deal Memo No. ${numberPart} — ${talentName}`
+      : projectTitle
+        ? `Deal Memo No. ${numberPart} — ${projectTitle}`
+        : `Deal Memo No. ${numberPart}`;
+
+  const phase = (project && project.stage && DEAL_MEMO_PHASES.some((p) => p.key === project.stage))
+    ? project.stage
+    : "production";
+  const role = (booking && booking.role)
+    || (disciplines[0] || "");
+  const rateAmount = (talent && talent.rateAmount) || "";
+  const rateUnit = (talent && talent.rateUnit) || "day";
+  const currency = (talent && talent.currency) || "USD";
+  const value = rateAmount
+    ? `${rateAmount} ${currency} ${lookupLabel(RATE_UNITS, rateUnit)}`.trim()
+    : "";
+
+  const answers = normalizeDealMemoAnswers({
+    ...emptyDealMemoAnswers(),
+    role,
+    phase,
+    engagementType: defaultEngagementType(disciplines, phase),
+    location: (talent && talent.location) || "",
+    allocation: booking && booking.allocation != null ? String(booking.allocation) : "100",
+    rateAmount,
+    rateUnit,
+    currency,
+    scope: booking && booking.notes ? String(booking.notes) : "",
+    confidentiality: (talent && talent.ndaContractId) ? "existingNda" : "included",
+    ...(answerOverrides || {}),
+  });
+
+  const draft = {
+    title,
+    memoNumber: String(memoNumber || "").trim(),
+    talentId: (talent && talent.id) || null,
+    projectId: (project && project.id) || null,
+    companyId: (project && project.companyId) || null,
+    talentName,
+    talentEmail: (talent && talent.email) || "",
+    talentPhone: (talent && talent.phone) || "",
+    agent: (talent && talent.agent) || "",
+    disciplines,
+    studioName: studioName || DEFAULT_SOW_STUDIO_NAME,
+    projectTitle,
+    value,
+    startDate: (booking && booking.startDate) || (project && project.startDate) || null,
+    endDate: (booking && booking.endDate) || (project && project.endDate) || null,
+    answers,
+  };
+  draft.sections = buildDealMemoSections(draft);
+  return draft;
+}
+
+export function dealMemoExportPayload(draft) {
+  const withAnswers = draft && draft.answers
+    ? { ...draft, sections: buildDealMemoSections(draft) }
+    : draft;
+  const sections = normalizeSowSections(withAnswers && withAnswers.sections);
+  const value = String((withAnswers && withAnswers.value) || "").trim()
+    || dealMemoRateLine(normalizeDealMemoAnswers((withAnswers && withAnswers.answers) || {}));
+  return {
+    title: String((withAnswers && withAnswers.title) || "Deal Memo").trim() || "Deal Memo",
+    memoNumber: String((withAnswers && withAnswers.memoNumber) || "").trim(),
+    studioName: String((withAnswers && withAnswers.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME,
+    talentName: String((withAnswers && withAnswers.talentName) || "").trim(),
+    talentLine: [
+      withAnswers && withAnswers.talentName,
+      withAnswers && withAnswers.talentEmail,
+      withAnswers && withAnswers.talentPhone,
+    ].filter(Boolean).join(" · "),
+    agent: String((withAnswers && withAnswers.agent) || "").trim(),
+    projectTitle: String((withAnswers && withAnswers.projectTitle) || "").trim(),
+    value,
+    role: String((withAnswers && withAnswers.answers && withAnswers.answers.role) || "").trim(),
+    answers: normalizeDealMemoAnswers((withAnswers && withAnswers.answers) || {}),
     sections,
   };
 }
@@ -1747,7 +2079,7 @@ export function normalizeData(raw) {
       return {
         ...merged,
         kind,
-        sections: kind === "sow" || Array.isArray(merged.sections)
+        sections: kind === "sow" || kind === "dealMemo" || Array.isArray(merged.sections)
           ? normalizeSowSections(merged.sections)
           : [],
       };

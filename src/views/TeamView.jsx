@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Table as TableIcon, CalendarRange, ShieldCheck, ShieldAlert, X, UserPlus, ExternalLink } from "lucide-react";
+import { Plus, Table as TableIcon, CalendarRange, ShieldCheck, ShieldAlert, X, UserPlus, ExternalLink, FileText } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   TALENT_STATUSES, RATE_UNITS, recordTypeInfo, lookupColor, lookupLabel,
@@ -199,7 +199,7 @@ function AvailabilityTimeline({ roster, onOpen }) {
   );
 }
 
-function TalentDetail({ talent, onClose }) {
+function TalentDetail({ talent, onClose, onOpenDealMemo }) {
   const { data, update, remove, patch, add, currentUser, memberName, shared } = useStore();
   const nda = ndaFor(data, talent);
   const list = bookings(talent);
@@ -280,6 +280,18 @@ function TalentDetail({ talent, onClose }) {
           </div>
         </Field>
         <Field label="NDA"><NdaCell talent={talent} /></Field>
+        {onOpenDealMemo && (
+          <Field label="DEAL MEMO">
+            <button
+              type="button"
+              className="md-btn md-btn-ghost"
+              style={{ fontSize: 12, border: "1px solid var(--rule)" }}
+              onClick={() => onOpenDealMemo({ talentId: talent.id, projectId: (list[0] && list[0].projectId) || null })}
+            >
+              <FileText size={13} /> Create Deal Memo
+            </button>
+          </Field>
+        )}
         <Field label="EMAIL"><InlineText value={talent.email} mono style={{ color: "var(--accent)" }} onCommit={(v) => setField({ email: v })} /></Field>
         <Field label="PHONE"><InlineText value={talent.phone} mono onCommit={(v) => setField({ phone: v })} /></Field>
         <Field label="AGENT / REP"><InlineText value={talent.agent} placeholder="Add rep" onCommit={(v) => setField({ agent: v })} /></Field>
@@ -409,7 +421,7 @@ function NewTalentModal({ onClose, onCreated }) {
   );
 }
 
-export default function TeamView({ searchQuery }) {
+export default function TeamView({ searchQuery, onOpenDealMemo }) {
   const { data, update } = useStore();
   const [statusFilter, setStatusFilter] = useState("all");
   const [availableOnly, setAvailableOnly] = useState(false);
@@ -553,7 +565,16 @@ export default function TeamView({ searchQuery }) {
         <DataTable columns={columns} rows={roster} onRowClick={setOpen} hideExport />
       )}
 
-      {open && <TalentDetail talent={(data.talent || []).find((t) => t.id === open.id) || open} onClose={() => setOpen(null)} />}
+      {open && (
+        <TalentDetail
+          talent={(data.talent || []).find((t) => t.id === open.id) || open}
+          onClose={() => setOpen(null)}
+          onOpenDealMemo={onOpenDealMemo ? (opts) => {
+            setOpen(null);
+            onOpenDealMemo(opts);
+          } : undefined}
+        />
+      )}
       {showNew && <NewTalentModal onClose={() => setShowNew(false)} onCreated={setOpen} />}
     </div>
   );
