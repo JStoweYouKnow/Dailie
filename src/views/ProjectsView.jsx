@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid, Table as TableIcon, Image as ImageIcon, Plus, Star, Archive, ArchiveRestore, Search, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
@@ -13,6 +13,7 @@ import {
   imageSrc, listAttachments, allAttachments, trashAttachment, restoreAttachment, purgeAttachment,
   SLATE_FILE_ACCEPT,
 } from "../lib/files";
+import { readDealsBoardPrefs, writeDealsBoardPrefs } from "../lib/uiPrefs";
 import {
   ViewHeader, FilterChips, EmptyState, DataTable, KanbanBoard, Badge, Avatar, AvatarStack,
   InlineText, InlineSelect, MemberPicker, ExportMenu, AttachmentList,
@@ -237,16 +238,62 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail, onRestore
   );
 }
 
+function hydrateDealsBoardPrefs(userKey, sharedColumnOrder) {
+  const saved = readDealsBoardPrefs(userKey);
+  // Older boards stored table column order on shared settings — copy once into this user's prefs.
+  if (!saved.projectColumnOrder.length && Array.isArray(sharedColumnOrder) && sharedColumnOrder.length) {
+    saved.projectColumnOrder = sharedColumnOrder.map(String).filter(Boolean);
+  }
+  return saved;
+}
+
 export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
-  const { data, patch, update, updateProject, updateSettings, currentUser, memberName, companyName } = useStore();
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [boardFilter, setBoardFilter] = useState("active");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [viewMode, setViewMode] = useState("pipeline");
-  const [mineOnly, setMineOnly] = useState(false);
-  const [showArchive, setShowArchive] = useState(false);
+  const { data, patch, update, updateProject, currentUser, memberName, companyName } = useStore();
+  const userKey = (currentUser && currentUser.id) || "local";
+  const sharedColumnOrder = data.settings && data.settings.projectColumnOrder;
+  const bootPrefsRef = useRef(null);
+  if (!bootPrefsRef.current) {
+    bootPrefsRef.current = hydrateDealsBoardPrefs(userKey, sharedColumnOrder);
+  }
+  const bootPrefs = bootPrefsRef.current;
+
+  const [typeFilter, setTypeFilter] = useState(bootPrefs.typeFilter);
+  const [boardFilter, setBoardFilter] = useState(bootPrefs.boardFilter);
+  const [priorityFilter, setPriorityFilter] = useState(bootPrefs.priorityFilter);
+  const [viewMode, setViewMode] = useState(bootPrefs.viewMode);
+  const [mineOnly, setMineOnly] = useState(bootPrefs.mineOnly);
+  const [showArchive, setShowArchive] = useState(bootPrefs.showArchive);
+  const [columnOrder, setColumnOrder] = useState(bootPrefs.projectColumnOrder);
+  const [prefsUser, setPrefsUser] = useState(userKey);
   const [dealSearch, setDealSearch] = useState("");
   const query = (dealSearch || searchQuery || "").trim();
+
+  // When the signed-in user changes, reload that person's saved layout.
+  useEffect(() => {
+    if (prefsUser === userKey) return;
+    const saved = hydrateDealsBoardPrefs(userKey, sharedColumnOrder);
+    setTypeFilter(saved.typeFilter);
+    setBoardFilter(saved.boardFilter);
+    setPriorityFilter(saved.priorityFilter);
+    setViewMode(saved.viewMode);
+    setMineOnly(saved.mineOnly);
+    setShowArchive(saved.showArchive);
+    setColumnOrder(saved.projectColumnOrder);
+    setPrefsUser(userKey);
+  }, [userKey, prefsUser, sharedColumnOrder]);
+
+  useEffect(() => {
+    if (prefsUser !== userKey) return;
+    writeDealsBoardPrefs(userKey, {
+      viewMode,
+      boardFilter,
+      typeFilter,
+      priorityFilter,
+      mineOnly,
+      showArchive,
+      projectColumnOrder: columnOrder,
+    });
+  }, [userKey, prefsUser, viewMode, boardFilter, typeFilter, priorityFilter, mineOnly, showArchive, columnOrder]);
 
   const boardOpts = { pipelines: data.pipelines };
   const liveProjects = useMemo(
@@ -433,11 +480,10 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
   ];
 
   // A saved order wins; columns added by a later release append rather than disappear.
-  const savedOrder = data.settings.projectColumnOrder || [];
-  const columns = savedOrder.length
+  const columns = columnOrder.length
     ? [
-        ...savedOrder.map((key) => allColumns.find((c) => c.key === key)).filter(Boolean),
-        ...allColumns.filter((c) => !savedOrder.includes(c.key)),
+        ...columnOrder.map((key) => allColumns.find((c) => c.key === key)).filter(Boolean),
+        ...allColumns.filter((c) => !columnOrder.includes(c.key)),
       ]
     : allColumns;
   const shownColumns = showArchive
@@ -462,7 +508,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     const to = order.indexOf(toKey);
     if (from === -1 || to === -1 || from === to) return;
     order.splice(to, 0, order.splice(from, 1)[0]);
-    updateSettings({ projectColumnOrder: order });
+    setColumnOrder(order);
   };
 
   return (
