@@ -255,6 +255,29 @@ export function dealsReadyToArchive(projects, options) {
   return (projects || []).filter((project) => archiveReasonFor(project, options));
 }
 
+/** Live-board buckets for deal filters. Archived deals live under the Archive toggle. */
+export const DEAL_BOARD_FILTERS = [
+  { key: "active", label: "Active" },
+  { key: "lost", label: "Lost / Passed" },
+  { key: "stalled", label: "Stalled" },
+  { key: "all", label: "All open" },
+];
+
+export function dealBoardBucket(project, { pipelines, now = Date.now(), stallDays = DEAL_STALL_DAYS } = {}) {
+  if (!project || isArchivedProject(project)) return "archived";
+  if (isLostOrPassedDeal(project, pipelines)) return "lost";
+  if (archiveReasonFor(project, { pipelines, now, stallDays }) === "stalled") return "stalled";
+  return "active";
+}
+
+/** True when a pipeline column is a Lost / Passed stage (by key or label). */
+export function isLostOrPassedColumn(column) {
+  if (!column) return false;
+  const key = String(column.key || "").toLowerCase();
+  if (key === "lost" || key === "passed") return true;
+  return /\blost\b|\bpassed\b/.test(String(column.label || "").toLowerCase());
+}
+
 /**
  * A conversation that is not a deal yet. It stays here until someone passes on it
  * or opens a deal from it.

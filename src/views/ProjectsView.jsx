@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { LayoutGrid, Table as TableIcon, Image as ImageIcon, Plus, Star, Archive, ArchiveRestore } from "lucide-react";
+import { LayoutGrid, Table as TableIcon, Image as ImageIcon, Plus, Star, Archive, ArchiveRestore, Search, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import {
   RECORD_TYPES, recordTypeInfo, STAGES, stageInfo, PRIORITIES,
   PAYMENT_STATUSES, lookupLabel, lookupColor,
   projectOwnerIds, withProjectOwners, isOnProject,
   isArchivedProject, ARCHIVE_REASON_LABELS, archiveChange, restoreChange, dealsReadyToArchive,
+  DEAL_BOARD_FILTERS, dealBoardBucket, isLostOrPassedColumn, isLostOrPassedDeal,
 } from "../lib/model";
 import { formatShort, uid } from "../lib/format";
 import {
@@ -38,7 +39,7 @@ function purge(row, item) {
   return purgeAttachment(row, item).then((attachments) => ({ attachments }));
 }
 
-function ProjectCard({ project, onOpen, onRestore, memberName, companyName }) {
+function ProjectCard({ project, onOpen, onRestore, onArchive, memberName, companyName }) {
   const { update } = useStore();
   const type = recordTypeInfo(project.recordType);
   const image = imageSrc(project);
@@ -101,22 +102,40 @@ function ProjectCard({ project, onOpen, onRestore, memberName, companyName }) {
         {!files.length && (
           <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 5 }}>Deck, one-sheet, treatment, budget.</div>
         )}
-        {onRestore && (
-          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, marginTop: 8 }}
-            onClick={() => onRestore(project)}>
-            <ArchiveRestore size={12} /> Restore
-          </button>
+        {(onRestore || onArchive) && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {onArchive && (
+              <button className="md-btn md-btn-ghost" style={{ fontSize: 11 }}
+                onClick={() => onArchive(project)}>
+                <Archive size={12} /> Archive
+              </button>
+            )}
+            {onRestore && (
+              <button className="md-btn md-btn-ghost" style={{ fontSize: 11 }}
+                onClick={() => onRestore(project)}>
+                <ArchiveRestore size={12} /> Restore
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function GalleryGrid({ projects, onOpen, onRestore, memberName, companyName }) {
+function GalleryGrid({ projects, onOpen, onRestore, onArchive, memberName, companyName }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(248px, 1fr))", gap: 16 }}>
       {projects.map((p) => (
-        <ProjectCard key={p.id} project={p} onOpen={() => onOpen(p)} onRestore={onRestore} memberName={memberName} companyName={companyName} />
+        <ProjectCard
+          key={p.id}
+          project={p}
+          onOpen={() => onOpen(p)}
+          onRestore={onRestore}
+          onArchive={onArchive}
+          memberName={memberName}
+          companyName={companyName}
+        />
       ))}
     </div>
   );
@@ -127,7 +146,7 @@ function GalleryGrid({ projects, onOpen, onRestore, memberName, companyName }) {
  * One editable pipeline per record type. Each type keeps its own columns, so
  * "All Types" stacks the boards rather than hiding work behind a filter.
  */
-function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail, onRestore }) {
+function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail, onRestore, onArchive }) {
   const { data, patch, update, updateProject, memberName, companyName } = useStore();
   const type = recordTypeInfo(typeKey);
   const pipeline = data.pipelines[typeKey] || [];
@@ -167,9 +186,19 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail, onRestore
 
   const move = (projectId, stageKey) => {
     const project = data.projects.find((p) => p.id === projectId);
-    const label = (pipeline.find((c) => c.key === stageKey) || {}).label || stageKey;
+    const column = pipeline.find((c) => c.key === stageKey);
+    const label = (column || {}).label || stageKey;
     if (!project || project.pipelineStage === stageKey) return;
-    updateProject(projectId, { pipelineStage: stageKey }, `Moved to ${label}`);
+    const preview = { ...project, pipelineStage: stageKey };
+    const patchFields = { pipelineStage: stageKey };
+    let note = `Moved to ${label}`;
+    // Lost / Passed leaves the active board by archiving in the same write.
+    if (isLostOrPassedDeal(preview, data.pipelines) || isLostOrPassedColumn(column)) {
+      const change = archiveChange(preview, { pipelines: data.pipelines });
+      Object.assign(patchFields, change.patch);
+      note = change.note;
+    }
+    updateProject(projectId, patchFields, note);
   };
 
   return (
@@ -194,7 +223,14 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail, onRestore
         onReorderColumns={reorderColumns}
         emptyHint="Drag a deal here"
         renderCard={(p) => (
-          <ProjectCard project={p} onOpen={() => onOpenDetail(p)} onRestore={onRestore} memberName={memberName} companyName={companyName} />
+          <ProjectCard
+            project={p}
+            onOpen={() => onOpenDetail(p)}
+            onRestore={onRestore}
+            onArchive={onArchive}
+            memberName={memberName}
+            companyName={companyName}
+          />
         )}
       />
     </div>
@@ -204,18 +240,35 @@ function PipelineBoard({ typeKey, projects, showHeading, onOpenDetail, onRestore
 export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
   const { data, patch, update, updateProject, updateSettings, currentUser, memberName, companyName } = useStore();
   const [typeFilter, setTypeFilter] = useState("all");
+  const [boardFilter, setBoardFilter] = useState("active");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [viewMode, setViewMode] = useState("pipeline");
   const [mineOnly, setMineOnly] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [dealSearch, setDealSearch] = useState("");
+  const query = (dealSearch || searchQuery || "").trim();
 
+  const boardOpts = { pipelines: data.pipelines };
+  const liveProjects = useMemo(
+    () => data.projects.filter((p) => !isArchivedProject(p)),
+    [data.projects]
+  );
   const readyToArchive = useMemo(
-    () => dealsReadyToArchive(data.projects, { pipelines: data.pipelines }),
+    () => dealsReadyToArchive(data.projects, boardOpts),
     [data.projects, data.pipelines]
   );
   const archivedCount = data.projects.filter(isArchivedProject).length;
+  const boardCounts = useMemo(() => {
+    const counts = { active: 0, lost: 0, stalled: 0, all: liveProjects.length };
+    liveProjects.forEach((p) => {
+      const bucket = dealBoardBucket(p, boardOpts);
+      if (counts[bucket] != null) counts[bucket] += 1;
+    });
+    return counts;
+  }, [liveProjects, data.pipelines]);
 
   const archiveOne = (project) => {
-    const change = archiveChange(project, { pipelines: data.pipelines });
+    const change = archiveChange(project, boardOpts);
     updateProject(project.id, change.patch, change.note);
   };
 
@@ -232,16 +285,40 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     readyToArchive.forEach(archiveOne);
   };
 
+  const movePipelineStage = (projectId, stageKey) => {
+    const project = data.projects.find((p) => p.id === projectId);
+    if (!project || project.pipelineStage === stageKey) return;
+    const columns = data.pipelines[project.recordType] || [];
+    const column = columns.find((c) => c.key === stageKey);
+    const label = (column || {}).label || stageKey;
+    const preview = { ...project, pipelineStage: stageKey };
+    const patchFields = { pipelineStage: stageKey };
+    let note = `Moved to ${label}`;
+    if (isLostOrPassedDeal(preview, data.pipelines) || isLostOrPassedColumn(column)) {
+      const change = archiveChange(preview, boardOpts);
+      Object.assign(patchFields, change.patch);
+      note = change.note;
+    }
+    updateProject(projectId, patchFields, note);
+  };
+
   const projects = useMemo(() => {
     let list = data.projects.filter((p) => (showArchive ? isArchivedProject(p) : !isArchivedProject(p)));
+    if (!showArchive && boardFilter !== "all") {
+      list = list.filter((p) => dealBoardBucket(p, boardOpts) === boardFilter);
+    }
     if (typeFilter !== "all") list = list.filter((p) => p.recordType === typeFilter);
+    if (priorityFilter !== "all") list = list.filter((p) => (p.priority || "MEDIUM") === priorityFilter);
     if (mineOnly) list = list.filter((p) => isMine(p, currentUser && currentUser.id));
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
+    if (query) {
+      const q = query.toLowerCase();
       list = list.filter((p) =>
         p.title.toLowerCase().includes(q) ||
         (p.description || "").toLowerCase().includes(q) ||
         (p.nextStep || "").toLowerCase().includes(q) ||
+        (p.budget || "").toLowerCase().includes(q) ||
+        (p.studio || "").toLowerCase().includes(q) ||
+        companyName(p.companyId).toLowerCase().includes(q) ||
         memberName(p.ownerId).toLowerCase().includes(q) ||
         projectOwnerIds(p).some((id) => memberName(id).toLowerCase().includes(q)) ||
         (p.contactName || "").toLowerCase().includes(q) ||
@@ -250,7 +327,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         listAttachments(p).some((a) => (a.fileName || "").toLowerCase().includes(q)));
     }
     return list;
-  }, [data.projects, typeFilter, mineOnly, searchQuery, currentUser, memberName, showArchive]);
+  }, [data.projects, data.pipelines, typeFilter, boardFilter, priorityFilter, mineOnly, query, currentUser, memberName, companyName, showArchive]);
 
   const moveToStage = (projectId, stageKey) => {
     const project = data.projects.find((p) => p.id === projectId);
@@ -258,10 +335,25 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     updateProject(projectId, { stage: stageKey }, `Moved to ${stageInfo(stageKey).label}`);
   };
 
+  const scopedForCounts = showArchive
+    ? data.projects.filter(isArchivedProject)
+    : liveProjects.filter((p) => boardFilter === "all" || dealBoardBucket(p, boardOpts) === boardFilter);
+
   const typeOptions = RECORD_TYPES.map((t) => ({
     key: t.key, label: t.short, color: t.color,
-    count: data.projects.filter((p) => p.recordType === t.key && (showArchive ? isArchivedProject(p) : !isArchivedProject(p))).length,
+    count: scopedForCounts.filter((p) => p.recordType === t.key).length,
   }));
+  const boardFilterOptions = DEAL_BOARD_FILTERS.map((f) => ({
+    ...f,
+    count: boardCounts[f.key] || 0,
+  }));
+  const priorityOptions = PRIORITIES.map((key) => ({
+    key,
+    label: key,
+    color: key === "HIGH" ? "var(--red)" : key === "LOW" ? "var(--dim)" : undefined,
+    count: scopedForCounts.filter((p) => (p.priority || "MEDIUM") === key).length,
+  }));
+  const canArchiveCards = !showArchive && (boardFilter === "lost" || boardFilter === "stalled");
 
   const modeButton = (mode, Icon, title) => (
     <button className="md-btn md-btn-ghost" onClick={() => setViewMode(mode)} title={title}
@@ -285,7 +377,7 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     { key: "pipeline", label: "PIPELINE", stopClick: true, render: (p) => (
       <InlineSelect value={p.pipelineStage} options={data.pipelines[p.recordType] || []}
         color={lookupColor(data.pipelines[p.recordType] || [], p.pipelineStage)}
-        onCommit={(v) => updateProject(p.id, { pipelineStage: v }, `Moved to ${lookupLabel(data.pipelines[p.recordType] || [], v)}`)} />
+        onCommit={(v) => movePipelineStage(p.id, v)} />
     ) },
     { key: "stage", label: "PRODUCTION STAGE", stopClick: true, render: (p) => (
       <InlineSelect value={p.stage} options={STAGES} color={stageInfo(p.stage).color} onCommit={(v) => moveToStage(p.id, v)} />
@@ -377,7 +469,9 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
     <div>
       <ViewHeader
         count={projects.length}
-        label={showArchive ? `ARCHIVED DEAL${projects.length === 1 ? "" : "S"}` : `DEAL${projects.length === 1 ? "" : "S"}${mineOnly ? " ASSIGNED TO ME" : ""}`}
+        label={showArchive
+          ? `ARCHIVED DEAL${projects.length === 1 ? "" : "S"}`
+          : `DEAL${projects.length === 1 ? "" : "S"}${mineOnly ? " ASSIGNED TO ME" : ""}`}
       >
         <button className="md-chip" onClick={() => setMineOnly((m) => !m)}
           style={mineOnly ? { background: "var(--accent)", borderColor: "var(--accent)", color: "var(--ink)" } : undefined}>
@@ -401,28 +495,87 @@ export default function ProjectsView({ searchQuery, onOpenDetail, onOpenNew }) {
         <button className="md-btn md-btn-primary" onClick={onOpenNew}><Plus size={14} /> New Deal</button>
       </ViewHeader>
 
-      <div style={{ marginBottom: 18 }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        marginBottom: 14,
+        padding: "10px 12px",
+        border: "1px solid var(--rule)",
+        borderRadius: 10,
+        background: "var(--panel)",
+      }}>
+        <Search size={15} color="var(--dim)" style={{ flexShrink: 0 }} />
+        <input
+          className="md-input"
+          style={{ flex: 1, border: "none", background: "transparent", padding: 0, boxShadow: "none" }}
+          value={dealSearch}
+          onChange={(e) => setDealSearch(e.target.value)}
+          placeholder="Search deals by title, company, contact, budget, next step…"
+          aria-label="Search deals"
+        />
+        {dealSearch ? (
+          <button type="button" className="md-btn md-btn-ghost" style={{ padding: "4px 6px" }} onClick={() => setDealSearch("")} title="Clear search">
+            <X size={14} />
+          </button>
+        ) : null}
+      </div>
+
+      {!showArchive && (
+        <div style={{ marginBottom: 12 }}>
+          <FilterChips options={boardFilterOptions} value={boardFilter} onChange={setBoardFilter} allLabel={null} />
+        </div>
+      )}
+      <div style={{ marginBottom: 12 }}>
         <FilterChips options={typeOptions} value={typeFilter} onChange={setTypeFilter} allLabel="All Types" />
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <FilterChips options={priorityOptions} value={priorityFilter} onChange={setPriorityFilter} allLabel="All priorities" />
       </div>
 
       {projects.length === 0 ? (
         <EmptyState
-          title={showArchive ? "Nothing in the archive" : mineOnly ? "Nothing assigned to you yet" : "No deals match this filter"}
+          title={showArchive
+            ? "Nothing in the archive"
+            : mineOnly
+              ? "Nothing assigned to you yet"
+              : boardFilter === "lost"
+                ? "No lost or passed deals"
+                : boardFilter === "stalled"
+                  ? "No stalled deals"
+                  : "No deals match this filter"}
           subtitle={showArchive
-            ? "Lost, passed, and stalled deals can be archived from the board. Restoring one puts it back."
+            ? "Lost, passed, and stalled deals land here. Restoring one puts it back on the board."
             : mineOnly
               ? "Deals where you are the owner or a team member land here."
-              : "Change the type filter, clear your search, or add a deal."}
+              : boardFilter === "active"
+                ? "Active hides lost and passed deals. Switch filters, clear search, or add a deal."
+                : "Change the filters, clear your search, or add a deal."}
         />
       ) : viewMode === "table" ? (
         <DataTable columns={shownColumns} rows={projects} onRowClick={onOpenDetail} onReorderColumns={showArchive ? undefined : reorderTableColumns} hideExport />
       ) : viewMode === "gallery" ? (
-        <GalleryGrid projects={projects} onOpen={onOpenDetail} onRestore={showArchive ? restoreOne : undefined} memberName={memberName} companyName={companyName} />
+        <GalleryGrid
+          projects={projects}
+          onOpen={onOpenDetail}
+          onRestore={showArchive ? restoreOne : undefined}
+          onArchive={canArchiveCards ? archiveOne : undefined}
+          memberName={memberName}
+          companyName={companyName}
+        />
       ) : (
         (typeFilter === "all" ? RECORD_TYPES.map((t) => t.key) : [typeFilter])
           .filter((key) => typeFilter !== "all" || projects.some((p) => p.recordType === key))
           .map((key) => (
-            <PipelineBoard key={key} typeKey={key} projects={projects} showHeading={typeFilter === "all"} onOpenDetail={onOpenDetail} onRestore={showArchive ? restoreOne : undefined} />
+            <PipelineBoard
+              key={key}
+              typeKey={key}
+              projects={projects}
+              showHeading={typeFilter === "all"}
+              onOpenDetail={onOpenDetail}
+              onRestore={showArchive ? restoreOne : undefined}
+              onArchive={canArchiveCards ? archiveOne : undefined}
+            />
           ))
       )}
     </div>

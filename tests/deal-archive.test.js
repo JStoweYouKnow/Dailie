@@ -8,6 +8,8 @@ import {
   dealsReadyToArchive,
   isArchivedProject,
   isLostOrPassedDeal,
+  dealBoardBucket,
+  isLostOrPassedColumn,
 } from "../src/lib/model.js";
 import { isOpenDeal } from "../src/lib/dealMail.js";
 import { DAY } from "../src/lib/format.js";
@@ -75,4 +77,13 @@ test("only the stalled and lost deals are in the bulk set", () => {
     deal({ id: "done", pipelineStage: "delivered", updatedAt: NOW - 90 * DAY }),
   ];
   assert.deepEqual(dealsReadyToArchive(projects, { pipelines, now: NOW }).map((p) => p.id), ["lost", "quiet"]);
+});
+
+test("deal board buckets separate active, lost, and stalled", () => {
+  assert.equal(dealBoardBucket(deal({ pipelineStage: "pitch", updatedAt: NOW }), { pipelines, now: NOW }), "active");
+  assert.equal(dealBoardBucket(deal({ pipelineStage: "lost" }), { pipelines, now: NOW }), "lost");
+  assert.equal(dealBoardBucket(deal({ updatedAt: NOW - 90 * DAY }), { pipelines, now: NOW }), "stalled");
+  assert.equal(dealBoardBucket(deal({ archivedAt: NOW }), { pipelines, now: NOW }), "archived");
+  assert.equal(isLostOrPassedColumn({ key: "lost", label: "Lost / Passed" }), true);
+  assert.equal(isLostOrPassedColumn({ key: "pitch", label: "In Pitch" }), false);
 });
