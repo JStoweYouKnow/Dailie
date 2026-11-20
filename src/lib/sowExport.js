@@ -1,6 +1,6 @@
 /**
- * Statement of Work PDF and Word export. Shares one content model so both
- * formats stay in sync with what the wizard preview shows.
+ * Statement of Work PDF and Word export. Matches the official Matriarch labeled
+ * SOW layout: party preamble, then editable labeled sections, then a USD note.
  */
 
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
@@ -86,21 +86,11 @@ function pdfObjects(parts) {
   return chunks.join("");
 }
 
-function headerLines(payload) {
-  const lines = [];
-  if (payload.studioName) {
-    lines.push(`Provider: ${payload.studioName} ("Matriarch")`);
-  }
-  if (payload.clientName) {
-    lines.push(`Client: ${payload.clientName} ("Client")`);
-  }
-  if (payload.contactLine) lines.push(`Primary contact: ${payload.contactLine}`);
-  if (payload.projectTitle) lines.push(`Project: ${payload.projectTitle}`);
-  if (payload.value) lines.push(`Total approved budget: ${payload.value}`);
-  if (payload.ownershipLabel) {
-    lines.push(`Ownership model: [${payload.ownershipModel ? payload.ownershipLabel : "Client-Owned Production / Studio-Owned Production"}]`);
-  }
-  return lines;
+function partyPreamble(payload) {
+  return [
+    payload.studioParty,
+    payload.clientParty,
+  ].filter(Boolean);
 }
 
 /** Build a letter-sized PDF string for a Statement of Work. */
@@ -111,7 +101,6 @@ export function sowToPdf(draft) {
   const margin = 54;
   const usable = pageW - margin * 2;
   const maxChars = Math.max(40, Math.floor(usable / 5.2));
-  const lineH = 13;
   const stamped = new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 
   const pages = [];
@@ -147,16 +136,24 @@ export function sowToPdf(draft) {
     page.y -= gapAfter;
   };
 
-  writeLines("/F2", 18, wrapLines(payload.title, Math.floor(maxChars * 0.7)), 10);
-  writeLines("/F1", 10, headerLines(payload).flatMap((line) => wrapLines(line, maxChars)), 14);
+  writeLines("/F2", 16, wrapLines(payload.title, Math.floor(maxChars * 0.8)), 8);
+  writeLines("/F1", 10, partyPreamble(payload).flatMap((line) => wrapLines(line, maxChars)), 12);
 
-  payload.sections.forEach((section, index) => {
-    const heading = `${index + 1}. ${section.title}`;
+  payload.sections.forEach((section) => {
+    if (section.key === "signatures") {
+      ensureSpace(40);
+      writeLines("/F2", 11, wrapLines(section.title, maxChars), 4);
+      writeLines("/F1", 10, wrapLines(section.body || " ", maxChars), 12);
+      return;
+    }
     ensureSpace(40);
-    writeLines("/F2", 12, wrapLines(heading, maxChars), 4);
-    const bodyLines = wrapLines(section.body || " ", maxChars);
-    writeLines("/F1", 10, bodyLines, 12);
+    writeLines("/F2", 11, wrapLines(section.title, maxChars), 2);
+    writeLines("/F1", 10, wrapLines(section.body || " ", maxChars), 10);
   });
+
+  if (payload.footerNote) {
+    writeLines("/F1", 9, wrapLines(payload.footerNote, maxChars), 4);
+  }
 
   const fontRegular = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
   const fontBold = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
@@ -176,10 +173,10 @@ export function sowToPdf(draft) {
 
 function bodyParagraphs(text) {
   const parts = String(text || "").split(/\n/);
-  if (!parts.length) return [new Paragraph({ children: [new TextRun({ text: " ", font: "Calibri", size: 22 })] })];
+  if (!parts.length) return [new Paragraph({ children: [new TextRun({ text: " ", font: "Times New Roman", size: 22 })] })];
   return parts.map((line) => new Paragraph({
-    spacing: { after: 120 },
-    children: [new TextRun({ text: line || " ", font: "Calibri", size: 22 })],
+    spacing: { after: 80 },
+    children: [new TextRun({ text: line || " ", font: "Times New Roman", size: 22 })],
   }));
 }
 
@@ -189,45 +186,47 @@ export async function sowToDocx(draft) {
   const children = [
     new Paragraph({
       heading: HeadingLevel.TITLE,
-      spacing: { after: 200 },
-      children: [new TextRun({ text: payload.title, bold: true, font: "Calibri", size: 36 })],
+      spacing: { after: 160 },
+      children: [new TextRun({ text: payload.title, bold: true, font: "Times New Roman", size: 32 })],
     }),
   ];
 
-  headerLines(payload).forEach((line) => {
+  partyPreamble(payload).forEach((line) => {
     children.push(new Paragraph({
       spacing: { after: 60 },
-      children: [new TextRun({ text: line, font: "Calibri", size: 20, color: "555555" })],
+      children: [new TextRun({ text: line, font: "Times New Roman", size: 20 })],
     }));
   });
 
-  children.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
+  children.push(new Paragraph({ spacing: { after: 160 }, children: [] }));
 
-  payload.sections.forEach((section, index) => {
+  payload.sections.forEach((section) => {
     children.push(new Paragraph({
-      heading: HeadingLevel.HEADING_1,
-      spacing: { before: 240, after: 120 },
+      spacing: { before: 180, after: 60 },
       children: [new TextRun({
-        text: `${index + 1}. ${section.title}`,
+        text: section.title,
         bold: true,
-        font: "Calibri",
-        size: 26,
+        font: "Times New Roman",
+        size: 22,
       })],
     }));
     bodyParagraphs(section.body).forEach((p) => children.push(p));
   });
 
+  if (payload.footerNote) {
+    children.push(new Paragraph({
+      spacing: { before: 200 },
+      children: [new TextRun({ text: payload.footerNote, italics: true, font: "Times New Roman", size: 18 })],
+    }));
+  }
+
   const doc = new Document({
     styles: {
       default: {
-        document: { run: { font: "Calibri", size: 22 } },
+        document: { run: { font: "Times New Roman", size: 22 } },
         title: {
-          run: { font: "Calibri", size: 36, bold: true },
-          paragraph: { spacing: { before: 0, after: 200 }, keepNext: true },
-        },
-        heading1: {
-          run: { font: "Calibri", size: 26, bold: true },
-          paragraph: { spacing: { before: 240, after: 120 }, keepNext: true },
+          run: { font: "Times New Roman", size: 32, bold: true },
+          paragraph: { spacing: { before: 0, after: 160 }, keepNext: true },
         },
       },
     },
@@ -235,7 +234,7 @@ export async function sowToDocx(draft) {
       properties: {
         page: {
           size: { width: 12240, height: 15840 },
-          margin: { top: 1080, right: 1080, bottom: 1080, left: 1080 },
+          margin: { top: 1008, right: 1008, bottom: 1008, left: 1008 },
         },
       },
       children,
@@ -249,14 +248,14 @@ export function downloadSowPdf(draft) {
   const payload = sowExportPayload(draft);
   const pdf = sowToPdf(draft);
   const blob = new Blob([pdf], { type: "application/pdf" });
-  downloadBlob(exportFilename(payload.title, "pdf"), blob);
+  downloadBlob(exportFilename(payload.projectTitle || payload.title, "pdf"), blob);
   return blob;
 }
 
 export async function downloadSowDocx(draft) {
   const payload = sowExportPayload(draft);
   const blob = await sowToDocx(draft);
-  downloadBlob(exportFilename(payload.title, "docx"), blob);
+  downloadBlob(exportFilename(payload.projectTitle || payload.title, "docx"), blob);
   return blob;
 }
 
@@ -264,6 +263,6 @@ export async function downloadSowDocx(draft) {
 export function sowPdfFile(draft) {
   const payload = sowExportPayload(draft);
   const pdf = sowToPdf(draft);
-  const name = exportFilename(payload.title, "pdf");
+  const name = exportFilename(payload.projectTitle || payload.title, "pdf");
   return new File([pdf], name, { type: "application/pdf" });
 }

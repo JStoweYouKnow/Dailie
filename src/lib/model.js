@@ -634,18 +634,27 @@ export function resolvedContractKind(contract) {
 }
 
 /** Default Statement of Work sections. Bodies are generated from structured wizard answers. */
+/**
+ * Official Matriarch SOW layout: labeled rows (not numbered chapters). Sections can
+ * be removed or rewritten in the wizard before export.
+ */
 export const DEFAULT_SOW_SECTION_DEFS = [
-  { key: "parties", title: "Parties" },
-  { key: "scope", title: "Project and Scope of Work" },
-  { key: "ownership", title: "Ownership and Rights" },
-  { key: "deliverables", title: "Final Deliverables" },
-  { key: "clientMaterials", title: "Client Materials" },
-  { key: "timeline", title: "Timeline, Approvals and Revisions" },
-  { key: "fees", title: "Budget, Fees and Payment" },
-  { key: "production", title: "Production Terms" },
-  { key: "acceptance", title: "Acceptance" },
-  { key: "special", title: "Special Terms" },
-  { key: "terms", title: "Terms and Conditions" },
+  { key: "effectiveDate", title: "Effective Date" },
+  { key: "project", title: "Project" },
+  { key: "deliverables", title: "Deliverables / Delivery Dates & Approvals" },
+  { key: "representatives", title: "Representatives" },
+  { key: "social", title: "Social Media Posting" },
+  { key: "nonUnion", title: "Non-Union" },
+  { key: "fees", title: "Fee & Payment Schedule" },
+  { key: "killFee", title: "Kill Fee" },
+  { key: "rights", title: "Rights" },
+  { key: "aiCredits", title: "AI Tool Credits / Expenses" },
+  { key: "credit", title: "Credit" },
+  { key: "exclusivity", title: "Exclusivity" },
+  { key: "governingLaw", title: "Governing Law & Dispute Resolution" },
+  { key: "indemnification", title: "Indemnification" },
+  { key: "notices", title: "Notices" },
+  { key: "miscellaneous", title: "Miscellaneous" },
   { key: "signatures", title: "Signatures" },
 ];
 
@@ -654,6 +663,27 @@ export const SOW_OWNERSHIP_MODELS = [
   { key: "studioOwned", label: "Studio-Owned Production" },
 ];
 
+export const SOW_FEEDBACK_WINDOWS = [
+  { key: "1", label: "one (1) business day" },
+  { key: "2", label: "two (2) business days" },
+  { key: "3", label: "three (3) business days" },
+  { key: "5", label: "five (5) business days" },
+];
+
+export const SOW_REVISION_ROUNDS = [
+  { key: "1", label: "one (1) set of revisions" },
+  { key: "2", label: "two (2) sets of revisions" },
+  { key: "3", label: "three (3) sets of revisions" },
+];
+
+export const SOW_CREDIT_OPTIONS = [
+  { key: "aMatriarch", label: '"A Matriarch Production"' },
+  { key: "producedBy", label: '"Produced by Matriarch"' },
+  { key: "none", label: "No credit required" },
+  { key: "custom", label: "Custom" },
+];
+
+/** Kept for deal-memo reuse / older drafts. */
 export const SOW_FORMATS = [
   { key: "spot", label: "Spot" },
   { key: "shortFilm", label: "Short film" },
@@ -661,67 +691,51 @@ export const SOW_FORMATS = [
   { key: "feature", label: "Feature" },
   { key: "other", label: "Other" },
 ];
-
 export const SOW_PRODUCTION_METHODS = [
   { key: "liveAction", label: "Live action" },
   { key: "aiGenerated", label: "AI-generated" },
   { key: "hybrid", label: "Hybrid" },
 ];
-
 export const SOW_AI_TOOLS_OPTIONS = [
   { key: "matriarchChoice", label: "Matriarch's choice" },
   { key: "custom", label: "Custom list" },
 ];
-
 export const SOW_DELIVERY_METHODS = [
   { key: "fileTransfer", label: "File transfer service" },
   { key: "drive", label: "Drive" },
   { key: "platform", label: "Platform" },
   { key: "other", label: "Other" },
 ];
-
-export const SOW_FEEDBACK_WINDOWS = [
-  { key: "1", label: "One (1) Business Day" },
-  { key: "2", label: "Two (2) Business Days" },
-  { key: "3", label: "Three (3) Business Days" },
-  { key: "5", label: "Five (5) Business Days" },
-];
-
-export const SOW_REVISION_ROUNDS = [
-  { key: "1", label: "One (1) round" },
-  { key: "2", label: "Two (2) rounds" },
-  { key: "3", label: "Three (3) rounds" },
-];
-
 export const SOW_TALENT_OPTIONS = [
   { key: "nonUnion", label: "Non-union" },
   { key: "sagAftra", label: "SAG-AFTRA" },
   { key: "other", label: "Other / to be confirmed" },
 ];
-
-export const SOW_CREDIT_OPTIONS = [
-  { key: "producedBy", label: "Produced by Matriarch" },
-  { key: "aMatriarch", label: "A Matriarch Production" },
-  { key: "none", label: "No credit required" },
-  { key: "custom", label: "Custom" },
-];
-
 export const SOW_PORTFOLIO_OPTIONS = [
   { key: "standard", label: "Standard portfolio use" },
   { key: "restricted", label: "Restricted" },
   { key: "none", label: "No portfolio use" },
 ];
-
 export const SOW_WEATHER_OPTIONS = [
   { key: "actual", label: "Actual cost" },
   { key: "custom", label: "Custom rate" },
 ];
 
 export const DEFAULT_SOW_STUDIO_NAME = "Matriarch Studios, LLC";
+export const DEFAULT_SOW_STUDIO_ENTITY = "a Delaware limited liability company";
+export const DEFAULT_SOW_STUDIO_NOTICE = [
+  "c/o Goodman Genow Schenkman Smelkinson & Christopher LLP",
+  "9665 Wilshire Blvd., 5th Floor",
+  "Beverly Hills, CA 90212",
+  "Attn: Al-Jerometta Chede-Aghedo, Esq. (achede@ggssc.com).",
+].join("\n");
+
+export const DEFAULT_SOW_TITLE = 'Statement of Work ("SOW")';
 
 export function makeSowSection(fields = {}) {
   return {
     id: fields.id || uid(),
+    key: String(fields.key || "").trim(),
     title: String(fields.title || "Section").trim() || "Section",
     body: String(fields.body || "").trim(),
   };
@@ -735,7 +749,7 @@ function formatSowDate(ts) {
   if (!ts) return "";
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
 function ownershipModelLabel(key) {
@@ -764,21 +778,16 @@ function defaultOwnershipFromProject(project) {
   return "";
 }
 
-function defaultFormatFromProject(project) {
-  if (!project) return "";
-  if (project.recordType === "keynotePresentation") return "other";
-  if (project.recordType === "eventsProduction") return "other";
-  return "";
-}
-
 export function makeSowDeliverable(fields = {}) {
   return {
     id: fields.id || uid(),
     name: String(fields.name || "").trim(),
+    dueDate: String(fields.dueDate || "").trim(),
     specs: String(fields.specs || "").trim(),
   };
 }
 
+/** @deprecated Kept so older saved drafts still normalize cleanly. */
 export function makeSowClientMaterial(fields = {}) {
   return {
     id: fields.id || uid(),
@@ -788,284 +797,222 @@ export function makeSowClientMaterial(fields = {}) {
   };
 }
 
+const DEFAULT_SOCIAL_POSTING = "The parties will coordinate the launch. Matriarch will post once on its own social channels and complete the in-product publishing actions reasonably needed for Client placements and distribution.";
+const DEFAULT_NON_UNION = "The parties acknowledge that Matriarch's services hereunder are outside the jurisdiction of any union.";
+const DEFAULT_KILL_FEE = "If Client cancels for any reason other than Matriarch's uncured material breach before delivery of rough cut, the initial payment is non-refundable; if after delivery of the rough cut, the remainder of the Fee is due. On cancellation, all rights remain with Matriarch and no license takes effect.";
+const DEFAULT_EXCLUSIVITY = "Non-exclusive, no material interference.";
+const DEFAULT_GOVERNING_LAW = "This SOW and the Agreement shall be governed by the laws of the State of California applicable to agreements executed and to be performed entirely therein. The parties agree that any and all disputes or controversies between the parties shall be determined by confidential binding arbitration in accordance with the rules of JAMS before a single neutral arbitrator with experience in the entertainment industry and held in Los Angeles, California and will be the exclusive forum for any disputes arising out of this SOW and/or the Agreement (and the parties consent to such personal jurisdiction/venue). In the event of any adjudicated action or proceeding arising hereunder, the prevailing party shall be entitled to recover its reasonable outside attorneys' fees and costs.";
+const DEFAULT_INDEMNIFICATION = "Client shall defend, indemnify and hold harmless Matriarch and its members, officers, employees and contractors from and against any and all third-party claims, liabilities, damages, costs and expenses (including reasonable outside attorneys' fees) arising out of: (i) Client's breach of this SOW or the Agreement; (ii) any materials provided by Client; (iii) Client's platform and tools (including any claim that the same infringe any third-party rights); and (iv) Client's use, modification or exploitation of the Deliverables.";
+const DEFAULT_MISCELLANEOUS = 'The parties may negotiate in good faith a long-form agreement ("Agreement") incorporating the terms herein, as well as such other terms as are customary contained in agreements of this type (e.g., technical specs, delivery methods, force majeure, breach and cure right, etc.). Until such time as the Agreement is fully executed (if ever), the terms of this SOW shall control.';
+
 export function emptySowAnswers(overrides = {}) {
   return {
-    clientEntityType: "",
-    clientState: "",
-    studioRepName: "",
-    studioRepTitle: "",
-    studioEmail: "",
-    studioPhone: "",
-    scope: "",
-    format: "",
-    formatDetail: "",
-    productionMethod: "",
-    aiTools: "matriarchChoice",
-    aiToolsCustom: "",
-    outOfScope: "",
-    licenseMedia: "",
-    licenseTerritory: "",
-    licenseTerm: "",
-    licenseExclusivity: "",
-    licenseSponsorship: "",
-    thirdPartyMaterials: "",
+    studioEntityDetail: DEFAULT_SOW_STUDIO_ENTITY,
+    clientEntityDetail: "",
+    clientShortName: "",
+    effectiveDate: "",
+    studioReps: "",
+    clientReps: "",
     deliverables: [makeSowDeliverable(), makeSowDeliverable(), makeSowDeliverable()],
-    deliveryMethod: "fileTransfer",
-    deliveryMethodOther: "",
-    clientMaterials: [
-      makeSowClientMaterial({ material: "Logos, brand guidelines" }),
-      makeSowClientMaterial({ material: "Product, footage, talent" }),
-    ],
-    feedbackWindow: "3",
-    revisionRounds: "2",
-    productionFee: "",
-    thirdPartyCosts: "",
-    contingencyPct: "10",
-    contingencyAmount: "",
-    thirdPartyMarkupPct: "",
-    weatherBilling: "actual",
-    weatherRateCustom: "",
-    keyPersonnel: "",
-    talentStatus: "nonUnion",
-    talentNotes: "",
-    insurance: "",
-    credit: "producedBy",
+    feedbackWindow: "2",
+    revisionRounds: "1",
+    approvalsExtra: "",
+    socialMediaPosting: DEFAULT_SOCIAL_POSTING,
+    nonUnion: DEFAULT_NON_UNION,
+    feeAmount: "",
+    depositPct: "75",
+    finalPct: "25",
+    paymentNotes: "bank/wire receipt fees (if any) and any required foreign taxes (e.g., HST, VAT, GST, etc.) shall be borne by Client.",
+    killFee: DEFAULT_KILL_FEE,
+    licenseMedia: "Client's website, in-product placements, official social channels, paid media, case studies, product demos, and non-commercial showcases",
+    licenseTerritory: "worldwide",
+    licenseTerm: "3 years from first public release to be coordinated with Matriarch",
+    licensePaidMedia: "the first 12 months",
+    licenseRestrictions: "Client may create subtitles, aspect-ratio versions and cutdowns (cutdowns subject to Matriarch's prior written approval) but may not use the Deliverables to train AI models or alter them with AI tools.",
+    rightsExtra: "For the avoidance of doubt, Matriarch may use Deliverables in its portfolio, reel, festivals and press. Client's platform terms do not expand Client's rights and the terms of this SOW and the Agreement (as defined below) shall control in any event of conflict.",
+    aiCreditsExpenses: "No third-party costs billed to Client absent written agreement.",
+    credit: "aMatriarch",
     creditCustom: "",
-    portfolioUse: "standard",
-    specialTerms: "",
+    creditExtra: "",
+    exclusivity: DEFAULT_EXCLUSIVITY,
+    governingLaw: DEFAULT_GOVERNING_LAW,
+    indemnification: DEFAULT_INDEMNIFICATION,
+    studioNotice: DEFAULT_SOW_STUDIO_NOTICE,
+    clientNotice: "",
+    miscellaneous: DEFAULT_MISCELLANEOUS,
+    // Legacy fields retained so older drafts still round-trip.
+    scope: "",
+    productionFee: "",
     ...overrides,
   };
 }
 
 function normalizeSowAnswers(raw = {}) {
   const base = emptySowAnswers(raw || {});
+  const deliverables = ensureArray(raw.deliverables).map((row) => makeSowDeliverable(row || {}));
   return {
     ...base,
-    deliverables: ensureArray(raw.deliverables).map((row) => makeSowDeliverable(row || {})),
-    clientMaterials: ensureArray(raw.clientMaterials).map((row) => makeSowClientMaterial(row || {})),
+    deliverables: deliverables.length ? deliverables : emptySowAnswers().deliverables,
+    // Map older drafts that only had productionFee.
+    feeAmount: String(raw.feeAmount || raw.productionFee || base.feeAmount || "").trim(),
   };
 }
 
-function formatLine(answers) {
-  const label = optionLabel(SOW_FORMATS, answers.format, "");
-  const detail = String(answers.formatDetail || "").trim();
-  if (label && detail) return `${label}; ${detail}`;
-  if (label) return label;
-  return blankOr(detail);
-}
-
-function aiToolsLine(answers) {
-  if (answers.aiTools === "custom") return blankOr(answers.aiToolsCustom);
-  return optionLabel(SOW_AI_TOOLS_OPTIONS, answers.aiTools);
-}
-
-function deliveryMethodLine(answers) {
-  if (answers.deliveryMethod === "other") return blankOr(answers.deliveryMethodOther);
-  return optionLabel(SOW_DELIVERY_METHODS, answers.deliveryMethod);
-}
-
 function creditLine(answers) {
-  if (answers.credit === "custom") return blankOr(answers.creditCustom);
-  return optionLabel(SOW_CREDIT_OPTIONS, answers.credit);
-}
-
-function weatherLine(answers) {
-  if (answers.weatherBilling === "custom") return blankOr(answers.weatherRateCustom);
-  return optionLabel(SOW_WEATHER_OPTIONS, answers.weatherBilling, "actual cost");
-}
-
-function talentLine(answers) {
-  const base = optionLabel(SOW_TALENT_OPTIONS, answers.talentStatus, "");
-  const notes = String(answers.talentNotes || "").trim();
-  if (base && notes) return `${base}; ${notes}`;
-  return blankOr(base || notes);
-}
-
-function clientEntityLine(answers, clientName) {
-  const state = String(answers.clientState || "").trim();
-  const entity = String(answers.clientEntityType || "").trim();
-  const bits = [state, entity].filter(Boolean).join(" ");
-  if (bits) return `${blankOr(clientName, "[Client]")}, a ${bits}`;
-  return `${blankOr(clientName, "[Client]")}, a [STATE] [ENTITY TYPE]`;
-}
-
-function studioRepLine(answers) {
-  const name = String(answers.studioRepName || "").trim();
-  const title = String(answers.studioRepTitle || "").trim();
-  if (name && title) return `${name}, ${title}`;
-  if (name) return name;
-  if (title) return title;
-  return "[NAME, TITLE]";
+  if (answers.credit === "custom") return blankOr(answers.creditCustom, '"A Matriarch Production"');
+  if (answers.credit === "none") return "";
+  return optionLabel(SOW_CREDIT_OPTIONS, answers.credit, '"A Matriarch Production"');
 }
 
 function feedbackWindowPhrase(key) {
-  return optionLabel(SOW_FEEDBACK_WINDOWS, key, "three (3) Business Days").replace(/ Business Days?$/i, (m) => m);
+  return optionLabel(SOW_FEEDBACK_WINDOWS, key, "two (2) business days");
 }
 
 function revisionRoundsPhrase(key) {
-  const label = optionLabel(SOW_REVISION_ROUNDS, key, "Two (2) rounds");
-  if (/^One\b/i.test(label)) return label.replace(/ rounds?$/i, " round");
-  return label.replace(/ rounds?$/i, " rounds");
+  return optionLabel(SOW_REVISION_ROUNDS, key, "one (1) set of revisions");
 }
 
-/** Build the twelve SOW section bodies from deal data + structured answers. */
+function clientPartyLine(answers, clientName) {
+  const name = blankOr(clientName, "[Client legal name]");
+  const detail = String(answers.clientEntityDetail || "").trim();
+  const short = String(answers.clientShortName || "").trim();
+  if (detail && short) return `${name}, ${detail} ("${short}")`;
+  if (detail) return `${name}, ${detail} ("Client")`;
+  if (short) return `${name} ("${short}")`;
+  return `${name} ("Client")`;
+}
+
+function studioPartyLine(answers, studioName) {
+  const studio = blankOr(studioName, DEFAULT_SOW_STUDIO_NAME);
+  const detail = String(answers.studioEntityDetail || DEFAULT_SOW_STUDIO_ENTITY).trim() || DEFAULT_SOW_STUDIO_ENTITY;
+  return `${studio}, ${detail} ("Matriarch")`;
+}
+
+function ordinal(n) {
+  return `(${n})`;
+}
+
+function deliverablesBodyFromAnswers(answers, draft) {
+  const rows = (answers.deliverables || []).filter((row) => String(row.name || "").trim() || String(row.dueDate || "").trim());
+  const list = rows.length ? rows : [makeSowDeliverable()];
+  const lines = list.map((row, i) => {
+    const name = blankOr(row.name, "[Deliverable]");
+    const due = String(row.dueDate || "").trim();
+    const specs = String(row.specs || "").trim();
+    const bits = [name];
+    if (specs) bits.push(specs);
+    if (due) bits.push(`due ${due}`);
+    return `${ordinal(i + 1)} ${bits.join("; ")};`;
+  });
+  const milestones = ensureArray(draft && draft.milestones)
+    .filter((mark) => mark && mark.label && mark.dateLabel)
+    .map((mark, i) => `${ordinal(list.length + i + 1)} ${mark.label} due ${mark.dateLabel};`);
+  const feedback = feedbackWindowPhrase(answers.feedbackWindow);
+  const revisions = revisionRoundsPhrase(answers.revisionRounds);
+  const approvals = String(answers.approvalsExtra || "").trim() || [
+    `Client feedback due within ${feedback} of each submission, otherwise deemed approved; ${revisions} per submission.`,
+    "Any late feedback accepted by Matriarch after the feedback window and any late payments will extend applicable delivery dates by an equivalent number of days, and Client shall pay resulting costs due to such delay (if any).",
+    `There shall be no further revisions after the ${revisions} on each submission.`,
+    "Any additional work, material change in applicable Deliverable(s), or additional steps shall be by separate mutual agreement on terms to be negotiated in good faith.",
+  ].join(" ");
+  return [...lines, ...milestones, approvals].join(" ");
+}
+
+function rightsBodyFromAnswers(answers, ownershipModel) {
+  const media = blankOr(answers.licenseMedia, "[permitted uses]");
+  const territory = blankOr(answers.licenseTerritory, "worldwide");
+  const term = blankOr(answers.licenseTerm, "[term]");
+  const paid = blankOr(answers.licensePaidMedia, "[paid media window]");
+  const restrictions = blankOr(answers.licenseRestrictions, "");
+  const extra = String(answers.rightsExtra || "").trim();
+  if (ownershipModel === "clientOwned") {
+    return [
+      "Subject to payment in full, Client owns the Final Deliverables, excluding Studio IP and third-party materials licensed to Client under this SOW.",
+      restrictions,
+      extra || "For the avoidance of doubt, Matriarch may use Deliverables in its portfolio, reel, festivals and press unless otherwise agreed in writing.",
+    ].filter(Boolean).join(" ");
+  }
+  return [
+    "Matriarch owns the Project and all work products.",
+    `Subject to payment in full, Client receives a non-exclusive, ${territory} license for ${term} (paid media limited to ${paid}) for ${media}.`,
+    restrictions,
+    extra,
+  ].filter(Boolean).join(" ");
+}
+
+function feeBodyFromAnswers(answers, value) {
+  const fee = blankOr(answers.feeAmount || value, "[Fee]");
+  const deposit = blankOr(answers.depositPct, "75");
+  const finalPct = blankOr(answers.finalPct, "25");
+  const notes = String(answers.paymentNotes || "").trim();
+  return [
+    `${fee} fixed fee, payable ${deposit}% upon full signature of this SOW (work only begins upon receipt and all dates may be shifted due to late payment); and ${finalPct}% upon delivery of final Deliverables`,
+    notes,
+  ].filter(Boolean).join("; ") + ".";
+}
+
+function creditBodyFromAnswers(answers) {
+  const primary = creditLine(answers);
+  const extra = String(answers.creditExtra || "").trim();
+  if (!primary && !extra) return "[Credit language.]";
+  if (primary && extra) return `${primary} and ${extra} in end credits and on key art.`;
+  if (primary) return `${primary} in end credits and on key art.`;
+  return extra;
+}
+
+/** Build official labeled SOW sections from deal data + answers. */
 export function buildSowSections(draft) {
   const answers = normalizeSowAnswers(draft && draft.answers);
   const studio = String((draft && draft.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME;
   const clientName = String((draft && draft.clientName) || "").trim();
   const contactName = String((draft && draft.contactName) || "").trim();
   const contactEmail = String((draft && draft.contactEmail) || "").trim();
-  const contactPhone = String((draft && draft.contactPhone) || "").trim();
   const ownershipModel = String((draft && draft.ownershipModel) || "").trim();
-  const ownershipChoice = ownershipModelLabel(ownershipModel);
   const value = String((draft && draft.value) || "").trim();
-  const valueOrBlank = value || "[●]";
-  const startLabel = formatSowDate(draft && draft.startDate) || "[●]";
-  const endLabel = formatSowDate(draft && draft.endDate) || "[●]";
-  const milestoneLines = ensureArray(draft && draft.milestones)
-    .filter((mark) => mark && mark.label && mark.dateLabel)
-    .map((mark) => `${mark.label} | ${mark.dateLabel}`);
+  const projectTitle = String((draft && draft.projectTitle) || "").trim();
 
-  const partiesBody = [
-    "Provider | Client",
-    "--- | ---",
-    `Legal entity: ${studio}, a Delaware limited liability company | ${clientEntityLine(answers, clientName)}`,
-    `Representative for approvals: ${studioRepLine(answers)} | ${blankOr(contactName)}`,
-    `Email: ${blankOr(answers.studioEmail, "[EMAIL]")} | ${blankOr(contactEmail)}`,
-    `Phone: ${blankOr(answers.studioPhone, "[PHONE]")} | ${blankOr(contactPhone)}`,
-  ].join("\n");
+  const studioReps = blankOr(answers.studioReps, "[Matriarch representative(s) and email(s)]");
+  const clientReps = String(answers.clientReps || "").trim()
+    || blankOr(
+      [contactName, contactEmail && `(${contactEmail})`].filter(Boolean).join(" "),
+      "[Client representative(s) and email(s)]",
+    );
 
-  const scopeBody = [
-    blankOr(answers.scope, "[Describe the Project.]"),
-    "",
-    "Item | Terms",
-    "--- | ---",
-    `Format | ${formatLine(answers)}`,
-    `Production method | ${optionLabel(SOW_PRODUCTION_METHODS, answers.productionMethod)}`,
-    `Approved or restricted AI Tools | ${aiToolsLine(answers)}`,
-    `Out of scope | ${blankOr(answers.outOfScope, "[Anything expressly excluded; changes require a Change Order]")}`,
-  ].join("\n");
-
-  const ownershipBody = [
-    `This Project is a [${ownershipChoice}]. If no box is chosen, it is a Client-Owned Production.`,
-    "",
-    "- Client-Owned Production: On payment in full, Client owns the Final Deliverables listed in Section 4, excluding Studio IP and third-party materials.",
-    "- Studio-Owned Production: Matriarch owns the Project and all Work Product. Client receives the following license to the Final Deliverables:",
-    "",
-    "License term | Detail",
-    "--- | ---",
-    `Media | ${blankOr(answers.licenseMedia)}`,
-    `Territory | ${blankOr(answers.licenseTerritory)}`,
-    `Term | ${blankOr(answers.licenseTerm)}`,
-    `Exclusivity | ${blankOr(answers.licenseExclusivity)}`,
-    `Sponsorship, integration or presenting rights | ${blankOr(answers.licenseSponsorship)}`,
-    "",
-    `Third-party materials: ${blankOr(answers.thirdPartyMaterials, "[Music, stock, fonts and talent usage terms, or \"to be listed in delivery notes\"]")}.`,
-  ].join("\n");
-
-  const deliverableRows = answers.deliverables.length
-    ? answers.deliverables
-    : [makeSowDeliverable(), makeSowDeliverable(), makeSowDeliverable()];
-  const deliverablesBody = [
-    "# | Deliverable | Specifications (resolution, codec, frame rate, aspect ratio, audio, captions)",
-    "--- | --- | ---",
-    ...deliverableRows.map((row, i) => `${i + 1} | ${blankOr(row.name)} | ${blankOr(row.specs)}`),
-    "",
-    `Delivery method: ${deliveryMethodLine(answers)}.`,
-    "Raw footage, project files and generation files are not Deliverables unless listed above.",
-  ].join("\n");
-
-  const materialRows = answers.clientMaterials.length
-    ? answers.clientMaterials
-    : [makeSowClientMaterial(), makeSowClientMaterial()];
-  const clientMaterialsBody = [
-    "Material | Format | Due date",
-    "--- | --- | ---",
-    ...materialRows.map((row) => `${blankOr(row.material)} | ${blankOr(row.format)} | ${blankOr(row.dueDate)}`),
-    "",
-    "Client delays extend Matriarch's deadlines day for day, and resulting costs are charged to Client.",
-  ].join("\n");
-
-  const approvalRows = [
-    "[Treatment / script] | [●]",
-    "[Style frames / look book] | [●]",
-    "[Start of principal production or generation] | [●]",
-    "[Rough cut] | [●]",
-    "[Fine cut] | [●]",
-    `Final Deliverables | ${endLabel}`,
-    ...milestoneLines,
-  ];
-  const timelineBody = [
-    `Start: ${startLabel}`,
-    `Delivery of Final Deliverables: ${endLabel}`,
-    "",
-    "Approval stage | Target date",
-    "--- | ---",
-    ...approvalRows,
-    "",
-    `- Feedback window: Client provides consolidated feedback or approval within ${feedbackWindowPhrase(answers.feedbackWindow)} of each submission; otherwise the submission is deemed approved.`,
-    `- Revision rounds: ${revisionRoundsPhrase(answers.revisionRounds)} of consolidated revisions per approval stage. Additional rounds, or changes that depart from approved direction, require a Change Order.`,
-  ].join("\n");
-
-  const contingencyPct = blankOr(answers.contingencyPct, "10");
-  const feesBody = [
-    "Line | Amount (USD)",
-    "--- | ---",
-    `Production Fee | ${blankOr(answers.productionFee)}`,
-    `Estimated Third-Party Costs | ${blankOr(answers.thirdPartyCosts)}`,
-    `Contingency ([${contingencyPct}]%; drawn only with Client approval) | ${blankOr(answers.contingencyAmount)}`,
-    `Total approved budget | ${valueOrBlank}`,
-    "",
-    "Installment | Amount | Due",
-    "--- | --- | ---",
-    `Deposit | 50% of ${valueOrBlank} | On signature of this SOW; work begins on receipt`,
-    `Production installment | 25% of ${valueOrBlank} | At [start of principal production or generation]`,
-    `Final installment | 25% of ${valueOrBlank}, plus approved overages and reconciled expenses | On delivery of the Final Deliverables`,
-    "",
-    "- Invoices are due within [fifteen (15)] days of the invoice date.",
-    `- Unbudgeted Third-Party Costs are billed at cost plus ${blankOr(answers.thirdPartyMarkupPct)}%.`,
-    `- Weather days and holds not caused by Matriarch are billed at: ${weatherLine(answers)}.`,
-    "- Cancellation by Client is subject to fees as mutually agreed in writing before work begins, or as stated in Special Terms.",
-  ].join("\n");
-
-  const productionBody = [
-    "Item | Terms",
-    "--- | ---",
-    `Key personnel | ${blankOr(answers.keyPersonnel, "[Director, producer, AI lead]")}`,
-    `Talent and guild status | ${talentLine(answers)}`,
-    `Insurance | ${blankOr(answers.insurance, "[E&O required? Client as additional insured]")}`,
-    `Credit | ${creditLine(answers)}`,
-    `Portfolio use | ${optionLabel(SOW_PORTFOLIO_OPTIONS, answers.portfolioUse)}`,
-  ].join("\n");
-
-  const acceptanceBody = "Client has [five (5)] Business Days after delivery of the Final Deliverables to notify Matriarch in writing of any material technical nonconformity with the specifications in Section 4. Matriarch will correct any such nonconformity and redeliver. The Final Deliverables are deemed accepted on the earlier of Client's written acceptance, expiry of that period without notice, or any public release or commercial use by Client.";
-  const specialBody = blankOr(answers.specialTerms, "[None.]");
-  const termsBody = "This Statement of Work sets out the terms for the Project between Matriarch and Client. Changes to this SOW require a signed Change Order (email confirmation from each Party's representative is sufficient). Work begins after both Parties sign and Matriarch receives the deposit.";
-  const signaturesBody = [
-    `${studio} | ${blankOr(clientName, "[Client]")}`,
-    "--- | ---",
-    "By: | By:",
-    "Name: | Name:",
-    "Title: | Title:",
-    "Date: | Date:",
-  ].join("\n");
+  const effective = String(answers.effectiveDate || "").trim()
+    || (draft && draft.startDate ? formatSowDate(draft.startDate) : "")
+    || "As of _____________";
 
   const byKey = {
-    parties: partiesBody,
-    scope: scopeBody,
-    ownership: ownershipBody,
-    deliverables: deliverablesBody,
-    clientMaterials: clientMaterialsBody,
-    timeline: timelineBody,
-    fees: feesBody,
-    production: productionBody,
-    acceptance: acceptanceBody,
-    special: specialBody,
-    terms: termsBody,
-    signatures: signaturesBody,
+    effectiveDate: effective.startsWith("As of") ? effective : `As of ${effective}`,
+    project: projectTitle ? `"${projectTitle}"` : '"[Project title]"',
+    deliverables: deliverablesBodyFromAnswers(answers, draft),
+    representatives: `Matriarch: ${studioReps}.  Client: ${clientReps}.`,
+    social: blankOr(answers.socialMediaPosting, DEFAULT_SOCIAL_POSTING),
+    nonUnion: blankOr(answers.nonUnion, DEFAULT_NON_UNION),
+    fees: feeBodyFromAnswers(answers, value),
+    killFee: blankOr(answers.killFee, DEFAULT_KILL_FEE),
+    rights: rightsBodyFromAnswers(answers, ownershipModel),
+    aiCredits: blankOr(answers.aiCreditsExpenses, "No third-party costs billed to Client absent written agreement."),
+    credit: creditBodyFromAnswers(answers),
+    exclusivity: blankOr(answers.exclusivity, DEFAULT_EXCLUSIVITY),
+    governingLaw: blankOr(answers.governingLaw, DEFAULT_GOVERNING_LAW),
+    indemnification: blankOr(answers.indemnification, DEFAULT_INDEMNIFICATION),
+    notices: [
+      `To Matriarch:\n${blankOr(answers.studioNotice, DEFAULT_SOW_STUDIO_NOTICE)}`,
+      `To Client:\n${blankOr(answers.clientNotice, `${blankOr(clientName, "[Client]")}\n[Address]\nAttn: ${blankOr(contactName, "[Name]")}${contactEmail ? ` (${contactEmail})` : ""}`)}`,
+    ].join("\n\n"),
+    miscellaneous: blankOr(answers.miscellaneous, DEFAULT_MISCELLANEOUS),
+    signatures: [
+      "AGREED TO AND ACCEPTED:",
+      "",
+      `${studio}                    ${blankOr(clientName, "[Client]")}`,
+      "By: _______________________________          By: _______________________________",
+      "Its Authorized Signatory                     Its Authorized Signatory",
+    ].join("\n"),
   };
 
   return DEFAULT_SOW_SECTION_DEFS.map((def) => makeSowSection({
+    key: def.key,
     title: def.title,
     body: byKey[def.key] || "",
   }));
@@ -1087,10 +1034,6 @@ export function sowDraftFromProject(project, {
   const contactEmail = (project && project.contactEmail) || (company && company.contactEmail) || "";
   const contactPhone = (project && project.contactPhone) || (company && company.contactPhone) || "";
   const projectTitle = (project && project.title) || "";
-  const numberPart = String(sowNumber || "").trim() || "[●]";
-  const title = projectTitle
-    ? `Statement of Work No. ${numberPart} — ${projectTitle}`
-    : `Statement of Work No. ${numberPart}`;
   const value = (project && project.budget) || "";
   const studio = studioName || DEFAULT_SOW_STUDIO_NAME;
   const ownership = String(ownershipModel || defaultOwnershipFromProject(project) || "").trim();
@@ -1106,13 +1049,18 @@ export function sowDraftFromProject(project, {
   const answers = normalizeSowAnswers({
     ...emptySowAnswers(),
     scope: (project && project.description) || "",
-    format: defaultFormatFromProject(project),
-    productionFee: value,
+    feeAmount: value,
+    clientReps: [contactName, contactEmail && `(${contactEmail})`].filter(Boolean).join(" "),
+    clientNotice: [
+      clientName || "[Client]",
+      "[Address]",
+      contactName ? `Attn: ${contactName}${contactEmail ? ` (${contactEmail})` : ""}` : "Attn: [Name]",
+    ].join("\n"),
     ...(answerOverrides || {}),
   });
 
   const draft = {
-    title,
+    title: DEFAULT_SOW_TITLE,
     sowNumber: String(sowNumber || "").trim(),
     ownershipModel: ownership,
     projectId: (project && project.id) || null,
@@ -1129,33 +1077,44 @@ export function sowDraftFromProject(project, {
     milestones,
     recordType: (project && project.recordType) || "",
     answers,
+    sectionsCustomized: false,
   };
   draft.sections = buildSowSections(draft);
   return draft;
 }
 
-export function sowExportPayload(draft) {
+/**
+ * Export view of a SOW. Uses edited sections when the wizard has customized them;
+ * otherwise rebuilds from the current answers.
+ */
+export function sowExportPayload(draft, { rebuild = false } = {}) {
   const ownershipModel = String((draft && draft.ownershipModel) || "").trim();
-  const withAnswers = draft && draft.answers
-    ? { ...draft, sections: buildSowSections(draft) }
-    : draft;
-  const sections = normalizeSowSections(withAnswers && withAnswers.sections);
+  const answers = normalizeSowAnswers((draft && draft.answers) || {});
+  // Edited sections win; otherwise always rebuild so answer changes stay live.
+  const useExisting = !rebuild && draft && draft.sectionsCustomized
+    && Array.isArray(draft.sections) && draft.sections.length;
+  const sections = normalizeSowSections(
+    useExisting ? draft.sections : buildSowSections({ ...draft, answers }),
+  );
   return {
-    title: String((withAnswers && withAnswers.title) || "Statement of Work").trim() || "Statement of Work",
-    sowNumber: String((withAnswers && withAnswers.sowNumber) || "").trim(),
+    title: String((draft && draft.title) || DEFAULT_SOW_TITLE).trim() || DEFAULT_SOW_TITLE,
+    sowNumber: String((draft && draft.sowNumber) || "").trim(),
     ownershipModel,
     ownershipLabel: ownershipModelLabel(ownershipModel),
-    clientName: String((withAnswers && withAnswers.clientName) || "").trim(),
-    studioName: String((withAnswers && withAnswers.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME,
+    clientName: String((draft && draft.clientName) || "").trim(),
+    studioName: String((draft && draft.studioName) || DEFAULT_SOW_STUDIO_NAME).trim() || DEFAULT_SOW_STUDIO_NAME,
+    studioParty: studioPartyLine(answers, draft && draft.studioName),
+    clientParty: clientPartyLine(answers, draft && draft.clientName),
     contactLine: [
-      withAnswers && withAnswers.contactName,
-      withAnswers && withAnswers.contactEmail,
-      withAnswers && withAnswers.contactPhone,
+      draft && draft.contactName,
+      draft && draft.contactEmail,
+      draft && draft.contactPhone,
     ].filter(Boolean).join(" · "),
-    value: String((withAnswers && withAnswers.value) || "").trim(),
-    projectTitle: String((withAnswers && withAnswers.projectTitle) || "").trim(),
-    answers: normalizeSowAnswers((withAnswers && withAnswers.answers) || {}),
+    value: String((draft && draft.value) || "").trim(),
+    projectTitle: String((draft && draft.projectTitle) || "").trim(),
+    answers,
     sections,
+    footerNote: "* All dollar amounts are in USD.",
   };
 }
 
