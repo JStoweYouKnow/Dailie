@@ -4,11 +4,12 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { googleTokenForUser, gmailThreadText } from "../lib/googleWorkspace.js";
-import { readDealEmail } from "../lib/dealFromEmail.js";
+import { readDealEmail, readOpportunityEmail } from "../lib/dealFromEmail.js";
 import { DEAL_MAIL_LOOKBACK_DAYS, MAX_DEAL_THREADS_PER_RUN } from "../src/lib/dealMail.js";
 
 /**
- * Reads new mail on each deal and keeps the deal current from it.
+ * Reads new mail on deals and unmatched commercial threads, then soft-merges the
+ * result onto deals / opportunities and creates meetings from meeting-like dates.
  *
  * Gmail sync stores only a snippet of each message, which is rarely enough to tell a
  * next step from a pleasantry — so the thread is read in full here, from the mailbox
@@ -18,24 +19,49 @@ import { DEAL_MAIL_LOOKBACK_DAYS, MAX_DEAL_THREADS_PER_RUN } from "../src/lib/de
 
 const DAY = 24 * 60 * 60 * 1000;
 
-type RunSummary = { threads: number; updated: number; tasks: number; suggestions: number; errors: string[] };
+type RunSummary = {
+  threads: number;
+  updated: number;
+  opportunities: number;
+  tasks: number;
+  meetings: number;
+  suggestions: number;
+  errors: string[];
+};
 
 const summaryValidator = v.object({
   threads: v.number(),
   updated: v.number(),
+  opportunities: v.number(),
   tasks: v.number(),
+  meetings: v.number(),
   suggestions: v.number(),
   errors: v.array(v.string()),
 });
 
 async function runAll(ctx: ActionCtx): Promise<RunSummary> {
-  const summary: RunSummary = { threads: 0, updated: 0, tasks: 0, suggestions: 0, errors: [] };
+  const summary: RunSummary = {
+    threads: 0,
+    updated: 0,
+    opportunities: 0,
+    tasks: 0,
+    meetings: 0,
+    suggestions: 0,
+    errors: [],
+  };
   const now = Date.now();
-  const due = await ctx.runQuery(internal.dealUpdates.dueThreads, {
-    since: now - DEAL_MAIL_LOOKBACK_DAYS * DAY,
+  const since = now - DEAL_MAIL_LOOKBACK_DAYS * DAY;
+
+  const dueDeals = await ctx.runQuery(internal.dealUpdates.dueThreads, {
+    since,
     max: MAX_DEAL_THREADS_PER_RUN,
   });
-  if (!due.length) return summary;
+  const remaining = Math.max(0, MAX_DEAL_THREADS_PER_RUN - dueDeals.length);
+  const dueOpps = remaining
+    ? await ctx.runQuery(internal.dealUpdates.dueOpportunityThreads, { since, max: remaining })
+    : [];
+
+  if (!dueDeals.length && !dueOpps.length) return summary;
 
   const secretKey = process.env.CLERK_SECRET_KEY;
   const accounts = await ctx.runQuery(internal.syncState.accountsFor, { stateKey: "gmailSync" });
@@ -51,9 +77,7 @@ async function runAll(ctx: ActionCtx): Promise<RunSummary> {
     return tokens.get(clerkId) ?? null;
   };
 
-  const referenceDate = new Date(now).toISOString().slice(0, 10);
-  for (const thread of due) {
-    summary.threads += 1;
+  const loadMessages = async (thread: { account: string; threadId: string; messages: Array<{ from: string; direction: string; sentAt: number; subject: string; text: string }> }) => {
     let messages = thread.messages;
     try {
       const token = await tokenFor(thread.account);
@@ -62,10 +86,16 @@ async function runAll(ctx: ActionCtx): Promise<RunSummary> {
         if (full.some((m) => m.text.trim())) messages = full.map((m) => ({ ...m, direction: "" }));
       }
     } catch (err) {
-      // A thread Gmail will not hand over is still worth reading from its snippets.
       console.warn(`Deal mail: full thread unavailable for ${thread.threadId}:`, err instanceof Error ? err.message : err);
     }
+    return messages;
+  };
 
+  const referenceDate = new Date(now).toISOString().slice(0, 10);
+
+  for (const thread of dueDeals) {
+    summary.threads += 1;
+    const messages = await loadMessages(thread);
     const reading = await readDealEmail({
       deal: thread.deal,
       messages,
@@ -74,7 +104,6 @@ async function runAll(ctx: ActionCtx): Promise<RunSummary> {
       referenceDate,
     });
     if (reading.error) {
-      // Not stamped as checked, so the next run tries this thread again.
       if (!summary.errors.some((e) => e.startsWith("Model"))) summary.errors.push(`Model unavailable: ${reading.error}`);
       continue;
     }
@@ -90,10 +119,47 @@ async function runAll(ctx: ActionCtx): Promise<RunSummary> {
     if (result.applied) {
       summary.updated += 1;
       summary.tasks += result.tasks;
+      summary.meetings += result.meetings;
       if (result.suggestion) summary.suggestions += 1;
     }
   }
-  if (summary.updated || summary.errors.length) console.log("Deal mail:", JSON.stringify(summary));
+
+  for (const thread of dueOpps) {
+    summary.threads += 1;
+    const messages = await loadMessages(thread);
+    const reading = await readOpportunityEmail({
+      opportunity: thread.opportunity,
+      messages,
+      team: thread.team,
+      ourAddress: thread.account,
+      referenceDate,
+    });
+    if (reading.error) {
+      if (!summary.errors.some((e) => e.startsWith("Model"))) summary.errors.push(`Model unavailable: ${reading.error}`);
+      continue;
+    }
+
+    const { error: _ignored, ...cleanReading } = reading as typeof reading & { error?: string };
+    const result = await ctx.runMutation(internal.dealUpdates.applyOpportunityReading, {
+      threadId: thread.threadId,
+      opportunityId: thread.opportunityId,
+      latestEmailId: thread.latestEmailId,
+      account: thread.account,
+      contactName: thread.contactName,
+      contactEmail: thread.contactEmail,
+      companyId: thread.companyId,
+      reading: cleanReading,
+    });
+    if (result.applied) {
+      summary.opportunities += 1;
+      summary.meetings += result.meetings;
+      if (result.created) summary.updated += 1;
+    }
+  }
+
+  if (summary.updated || summary.opportunities || summary.errors.length) {
+    console.log("Deal mail:", JSON.stringify(summary));
+  }
   return summary;
 }
 

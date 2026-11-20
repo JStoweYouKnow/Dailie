@@ -232,7 +232,7 @@ export default function SettingsModal({ onClose }) {
           <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--bone)", cursor: "pointer", marginTop: 8 }}>
             <input type="checkbox" checked={data.settings.dealsFromEmail !== false}
               onChange={(e) => updateSettings({ dealsFromEmail: e.target.checked })} style={{ marginTop: 3 }} />
-            <span>Update deals from their email: set the next step, key dates, last contact and follow-up tasks, and suggest stage moves for approval.</span>
+            <span>Update deals and conversations from email: fill missing next steps and dates, suggest changes when something is already set, create meetings from scheduled calls, and open opportunities for unmatched commercial threads.</span>
           </label>
         )}
       </Section>

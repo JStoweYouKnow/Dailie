@@ -174,12 +174,19 @@ function LinkRow({ label, value, placeholder, onCommit }) {
 }
 
 /** One exchange read off the deal's mail: what it said, what it changed, what it suggests. */
-function EmailUpdateRow({ update, pipeline, onAccept, onDismiss }) {
+function EmailUpdateRow({
+  update, pipeline,
+  onAcceptStage, onDismissStage,
+  onAcceptNextStep, onDismissNextStep,
+  onAcceptDate, onDismissDate,
+}) {
   const s = update.stageSuggestion;
   const applied = update.applied || {};
+  const suggestedDates = (applied.suggestedDates || []).filter((d) => d && !d.status);
   const changes = [
     applied.nextStep && "next step",
     applied.dates && applied.dates.length && `${applied.dates.length} date${applied.dates.length === 1 ? "" : "s"}`,
+    applied.meetingIds && applied.meetingIds.length && `${applied.meetingIds.length} meeting${applied.meetingIds.length === 1 ? "" : "s"}`,
     applied.taskIds && applied.taskIds.length && `${applied.taskIds.length} task${applied.taskIds.length === 1 ? "" : "s"}`,
   ].filter(Boolean);
   return (
@@ -195,14 +202,32 @@ function EmailUpdateRow({ update, pipeline, onAccept, onDismiss }) {
       {changes.length > 0 && (
         <div className="md-mono" style={{ fontSize: 10, color: "var(--dim)", marginTop: 4 }}>Updated {changes.join(" · ")}</div>
       )}
+      {applied.suggestedNextStep && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, padding: "6px 8px", background: "var(--panel-raised)", borderRadius: 6 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
+            Replace next step with <strong>{applied.suggestedNextStep}</strong>?
+          </div>
+          <button className="md-btn md-btn-primary" style={{ fontSize: 11, padding: "3px 10px" }} onClick={onAcceptNextStep}>Accept</button>
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, padding: "3px 8px" }} onClick={onDismissNextStep}>Dismiss</button>
+        </div>
+      )}
+      {suggestedDates.map((d) => (
+        <div key={`${d.label}-${d.date}`} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, padding: "6px 8px", background: "var(--panel-raised)", borderRadius: 6 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
+            Move <strong>{d.label}</strong> to {formatShort(d.date)}?
+          </div>
+          <button className="md-btn md-btn-primary" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => onAcceptDate(d)}>Accept</button>
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, padding: "3px 8px" }} onClick={() => onDismissDate(d)}>Dismiss</button>
+        </div>
+      ))}
       {s && s.status === "pending" && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, padding: "6px 8px", background: "var(--panel-raised)", borderRadius: 6 }}>
           <div style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
             Move to <strong>{lookupLabel(pipeline, s.to) || s.toLabel}</strong>?
             {s.reason && <span style={{ color: "var(--dim)" }}> {s.reason}</span>}
           </div>
-          <button className="md-btn md-btn-primary" style={{ fontSize: 11, padding: "3px 10px" }} onClick={onAccept}>Accept</button>
-          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, padding: "3px 8px" }} onClick={onDismiss}>Dismiss</button>
+          <button className="md-btn md-btn-primary" style={{ fontSize: 11, padding: "3px 10px" }} onClick={onAcceptStage}>Accept</button>
+          <button className="md-btn md-btn-ghost" style={{ fontSize: 11, padding: "3px 8px" }} onClick={onDismissStage}>Dismiss</button>
         </div>
       )}
       {s && s.status !== "pending" && (
@@ -267,6 +292,43 @@ export default function ProjectDetail({ project, onClose, onOpenRecord, onOpenSo
     }
     update("dealUpdates", u.id, {
       stageSuggestion: { ...s, status: accept ? "accepted" : "dismissed", decidedAt: Date.now(), decidedBy: (currentUser && currentUser.id) || null },
+    });
+  };
+
+  const decideSuggestedNextStep = (u, accept) => {
+    const step = u.applied && u.applied.suggestedNextStep;
+    if (!step) return;
+    if (accept) patchProject({ nextStep: step }, `Next step (from email): ${step}`);
+    update("dealUpdates", u.id, {
+      applied: {
+        ...(u.applied || {}),
+        nextStep: accept ? step : (u.applied && u.applied.nextStep) || null,
+        suggestedNextStep: null,
+      },
+    });
+  };
+
+  const decideSuggestedDate = (u, entry, accept) => {
+    const list = ((u.applied && u.applied.suggestedDates) || []).slice();
+    const idx = list.findIndex((d) => d.label === entry.label && d.date === entry.date && !d.status);
+    if (idx < 0) return;
+    if (accept) {
+      const dates = normalizeProjectDates(project.dates);
+      const existing = entry.dateId ? dates.find((d) => d.id === entry.dateId) : dates.find((d) => d.label === entry.label);
+      const nextDates = existing
+        ? dates.map((d) => (d.id === existing.id ? { ...d, date: entry.date } : d))
+        : [...dates, makeProjectDate({ label: entry.label, date: entry.date })];
+      patchProject({ dates: nextDates }, `Moved date from email: ${entry.label}`);
+    }
+    list[idx] = { ...entry, status: accept ? "accepted" : "dismissed" };
+    update("dealUpdates", u.id, {
+      applied: {
+        ...(u.applied || {}),
+        suggestedDates: list,
+        dates: accept
+          ? [...((u.applied && u.applied.dates) || []), { label: entry.label, date: entry.date }]
+          : (u.applied && u.applied.dates) || [],
+      },
     });
   };
 
@@ -402,7 +464,13 @@ export default function ProjectDetail({ project, onClose, onOpenRecord, onOpenSo
         <Section title={`FROM EMAIL · ${emailUpdates.length}`}>
           {emailUpdates.slice(0, 5).map((u) => (
             <EmailUpdateRow key={u.id} update={u} pipeline={pipeline}
-              onAccept={() => decideSuggestion(u, true)} onDismiss={() => decideSuggestion(u, false)} />
+              onAcceptStage={() => decideSuggestion(u, true)}
+              onDismissStage={() => decideSuggestion(u, false)}
+              onAcceptNextStep={() => decideSuggestedNextStep(u, true)}
+              onDismissNextStep={() => decideSuggestedNextStep(u, false)}
+              onAcceptDate={(d) => decideSuggestedDate(u, d, true)}
+              onDismissDate={(d) => decideSuggestedDate(u, d, false)}
+            />
           ))}
         </Section>
       )}

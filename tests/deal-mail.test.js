@@ -3,11 +3,16 @@ import assert from "node:assert/strict";
 import {
   dealForThread,
   threadsDueForDealCheck,
+  threadsDueForOpportunityCheck,
+  opportunityForThread,
+  opportunityChangesFromEmail,
   dealChangesFromEmail,
   applyDealPatch,
   supersededSuggestion,
   dealContextForPrompt,
+  isMeetingLikeLabel,
 } from "../src/lib/dealMail.js";
+import { makeOpportunity } from "../src/lib/model.js";
 import { canReadRecord, canWriteRecord, canReadCollection } from "../src/lib/houseAccess.js";
 import { decodeGmailBody, messageBodyText, stripQuotedReply, gmailThreadText } from "../lib/googleWorkspace.js";
 
@@ -105,7 +110,7 @@ test("an irrelevant thread changes nothing", () => {
   assert.equal(dealChangesFromEmail(project("p1"), reading({ relevant: false }), { thread, now: NOW }), null);
 });
 
-test("next step, last contact and dates land on the deal; a stage move is only suggested", () => {
+test("empty next step and new dates land on the deal; existing ones are only suggested", () => {
   const p = project("p1", {
     nextStep: "Chase Dana",
     dates: [{ id: "d1", label: "Signing", date: Date.parse("2026-10-20T12:00:00") }],
@@ -121,16 +126,40 @@ test("next step, last contact and dates land on the deal; a stage move is only s
     ],
   }), { pipeline: PIPELINE, thread, now: NOW });
 
-  assert.equal(out.patch.nextStep, "Send revised deal memo");
+  assert.equal(out.patch.nextStep, undefined);
+  assert.equal(out.update.applied.suggestedNextStep, "Send revised deal memo");
   assert.equal(out.patch.lastContactAt, NOW - DAY);
   assert.equal(out.patch.pipelineStage, undefined);
   assert.equal(out.patch.dates.length, 2);
   assert.equal(out.patch.dates[0].id, "d1");
-  assert.equal(new Date(out.patch.dates[0].date).getDate(), 22);
+  assert.equal(out.patch.dates[0].date, Date.parse("2026-10-20T12:00:00"));
+  assert.equal(out.patch.dates[1].label, "Delivery");
+  assert.equal(out.update.applied.suggestedDates.length, 1);
+  assert.equal(out.update.applied.suggestedDates[0].label, "Signing");
   assert.deepEqual(out.update.stageSuggestion && out.update.stageSuggestion.to, "signed");
   assert.equal(out.update.stageSuggestion.status, "pending");
-  assert.ok(out.notes.includes("Next step (from email): Send revised deal memo"));
-  assert.ok(out.notes.some((n) => n.startsWith("Moved date from email: Signing")));
+  assert.ok(out.notes.some((n) => n.startsWith("Suggested next step from email")));
+  assert.ok(out.notes.some((n) => n.startsWith("Suggested date from email")));
+});
+
+test("an empty next step is filled, and meeting-like dates create meetings without clobbering", () => {
+  const p = project("p1", { nextStep: "" });
+  const out = dealChangesFromEmail(p, reading({
+    nextStep: "Send revised deal memo",
+    dates: [
+      { label: "Pitch call", date: "2026-10-24" },
+      { label: "Delivery", date: "2027-03-01" },
+    ],
+  }), { pipeline: PIPELINE, thread, now: NOW, meetings: [] });
+
+  assert.equal(out.patch.nextStep, "Send revised deal memo");
+  assert.equal(out.update.applied.suggestedNextStep, null);
+  assert.equal(out.meetings.length, 1);
+  assert.equal(out.meetings[0].title, "Pitch call");
+  assert.equal(out.meetings[0].projectId, "p1");
+  assert.equal(out.meetings[0].source, "email");
+  assert.ok(isMeetingLikeLabel("Pitch call"));
+  assert.ok(!isMeetingLikeLabel("Delivery"));
 });
 
 test("a stage the pipeline does not have, or the current one, is never suggested", () => {
@@ -165,13 +194,77 @@ test("follow-up tasks are house-only, skip what is already open, and go to the m
 });
 
 test("the patched deal carries each change on its activity log", () => {
-  const p = project("p1", { history: [{ id: "h0", date: 1, note: "Created" }] });
+  const p = project("p1", { nextStep: "", history: [{ id: "h0", date: 1, note: "Created" }] });
   const changes = dealChangesFromEmail(p, reading({ nextStep: "Sign" }), { thread, now: NOW });
   const next = applyDealPatch(p, changes, { now: NOW, newId: (i) => `h${i + 1}` });
   assert.equal(next.nextStep, "Sign");
   assert.equal(next.history.length, 2);
   assert.equal(next.history[1].note, "Next step (from email): Sign");
   assert.equal(next.updatedAt, NOW);
+});
+
+test("unmatched commercial threads are due for opportunity sync, newest first", () => {
+  const data = {
+    settings,
+    projects: [],
+    opportunities: [makeOpportunity({ id: "o1", contactEmail: "dana@a24.com", status: "talking" })],
+    companies: [{ id: "c1", domain: "a24.com" }],
+    emails: [
+      mail("a", { threadId: "t1", sentAt: NOW - 2 * DAY }),
+      mail("b", { threadId: "t2", sentAt: NOW - DAY }),
+      mail("c", { threadId: "t3", sentAt: NOW - DAY, from: "news@newsletter.com", subject: "Unsubscribe weekly" }),
+      mail("d", { threadId: "t4", sentAt: NOW - DAY, projectId: null, from: "v@matriarch-studios.com", to: ["kim@matriarch-studios.com"] }),
+    ],
+  };
+  const due = threadsDueForOpportunityCheck(data, { since: NOW - 14 * DAY });
+  assert.deepEqual(due.map((t) => t.threadId), ["t2", "t1"]);
+  assert.equal(due[0].opportunityId, "o1");
+  assert.equal(due[0].kind, "opportunity");
+});
+
+test("an opportunity matches by contact email, and email soft-merges conversations", () => {
+  const data = {
+    settings,
+    opportunities: [
+      makeOpportunity({ id: "o1", contactEmail: "dana@a24.com", nextStep: "Wait on Dana", conversations: [{ note: "Intro last week" }] }),
+    ],
+  };
+  assert.deepEqual(opportunityForThread([mail("a")], data), { opportunityId: "o1", via: "contact" });
+
+  const existing = data.opportunities[0];
+  const out = opportunityChangesFromEmail(existing, reading({
+    summary: "Dana wants a revised one-sheet before the pitch call.",
+    nextStep: "Send the one-sheet",
+    dates: [{ label: "Pitch call", date: "2026-10-24" }],
+  }), { thread, now: NOW, meetings: [], contactName: "Dana", contactEmail: "dana@a24.com" });
+
+  assert.equal(out.created, false);
+  assert.equal(out.opportunity.nextStep, "Wait on Dana");
+  assert.equal(out.suggestedNextStep, "Send the one-sheet");
+  assert.equal(out.opportunity.conversations[0].note, "Dana wants a revised one-sheet before the pitch call.");
+  assert.equal(out.meetings.length, 1);
+  assert.equal(out.meetings[0].opportunityId, "o1");
+});
+
+test("a relevant unmatched thread creates a new opportunity with a conversation entry", () => {
+  const out = opportunityChangesFromEmail(null, reading({
+    summary: "Roku asked about a shorts slate for Q1.",
+    nextStep: "Send the shorts deck",
+  }), {
+    thread,
+    now: NOW,
+    ownerId: "u-1",
+    companyId: "c1",
+    contactName: "Dana",
+    contactEmail: "dana@a24.com",
+    subjectHint: "Re: Shorts for Roku",
+  });
+  assert.equal(out.created, true);
+  assert.equal(out.opportunity.source, "email");
+  assert.equal(out.opportunity.nextStep, "Send the shorts deck");
+  assert.equal(out.opportunity.companyId, "c1");
+  assert.equal(out.opportunity.conversations.length, 1);
+  assert.match(out.opportunity.title, /Shorts for Roku/);
 });
 
 test("a newer suggestion supersedes a pending one, and leaves decided ones alone", () => {
